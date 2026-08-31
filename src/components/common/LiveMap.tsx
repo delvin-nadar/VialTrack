@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { RouteStop, DestinationLab, PickupBoy, LocationPing, PickupTask } from '../../types';
 import { CloudSync, parseFirestoreGeoPoint } from '../../services/firebase';
+import { isRiderLocationStale } from '../../services/locationService';
 import {
   MapPin,
   Bike,
@@ -14,9 +15,10 @@ import {
   Building2,
   Thermometer,
   Battery,
-  Phone,
-  CheckCircle2,
-  Clock
+  AlertCircle,
+  Clock,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 export interface LiveMapProps {
@@ -135,6 +137,10 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const polylinesLayerRef = useRef<L.LayerGroup | null>(null);
   const trailLayerRef = useRef<L.LayerGroup | null>(null);
+
+  // Persistent marker tracking references for smooth position updates without re-renders
+  const riderMarkersMapRef = useRef<Map<string, L.Marker>>(new Map());
+  const hasInitialFittedRef = useRef<boolean>(false);
 
   // Firestore real-time state for riders and location pings
   const [firestoreRiders, setFirestoreRiders] = useState<PickupBoy[]>([]);
@@ -300,6 +306,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        riderMarkersMapRef.current.clear();
       }
     };
   }, []);
@@ -370,7 +377,6 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     const trailLayer = trailLayerRef.current;
     if (!map || !markersLayer || !polylinesLayer || !trailLayer) return;
 
-    markersLayer.clearLayers();
     polylinesLayer.clearLayers();
     trailLayer.clearLayers();
 
@@ -382,7 +388,9 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       return r.id === activeFilterRiderId;
     });
 
-    // 1. RENDER LIVE BIKE ICON MARKERS FOR ACTIVE RIDERS (e.g. Rahul Sharma)
+    const currentRiderIds = new Set(ridersToRender.map((r) => r.id));
+
+    // 1. RENDER / SMOOTHLY UPDATE LIVE BIKE ICON MARKERS FOR ACTIVE RIDERS
     if (showRiderMarkers) {
       ridersToRender.forEach((activeRider) => {
         if (!activeRider.currentLocation) return;
@@ -395,42 +403,47 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         boundsPoints.push([coords.lat, coords.lng]);
 
         const isSelected = rider?.id === activeRider.id || activeFilterRiderId === activeRider.id;
+        const isStale = isRiderLocationStale(activeRider, 10);
         const assignedTask = tasks.find((t) => t.riderId === activeRider.id && t.status !== 'delivered') || tasks[0];
-        const nextStop = assignedTask?.stopsProgress.find((s) => s.status === 'pending' || s.status === 'arrived');
+        const nextStop = assignedTask?.stopsProgress?.find((s) => s.status === 'pending' || s.status === 'arrived');
 
         const riderName = activeRider.name || 'Rahul Sharma';
         const vehicleNum = activeRider.vehicleNumber || 'MH-02-DN-4921';
         const firstName = riderName.split(' ')[0] || riderName;
 
-        // Custom High-Precision Bike Icon Courier Marker
+        // Custom High-Precision Bike Icon Courier Marker with Stale/Online Badging
         const riderIcon = L.divIcon({
           className: 'custom-rider-marker',
           html: `
             <div class="relative group cursor-pointer">
-              <!-- Pulsing Live Radar Wave -->
-              <div class="absolute -inset-2 bg-sky-500 rounded-full animate-ping opacity-75"></div>
+              <!-- Pulsing Live Radar Wave (only when online & fresh) -->
+              ${!isStale ? '<div class="absolute -inset-2 bg-sky-500 rounded-full animate-ping opacity-75"></div>' : ''}
               
               <!-- Main Rider Badge with Bike Icon -->
               <div class="relative w-10 h-10 rounded-full ${
-                isSelected ? 'bg-slate-950 ring-4 ring-sky-400' : 'bg-sky-900 ring-2 ring-sky-400'
+                isStale
+                  ? 'bg-slate-800 ring-2 ring-amber-500'
+                  : isSelected
+                  ? 'bg-slate-950 ring-4 ring-sky-400'
+                  : 'bg-sky-900 ring-2 ring-sky-400'
               } text-white flex items-center justify-center shadow-xl transform transition-transform group-hover:scale-115">
                 <!-- Bike Icon SVG -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${isStale ? '#fbbf24' : '#38bdf8'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="18.5" cy="17.5" r="3.5"/>
                   <circle cx="5.5" cy="17.5" r="3.5"/>
                   <circle cx="15" cy="5" r="1"/>
                   <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
                 </svg>
                 
-                <!-- Online Live Telemetry Dot -->
-                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full ring-2 ring-white animate-pulse"></span>
+                <!-- Status Dot -->
+                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 ${isStale ? 'bg-amber-500' : 'bg-emerald-400 animate-pulse'} rounded-full ring-2 ring-white"></span>
               </div>
 
               <!-- Top Floating Rider Name Tag -->
-              <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-950/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap shadow-lg border border-slate-700 flex items-center gap-1.5 pointer-events-none">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-950/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap shadow-lg border ${isStale ? 'border-amber-600/70' : 'border-slate-700'} flex items-center gap-1.5 pointer-events-none">
+                <span class="w-1.5 h-1.5 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
                 <span>${firstName}</span>
-                <span class="text-sky-300 font-mono text-[9px]">${vehicleNum.split('-').pop() || 'BIKE'}</span>
+                <span class="${isStale ? 'text-amber-300' : 'text-sky-300'} font-mono text-[9px]">${vehicleNum.split('-').pop() || 'BIKE'}</span>
               </div>
             </div>
           `,
@@ -438,21 +451,13 @@ export const LiveMap: React.FC<LiveMapProps> = ({
           iconAnchor: [20, 20]
         });
 
-        const riderMarker = L.marker([coords.lat, coords.lng], {
-          icon: riderIcon,
-          zIndexOffset: 1200
-        }).addTo(markersLayer);
-
-        riderMarker.on('click', () => {
-          if (onSelectRider) onSelectRider(activeRider.id);
-        });
-
-        // Telemetry Rich Popup
-        riderMarker.bindPopup(`
+        const popupHtml = `
           <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 220px; padding: 6px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
               <span style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">Live GPS Medical Courier</span>
-              <span style="font-size: 9px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 2px 6px; border-radius: 9999px; border: 1px solid #a7f3d0;">ONLINE</span>
+              <span style="font-size: 9px; font-weight: 700; background: ${isStale ? '#fef3c7' : '#ecfdf5'}; color: ${isStale ? '#b45309' : '#047857'}; padding: 2px 6px; border-radius: 9999px; border: 1px solid ${isStale ? '#fde68a' : '#a7f3d0'};">
+                ${isStale ? 'STALE / OFFLINE (>10M)' : 'ONLINE / LIVE GPS'}
+              </span>
             </div>
             
             <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${riderName}</div>
@@ -479,11 +484,40 @@ export const LiveMap: React.FC<LiveMapProps> = ({
                 : ''
             }
           </div>
-        `);
+        `;
+
+        // Smooth position update if marker already exists
+        if (riderMarkersMapRef.current.has(activeRider.id)) {
+          const existingMarker = riderMarkersMapRef.current.get(activeRider.id)!;
+          existingMarker.setLatLng([coords.lat, coords.lng]);
+          existingMarker.setIcon(riderIcon);
+          existingMarker.setPopupContent(popupHtml);
+        } else {
+          // Create new marker
+          const riderMarker = L.marker([coords.lat, coords.lng], {
+            icon: riderIcon,
+            zIndexOffset: 1200
+          }).addTo(markersLayer);
+
+          riderMarker.on('click', () => {
+            if (onSelectRider) onSelectRider(activeRider.id);
+          });
+
+          riderMarker.bindPopup(popupHtml);
+          riderMarkersMapRef.current.set(activeRider.id, riderMarker);
+        }
       });
     }
 
-    // 2. RENDER CUSTOM HOSPITAL & CLINIC PIN MARKERS FOR CLIENT STOPS (e.g. Apex Diagnostic Center, Oscar Hospital)
+    // Clean up markers for removed riders
+    riderMarkersMapRef.current.forEach((marker, id) => {
+      if (!currentRiderIds.has(id) || !showRiderMarkers) {
+        markersLayer.removeLayer(marker);
+        riderMarkersMapRef.current.delete(id);
+      }
+    });
+
+    // 2. RENDER CUSTOM HOSPITAL & CLINIC PIN MARKERS FOR CLIENT STOPS
     if (showStops) {
       resolvedStops.forEach((stop, index) => {
         const stopId = stop.id || (stop as any).stopId || `stop-${index}`;
@@ -662,8 +696,9 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     }
 
-    // Auto-fit bounds if requested
-    if (autoFit && boundsPoints.length > 0) {
+    // Auto-fit bounds ONLY once on initial mount (to prevent disruptive zoom resets during ongoing GPS tracking)
+    if (autoFit && !hasInitialFittedRef.current && boundsPoints.length > 0) {
+      hasInitialFittedRef.current = true;
       const bounds = L.latLngBounds(boundsPoints);
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
     }
@@ -729,7 +764,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             <option value="all">All Active Riders ({activeRidersList.length})</option>
             {activeRidersList.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} ({r.vehicleNumber})
+                {r.name} ({r.vehicleNumber}) {isRiderLocationStale(r, 10) ? '• Stale' : '• Live'}
               </option>
             ))}
           </select>
@@ -832,7 +867,11 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-            <span>Rider (Bike)</span>
+            <span>Rider (Live)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span>Rider (Stale &gt;10m)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>

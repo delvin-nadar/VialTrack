@@ -168,6 +168,48 @@ export function ensureInitialized(): void {
       timeSlots: ['10:00', '14:00', '18:00', '22:00'],
       active: true,
       assignedRiderId: 'rider-rahul'
+    },
+    {
+      id: 'route-abc-diagnostic-1',
+      clientId: 'client-metropolis',
+      name: 'Abc diagnostic - Loop 1',
+      description: 'Daily specimen collection loop for Abc Diagnostic network across Andheri & Bandra',
+      destinationLab: {
+        id: 'dest-abc-central',
+        name: 'Abc Diagnostic Central Pathology Lab',
+        address: 'Hubtown Solaris, N.S. Phadke Marg, Andheri East, Mumbai 400069',
+        lat: 19.1176,
+        lng: 72.8532,
+        contactPerson: 'Dr. Meena Iyer (Chief Pathologist)',
+        phone: '+91 98200 99881'
+      },
+      stops: [
+        {
+          id: 'stop-abc-andheri',
+          name: 'Abc Diagnostic Center, Andheri West',
+          address: 'Veera Desai Road, Andheri West, Mumbai 400053',
+          lat: 19.1363,
+          lng: 72.8277,
+          contactPerson: 'Mr. Rajesh Nair',
+          phone: '+91 98204 55667',
+          order: 1,
+          avgPickupDurationMinutes: 10
+        },
+        {
+          id: 'stop-abc-bandra',
+          name: 'Abc Diagnostic Collection Hub, Bandra',
+          address: 'Hill Road, Near Mehboob Studio, Bandra West, Mumbai 400050',
+          lat: 19.0520,
+          lng: 72.8280,
+          contactPerson: 'Sister Mary Fernandez',
+          phone: '+91 98205 66778',
+          order: 2,
+          avgPickupDurationMinutes: 10
+        }
+      ],
+      timeSlots: ['11:30', '15:30', '19:30'],
+      active: true,
+      assignedRiderId: 'rider-rahul'
     }
   ];
 
@@ -184,7 +226,7 @@ export function ensureInitialized(): void {
       plateNumber: 'MH-02-DN-4921',
       vehicleType: 'Hero Splendor Plus (Cold-box Mounted)',
       shiftTimings: '08:00 AM - 04:00 PM',
-      assignedRouteIds: ['route-apex-western-1'],
+      assignedRouteIds: ['route-apex-western-1', 'route-abc-diagnostic-1'],
       status: 'active',
       joiningDate: '2025-11-10',
       currentLocation: {

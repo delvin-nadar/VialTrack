@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { UserAuth, PickupTask, Route, PickupBoy, Client, StopProgress } from '../../types';
 import { LiveMap } from '../common/LiveMap';
+import { isRiderLocationStale } from '../../services/locationService';
 import {
   Building2,
   Calendar,
@@ -343,17 +344,32 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           {/* Real-time Status Card */}
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className={`w-2.5 h-2.5 rounded-full ${activeLiveRider && isRiderLocationStale(activeLiveRider, 10) ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}></span>
               <span className="font-bold text-slate-900">Live Status:</span>
               <span className="text-slate-600">
                 {activeLiveTask?.status === 'delivered'
                   ? 'Completed handover at central lab'
-                  : 'Rider in transit between hospital collection points'}
+                  : activeLiveRider && isRiderLocationStale(activeLiveRider, 10)
+                  ? 'Rider GPS paused / offline (>10 min ago)'
+                  : 'Rider in transit between hospital collection points (Live GPS)'}
               </span>
             </div>
-            <span className="text-sky-700 font-mono font-semibold text-[11px]">
-              Estimated Lab Arrival: ~18 mins
-            </span>
+            <div className="flex items-center gap-2">
+              {activeLiveRider && (
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    isRiderLocationStale(activeLiveRider, 10)
+                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  }`}
+                >
+                  {isRiderLocationStale(activeLiveRider, 10) ? 'GPS Stale' : 'Live GPS'}
+                </span>
+              )}
+              <span className="text-sky-700 font-mono font-semibold text-[11px]">
+                Estimated Lab Arrival: ~18 mins
+              </span>
+            </div>
           </div>
         </div>
 

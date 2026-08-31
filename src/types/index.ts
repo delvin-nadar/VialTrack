@@ -138,6 +138,8 @@ export interface PickupBoy {
   isOnline: boolean;
   isCheckedIn: boolean;
   lastPingTime?: string;
+  lastUpdated?: any;
+  heading?: number;
   mustChangePassword?: boolean;
   failedAttempts?: number;
   lockoutUntil?: string;

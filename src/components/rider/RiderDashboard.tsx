@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { UserAuth, PickupTask, Route, PickupBoy, StopProgress, TaskStatus } from '../../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { UserAuth, PickupTask, Route, PickupBoy, StopProgress, TaskStatus, RiderSession } from '../../types';
 import {
   Bike,
   MapPin,
@@ -26,13 +26,16 @@ import {
   ChevronRight,
   Sparkles,
   RefreshCw,
-  Image as ImageIcon
+  Image as ImageIcon,
+  FileText
 } from 'lucide-react';
 import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
-import { LocationService } from '../../services/locationService';
+import { LocationService, GpsStatusEvent } from '../../services/locationService';
 import { NotificationService } from '../../services/notificationService';
 import { LiveMap } from '../common/LiveMap';
+import { CloudSync } from '../../services/firebase';
+import { DailyRoundsSchedule, ScheduleStopItem } from './DailyRoundsSchedule';
 
 interface RiderDashboardProps {
   user: UserAuth;
@@ -51,15 +54,28 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   onRefresh,
   onOpenProof
 }) => {
+  // Session resolution from localStorage ('vialtrack_rider_session')
+  const getRiderSession = (): RiderSession | null => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('vialtrack_rider_session') : null;
+      if (raw) return JSON.parse(raw);
+    } catch (err) {
+      console.warn('Error reading vialtrack_rider_session:', err);
+    }
+    return null;
+  };
+
+  const session = getRiderSession();
+
   const fallbackRider: PickupBoy = {
-    id: user?.riderId || 'rider-rahul',
-    name: user?.name || 'Rahul Sharma',
-    email: user?.email || 'rahul.sharma@vialtrack.in',
-    phone: user?.phone || '+91 98765 43210',
+    id: session?.riderId || user?.riderId || 'rider-rahul',
+    name: session?.name || user?.name || 'Rahul Sharma',
+    email: session?.email || user?.email || 'rahul.sharma@vialtrack.in',
+    phone: session?.phone || user?.phone || '+91 98765 43210',
     photoUrl: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
     vehicleNumber: 'MH-02-DN-4921',
     vehicleType: 'Hero Splendor Plus',
-    assignedRouteIds: [routes[0]?.id || 'route-andheri-west-1'],
+    assignedRouteIds: [routes[0]?.id || 'route-apex-western-1', 'route-abc-diagnostic-1'],
     status: 'active',
     joiningDate: '2025-11-10',
     isOnline: true,
@@ -68,23 +84,67 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   const activeRider: PickupBoy = rider || fallbackRider;
 
+  // Active identity keys
+  const sessionRiderId = session?.riderId || user?.riderId || activeRider.id;
+  const sessionPhone = session?.phone || user?.phone || activeRider.phone || '';
+  const sessionName = session?.name || user?.name || activeRider.name || '';
+
+  const normalizePhone = (p?: string) => (p || '').replace(/\D/g, '');
+  const normalizedSessionPhone = normalizePhone(sessionPhone);
+
+  // Local synced state for real-time Firestore listeners
+  const [liveTasks, setLiveTasks] = useState<PickupTask[]>(tasks);
+  const [liveRoutes, setLiveRoutes] = useState<Route[]>(routes);
+
+  useEffect(() => {
+    setLiveTasks(tasks);
+  }, [tasks]);
+
+  useEffect(() => {
+    setLiveRoutes(routes);
+  }, [routes]);
+
+  // Real-time Firestore snapshot listeners on tasks and routes
+  useEffect(() => {
+    const unsubTasks = CloudSync.subscribeToTasks((cloudTasks) => {
+      if (cloudTasks && cloudTasks.length > 0) {
+        setLiveTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          prev.forEach((t) => map.set(t.id, t));
+          cloudTasks.forEach((t) => map.set(t.id, t));
+          return Array.from(map.values());
+        });
+      }
+    });
+
+    const unsubRoutes = CloudSync.subscribeToRoutes((cloudRoutes) => {
+      if (cloudRoutes && cloudRoutes.length > 0) {
+        setLiveRoutes((prev) => {
+          const map = new Map<string, Route>();
+          prev.forEach((r) => map.set(r.id, r));
+          cloudRoutes.forEach((r) => map.set(r.id, r));
+          return Array.from(map.values());
+        });
+      }
+    });
+
+    return () => {
+      unsubTasks();
+      unsubRoutes();
+    };
+  }, []);
+
   const [isCheckedIn, setIsCheckedIn] = useState<boolean>(activeRider.isCheckedIn ?? true);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [currentStopIndex, setCurrentStopIndex] = useState<number>(0);
   const [isProcessingStop, setIsProcessingStop] = useState<boolean>(false);
   const [isProcessingDrop, setIsProcessingDrop] = useState<boolean>(false);
 
-  // Sync state if rider changes
-  useEffect(() => {
-    if (rider?.isCheckedIn !== undefined) {
-      setIsCheckedIn(rider.isCheckedIn);
-    }
-  }, [rider?.isCheckedIn]);
-
-  // Stop collection form state
+  // Stop collection 2-Photo proof state
   const [vialCount, setVialCount] = useState<number>(0);
   const [coldBoxTemp, setColdBoxTemp] = useState<number>(4.0);
-  const [stopPhoto, setStopPhoto] = useState<string | null>(null);
+  const [stopPhoto, setStopPhoto] = useState<string | null>(null); // Photo 1: Specimen Vials
+  const [stopPhoto2, setStopPhoto2] = useState<string | null>(null); // Photo 2: Hospital Handover Slip
   const [receiverName, setReceiverName] = useState<string>('Dr. Ramesh Patil (Lab Head)');
   const [delayReason, setDelayReason] = useState<string>('Heavy Traffic / Rain');
   const [showDelayModal, setShowDelayModal] = useState<boolean>(false);
@@ -92,7 +152,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [showLiveMap, setShowLiveMap] = useState<boolean>(true);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef1 = useRef<HTMLInputElement>(null);
+  const fileInputRef2 = useRef<HTMLInputElement>(null);
   const dropFileInputRef = useRef<HTMLInputElement>(null);
 
   // Online / Offline monitor
@@ -107,29 +168,160 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
   }, []);
 
-  // Strict Data Scoping: filter tasks, routes, and collection points for logged-in rider
-  const loggedInRiderId = user.riderId || activeRider.id;
-  const riderTasks = tasks.filter((t) => t.riderId === loggedInRiderId || (activeRider && t.riderId === activeRider.id));
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayTasks = riderTasks.filter((t) => t.date === todayStr);
+  // Today ISO Date string
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  // Data Matching: check if a task is assigned to this rider
+  const isTaskAssignedToRider = (t: PickupTask) => {
+    if (!t) return false;
+    if (t.riderId && (t.riderId === sessionRiderId || t.riderId === activeRider.id)) return true;
+    if (t.assignedRiderId && (t.assignedRiderId === sessionRiderId || t.assignedRiderId === activeRider.id)) return true;
+    if (normalizedSessionPhone && t.riderPhone && normalizePhone(t.riderPhone) === normalizedSessionPhone) return true;
+    if (sessionName && t.riderName && t.riderName.trim().toLowerCase() === sessionName.trim().toLowerCase()) return true;
+    return false;
+  };
+
+  // Data Matching: check if a route is assigned to this rider
+  const isRouteAssignedToRider = (r: Route) => {
+    if (!r) return false;
+    if (r.assignedRiderId && (r.assignedRiderId === sessionRiderId || r.assignedRiderId === activeRider.id)) return true;
+    if (normalizedSessionPhone && (r as any).assignedRiderPhone && normalizePhone((r as any).assignedRiderPhone) === normalizedSessionPhone) return true;
+    if (sessionName && (r as any).assignedRiderName && (r as any).assignedRiderName.trim().toLowerCase() === sessionName.trim().toLowerCase()) return true;
+    if (activeRider.assignedRouteIds && activeRider.assignedRouteIds.includes(r.id)) return true;
+    if (liveTasks.some((t) => isTaskAssignedToRider(t) && t.routeId === r.id)) return true;
+    return false;
+  };
+
+  // Assigned routes list (fallback to available routes if none matched)
+  const assignedRoutes: Route[] = useMemo(() => {
+    const matched = liveRoutes.filter(isRouteAssignedToRider);
+    return matched.length > 0 ? matched : liveRoutes;
+  }, [liveRoutes, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName, liveTasks]);
+
+  // Filter today's tasks for this rider
+  const todayRiderTasks: PickupTask[] = useMemo(() => {
+    return liveTasks.filter((t) => isTaskAssignedToRider(t) && t.date === todayStr);
+  }, [liveTasks, todayStr, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName]);
+
+  // Build sequential scheduled stops for "My Daily Rounds Schedule"
+  const scheduleStops: ScheduleStopItem[] = useMemo(() => {
+    const items: ScheduleStopItem[] = [];
+
+    assignedRoutes.forEach((route) => {
+      const timeSlots = route.timeSlots && route.timeSlots.length > 0 ? route.timeSlots : ['10:00', '14:00', '18:00', '22:00'];
+      const client = StorageService.getClientById(route.clientId) || { name: 'Diagnostic Partner' };
+
+      timeSlots.forEach((slot) => {
+        // Find existing task for this slot today
+        const matchedTask = todayRiderTasks.find(
+          (t) => (t.routeId === route.id || t.routeName === route.name) && t.timeSlot === slot
+        );
+
+        if (matchedTask && matchedTask.stopsProgress && matchedTask.stopsProgress.length > 0) {
+          matchedTask.stopsProgress.forEach((sp, spIdx) => {
+            const isCollected = sp.status === 'picked_up';
+            const isInTransit =
+              (matchedTask.status === 'started' || matchedTask.status === 'at_stop' || matchedTask.status === 'in_transit') &&
+              !isCollected;
+            const status: 'pending' | 'in_transit' | 'collected' = isCollected
+              ? 'collected'
+              : isInTransit
+              ? 'in_transit'
+              : 'pending';
+
+            items.push({
+              id: `${matchedTask.id}-stop-${spIdx}`,
+              uniqueKey: `${matchedTask.id}-stop-${spIdx}-${slot}`,
+              stopNumber: spIdx + 1,
+              stopName: sp.stopName,
+              address: sp.address,
+              lat: sp.lat || 19.2082,
+              lng: sp.lng || 72.8398,
+              timeSlot: matchedTask.timeSlot || slot,
+              contactPerson: sp.contactPerson || 'Sister Sunita Rao (OPD Head)',
+              phone: sp.phone || '+91 98201 12345',
+              status,
+              vialCount: sp.sampleCount,
+              coldBoxTemp: sp.coldBoxTemp,
+              photoUrl: sp.photoUrl,
+              photo2Url: (sp as any).handoverPhotoUrl || (sp as any).photo2Url,
+              taskId: matchedTask.id,
+              task: matchedTask,
+              routeId: route.id,
+              routeName: route.name,
+              clientId: route.clientId,
+              clientName: matchedTask.clientName || client.name,
+              stopIndex: spIdx,
+              order: spIdx + 1
+            });
+          });
+        } else {
+          // Resolve stops directly from assigned route definition
+          const routeStops = route.stops || [];
+          routeStops.forEach((rs, rsIdx) => {
+            items.push({
+              id: `route-${route.id}-slot-${slot.replace(':', '')}-stop-${rsIdx}`,
+              uniqueKey: `route-${route.id}-slot-${slot.replace(':', '')}-stop-${rsIdx}`,
+              stopNumber: rs.order || rsIdx + 1,
+              stopName: rs.name,
+              address: rs.address,
+              lat: rs.lat || 19.2082,
+              lng: rs.lng || 72.8398,
+              timeSlot: slot,
+              contactPerson: rs.contactPerson || 'Hospital OPD Coordinator',
+              phone: rs.phone || '+91 98201 12345',
+              status: 'pending',
+              routeId: route.id,
+              routeName: route.name,
+              clientId: route.clientId,
+              clientName: client.name,
+              stopIndex: rsIdx,
+              order: rs.order || rsIdx + 1
+            });
+          });
+        }
+      });
+    });
+
+    return items;
+  }, [assignedRoutes, todayRiderTasks]);
 
   // Find currently active task or default to first in-progress/upcoming
-  const activeTask =
-    todayTasks.find((t) => t.id === activeTaskId) ||
-    todayTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) ||
-    todayTasks[0] ||
-    riderTasks[0];
+  const activeTask = useMemo(() => {
+    return (
+      todayRiderTasks.find((t) => t.id === activeTaskId) ||
+      todayRiderTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) ||
+      todayRiderTasks[0] ||
+      liveTasks.find((t) => isTaskAssignedToRider(t)) ||
+      liveTasks[0]
+    );
+  }, [todayRiderTasks, activeTaskId, liveTasks]);
 
-  const activeRoute = routes.find((r) => r.id === activeTask?.routeId) || routes[0];
+  const activeRoute = useMemo(() => {
+    return assignedRoutes.find((r) => r.id === activeTask?.routeId) || assignedRoutes[0] || liveRoutes[0];
+  }, [assignedRoutes, activeTask, liveRoutes]);
 
-  // Start GPS broadcasting when on duty
+  const [gpsStatus, setGpsStatus] = useState<GpsStatusEvent>(LocationService.getStatus());
+
+  // Listen to GPS status events (permissions, errors, mode)
+  useEffect(() => {
+    const unsub = LocationService.subscribeStatus((status) => {
+      setGpsStatus(status);
+    });
+    return () => unsub();
+  }, []);
+
+  // Start real GPS broadcasting when on duty
   useEffect(() => {
     if (isCheckedIn) {
-      LocationService.startTracking((loc) => {
-        // Broadcast location updates
-      });
+      LocationService.startRealGeolocation(activeRider.id, activeRider.name, activeTask?.id);
+    } else {
+      LocationService.stop();
     }
-  }, [isCheckedIn]);
+    return () => {
+      LocationService.stop();
+    };
+  }, [isCheckedIn, activeRider.id, activeRider.name, activeTask?.id]);
 
   // Handle Attendance Toggle
   const handleToggleAttendance = () => {
@@ -198,62 +390,69 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     });
   };
 
-  // Handle Photo Upload with Watermarking
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>, isDrop = false) => {
+  // Handle Photo Upload with 2-Photo Proof & Watermarking
+  const handlePhotoCapture = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    photoType: 'photo1' | 'photo2' | 'drop'
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setWatermarking(true);
     const currentStop = activeTask?.stopsProgress[currentStopIndex];
 
-    // Reset file input value so repeated captures trigger onChange
     if (e.target) {
       e.target.value = '';
     }
 
     try {
-      // Step 1: Compress via HTML5 Canvas to max 800px JPEG (0.6 quality)
       const compressedBase64 = await compressImageToBase64(file, 800, 0.6);
+      const watermarked = await addWatermarkToImage(compressedBase64, {
+        timestamp: new Date().toISOString(),
+        lat: 19.2082,
+        lng: 72.8398,
+        address:
+          photoType === 'drop'
+            ? activeTask?.destination.name || 'Diagnostic Lab'
+            : currentStop?.stopName || 'Hospital Stop',
+        riderName: activeRider.name,
+        clientName: activeTask?.clientName || 'Diagnostic Partner',
+        vialCount: vialCount,
+        temperature: coldBoxTemp,
+        isDrop: photoType === 'drop',
+        receiverName: photoType === 'drop' ? receiverName : undefined
+      });
 
-      // Step 2: Apply GPS & cold-chain watermark overlay
-      const watermarked = await addWatermarkToImage(
-        compressedBase64,
-        {
-          timestamp: new Date().toISOString(),
-          lat: 19.2082,
-          lng: 72.8398,
-          address: isDrop ? activeTask?.destination.name || 'Diagnostic Lab' : currentStop?.stopName || 'Hospital Stop',
-          riderName: activeRider.name,
-          clientName: activeTask?.clientName || 'Diagnostic Partner',
-          vialCount: vialCount,
-          temperature: coldBoxTemp,
-          isDrop: isDrop,
-          receiverName: isDrop ? receiverName : undefined
-        }
-      );
-
-      setStopPhoto(watermarked);
+      if (photoType === 'photo1') {
+        setStopPhoto(watermarked);
+      } else if (photoType === 'photo2') {
+        setStopPhoto2(watermarked);
+      } else {
+        setStopPhoto(watermarked);
+      }
     } catch (err) {
-      console.warn('Watermark generation fallback to compressed photo:', err);
+      console.warn('Watermark generation fallback:', err);
       try {
         const fallbackBase64 = await compressImageToBase64(file, 800, 0.6);
-        setStopPhoto(fallbackBase64);
-      } catch {
-        // Safe fallback
-      }
+        if (photoType === 'photo1') setStopPhoto(fallbackBase64);
+        else if (photoType === 'photo2') setStopPhoto2(fallbackBase64);
+        else setStopPhoto(fallbackBase64);
+      } catch {}
     } finally {
       setWatermarking(false);
     }
   };
 
   // Instant Sample / Cam Snap Simulator
-  const handleInstantPhotoSnap = async (isDrop = false) => {
+  const handleInstantPhotoSnap = async (photoType: 'photo1' | 'photo2' | 'drop') => {
     setWatermarking(true);
     const currentStop = activeTask?.stopsProgress[currentStopIndex];
     const generated = generateSampleVialPhoto(
-      isDrop ? 'drop' : 'vial',
-      isDrop
+      photoType === 'drop' ? 'drop' : photoType === 'photo2' ? 'drop' : 'vial',
+      photoType === 'drop'
         ? `Diagnostic Lab Handover • ${activeTask?.destination.name}`
+        : photoType === 'photo2'
+        ? `Hospital Handover Slip • ${currentStop?.stopName || 'Hospital Stop'}`
         : `${vialCount} Blood Vials • ${currentStop?.stopName || 'Hospital Stop'}`
     );
 
@@ -262,33 +461,131 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         timestamp: new Date().toISOString(),
         lat: 19.2082,
         lng: 72.8398,
-        address: isDrop ? activeTask?.destination.name || 'Diagnostic Lab' : currentStop?.stopName || 'Hospital Stop',
+        address:
+          photoType === 'drop'
+            ? activeTask?.destination.name || 'Diagnostic Lab'
+            : currentStop?.stopName || 'Hospital Stop',
         riderName: activeRider.name,
         clientName: activeTask?.clientName || 'Diagnostic Partner',
         vialCount: vialCount,
         temperature: coldBoxTemp,
-        isDrop: isDrop,
-        receiverName: isDrop ? receiverName : undefined
+        isDrop: photoType === 'drop',
+        receiverName: photoType === 'drop' ? receiverName : undefined
       });
-      setStopPhoto(watermarked);
+      if (photoType === 'photo1') setStopPhoto(watermarked);
+      else if (photoType === 'photo2') setStopPhoto2(watermarked);
+      else setStopPhoto(watermarked);
     } catch {
-      setStopPhoto(generated);
+      if (photoType === 'photo1') setStopPhoto(generated);
+      else if (photoType === 'photo2') setStopPhoto2(generated);
+      else setStopPhoto(generated);
     } finally {
       setWatermarking(false);
     }
   };
 
-  // Confirm Stop Pickup
+  // Start collection / upload 2-photo proof directly from schedule stop card
+  const handleStartStopCollectionFromSchedule = (stopItem: ScheduleStopItem) => {
+    let targetTask = stopItem.task;
+
+    if (!targetTask) {
+      // Find or build task for this assigned route and timing slot
+      const matchingRoute = liveRoutes.find((r) => r.id === stopItem.routeId) || liveRoutes[0];
+      const newTaskId = `task-${todayStr}-${stopItem.timeSlot.replace(':', '')}-${Date.now().toString().slice(-4)}`;
+
+      const stopsProgress: StopProgress[] = (matchingRoute?.stops || []).map((s, idx) => ({
+        stopId: s.id || `stop-${idx}`,
+        stopName: s.name,
+        address: s.address,
+        lat: s.lat || 19.2082,
+        lng: s.lng || 72.8398,
+        contactPerson: s.contactPerson || 'Hospital Coordinator',
+        phone: s.phone || '+91 98201 12345',
+        status: 'pending'
+      }));
+
+      const client = StorageService.getClientById(matchingRoute?.clientId || '') || {
+        id: matchingRoute?.clientId || 'client-apex',
+        name: 'Apex Diagnostic Center',
+        address: 'Malad West, Mumbai'
+      };
+
+      targetTask = {
+        id: newTaskId,
+        date: todayStr,
+        timeSlot: stopItem.timeSlot,
+        routeId: matchingRoute?.id || stopItem.routeId,
+        routeName: matchingRoute?.name || stopItem.routeName,
+        clientId: client.id,
+        clientName: client.name,
+        riderId: activeRider.id,
+        riderName: activeRider.name,
+        riderPhone: activeRider.phone,
+        riderVehicle: activeRider.vehicleNumber,
+        status: 'started',
+        currentStopIndex: stopItem.stopIndex,
+        pickupLocation: {
+          name: matchingRoute?.stops[0]?.name || client.name,
+          address: matchingRoute?.stops[0]?.address || client.address,
+          lat: matchingRoute?.stops[0]?.lat || 19.1363,
+          lng: matchingRoute?.stops[0]?.lng || 72.8277,
+          area: 'Mumbai'
+        },
+        deliveryLocation: {
+          name: matchingRoute?.destinationLab?.name || 'Central Diagnostic Processing Lab',
+          address: matchingRoute?.destinationLab?.address || 'Mumbai Central Facility',
+          lat: matchingRoute?.destinationLab?.lat || 19.1860,
+          lng: matchingRoute?.destinationLab?.lng || 72.8485,
+          area: 'Mumbai'
+        },
+        stopsProgress,
+        destination: {
+          name: matchingRoute?.destinationLab?.name || 'Central Diagnostic Processing Lab',
+          address: matchingRoute?.destinationLab?.address || 'Mumbai Central Facility',
+          lat: matchingRoute?.destinationLab?.lat || 19.1860,
+          lng: matchingRoute?.destinationLab?.lng || 72.8485,
+          notes: 'Specimen cold-chain transport'
+        },
+        isDelayed: false,
+        delayMinutes: 0,
+        issueFlags: [],
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString()
+      };
+
+      StorageService.addTask(targetTask);
+    } else if (targetTask.status === 'upcoming' || targetTask.status === 'pending') {
+      targetTask = {
+        ...targetTask,
+        status: 'started',
+        startedAt: targetTask.startedAt || new Date().toISOString()
+      };
+      StorageService.updateTask(targetTask);
+    }
+
+    setActiveTaskId(targetTask.id);
+    setCurrentStopIndex(stopItem.stopIndex);
+
+    const targetStop = targetTask.stopsProgress[stopItem.stopIndex];
+    setVialCount(targetStop?.sampleCount ?? 0);
+    setColdBoxTemp(targetStop?.coldBoxTemp ?? 4.0);
+    setStopPhoto(targetStop?.photoUrl || null);
+    setStopPhoto2((targetStop as any)?.handoverPhotoUrl || (targetStop as any)?.photo2Url || null);
+    setIsProcessingStop(true);
+    onRefresh();
+  };
+
+  // Confirm Stop Pickup with 2-Photo Proof
   const handleConfirmStopPickup = () => {
     if (!activeTask) return;
 
     const stopToUpdate = activeTask.stopsProgress[currentStopIndex];
     const finalSamplePhoto =
       stopPhoto ||
-      generateSampleVialPhoto(
-        'vial',
-        `${vialCount} Specimen Vials (${stopToUpdate.stopName})`
-      );
+      generateSampleVialPhoto('vial', `${vialCount} Specimen Vials (${stopToUpdate.stopName})`);
+    const finalSlipPhoto =
+      stopPhoto2 ||
+      generateSampleVialPhoto('drop', `Hospital Handover Slip (${stopToUpdate.stopName})`);
 
     const updatedStops: StopProgress[] = activeTask.stopsProgress.map((s, idx) => {
       if (idx === currentStopIndex) {
@@ -300,9 +597,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           sampleCount: vialCount,
           coldBoxTemp: coldBoxTemp,
           photoUrl: finalSamplePhoto,
+          handoverPhotoUrl: finalSlipPhoto,
+          photo2Url: finalSlipPhoto,
           photoTimestamp: new Date().toISOString(),
           photoLocation: { lat: 19.2082, lng: 72.8398, accuracy: 5 },
-          notes: vialCount === 0 ? 'Verified: 0 samples ready for collection.' : `${vialCount} specimen vials sealed in chiller rack.`
+          notes:
+            vialCount === 0
+              ? 'Verified: 0 samples ready for collection.'
+              : `${vialCount} specimen vials sealed in chiller rack with 2-photo verification.`
         };
       }
       return s;
@@ -319,13 +621,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     StorageService.updateTask(updatedTask);
     setIsProcessingStop(false);
     setStopPhoto(null);
+    setStopPhoto2(null);
     setVialCount(0);
     onRefresh();
 
     NotificationService.sendAlert({
       type: 'pickup',
       title: `Sample Picked: ${vialCount} Vials`,
-      message: `${activeRider.name} collected ${vialCount} vials at ${stopToUpdate.stopName}. Cold box: ${coldBoxTemp}°C.`,
+      message: `${activeRider.name} collected ${vialCount} vials at ${stopToUpdate.stopName}. 2-Photo proof verified. Cold box: ${coldBoxTemp}°C.`,
       recipientRole: 'both',
       channel: 'both'
     });
@@ -337,10 +640,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     const finalLabPhoto =
       stopPhoto ||
-      generateSampleVialPhoto(
-        'drop',
-        `Lab Handover Verified (${activeTask.destination.name})`
-      );
+      generateSampleVialPhoto('drop', `Lab Handover Verified (${activeTask.destination.name})`);
 
     const totalVials = activeTask.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
 
@@ -364,12 +664,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     StorageService.updateTask(updatedTask);
     setIsProcessingDrop(false);
     setStopPhoto(null);
+    setStopPhoto2(null);
     onRefresh();
 
     NotificationService.sendAlert({
-      type: 'delivered',
-      title: `Delivery Confirmed: ${activeTask.timeSlot} Round`,
-      message: `Total ${totalVials} specimen vials delivered to ${activeTask.destination.name}. Received by ${receiverName}. Cold-chain safe: ${coldBoxTemp}°C.`,
+      type: 'delivery',
+      title: `Lab Delivery Completed (${totalVials} Vials)`,
+      message: `${activeRider.name} delivered ${totalVials} vials to ${activeTask.destination.name}. Received by ${receiverName}.`,
       recipientRole: 'both',
       channel: 'both'
     });
@@ -378,369 +679,356 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   // Report Delay
   const handleReportDelay = () => {
     if (!activeTask) return;
-
-    const updatedTask: PickupTask = {
+    const newFlag: any = {
+      id: `issue-${Date.now()}`,
+      type: 'delay',
+      reason: delayReason,
+      description: `Rider reported delay: ${delayReason}`,
+      reportedAt: new Date().toISOString(),
+      reportedByRiderId: activeRider.id,
+      reportedByRiderName: activeRider.name,
+      resolved: false
+    };
+    const updated: PickupTask = {
       ...activeTask,
       isDelayed: true,
-      delayMinutes: 20,
-      issueFlags: [
-        ...(activeTask.issueFlags || []),
-        {
-          id: `issue-${Date.now()}`,
-          reportedAt: new Date().toISOString(),
-          reason: delayReason,
-          resolved: false
-        }
-      ]
+      delayMinutes: (activeTask.delayMinutes || 0) + 20,
+      issueFlags: [...(activeTask.issueFlags || []), newFlag]
     };
-
-    StorageService.updateTask(updatedTask);
+    StorageService.updateTask(updated);
     setShowDelayModal(false);
     onRefresh();
 
     NotificationService.sendAlert({
       type: 'delay',
-      title: `Rider Reported Delay (+20m)`,
-      message: `${activeRider.name} on ${activeTask.routeName} reported: ${delayReason}. SecondMedic Ops notified.`,
+      title: `Rider Delay Alert: +20 Mins`,
+      message: `${activeRider.name} reported delay: ${delayReason} on ${activeTask.timeSlot} loop.`,
       recipientRole: 'both',
       channel: 'both'
     });
   };
 
+  // Calculate live summary counters
+  const totalCollectedVials = useMemo(() => {
+    return todayRiderTasks.reduce((sum, t) => {
+      const taskVials = t.stopsProgress.reduce((sub, s) => sub + (s.sampleCount || 0), 0);
+      return sum + taskVials;
+    }, 0);
+  }, [todayRiderTasks]);
+
+  const completedStopsCount = useMemo(() => {
+    return scheduleStops.filter((s) => s.status === 'collected').length;
+  }, [scheduleStops]);
+
   return (
-    <div className="space-y-4 max-w-lg mx-auto pb-16">
-      {/* Rider Status & Duty Header (Mobile Bar) */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between">
+    <div className="space-y-4 max-w-5xl mx-auto pb-16">
+      {/* GPS Status Banner */}
+      {gpsStatus.errorMessage && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs text-red-800 shadow-xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <div>
+              <span className="font-bold">GPS Access Warning:</span> {gpsStatus.errorMessage}
+            </div>
+          </div>
+          <button
+            onClick={() => LocationService.startRealGeolocation(activeRider.id, activeRider.name, activeTask?.id)}
+            className="px-2.5 py-1 bg-red-700 hover:bg-red-800 text-white rounded-md font-bold text-xs shrink-0 cursor-pointer"
+          >
+            Grant Location
+          </button>
+        </div>
+      )}
+
+      {/* Rider Header Bar & Live Duty Status */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
               src={activeRider.photoUrl}
               alt={activeRider.name}
-              className="w-11 h-11 rounded-lg object-cover border border-slate-200 shadow-xs"
+              className="w-12 h-12 rounded-full object-cover border-2 border-sky-600 shadow-xs"
             />
-            <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-600 rounded-full border-2 border-white flex items-center justify-center">
-              <Check className="w-2.5 h-2.5 text-white" />
-            </span>
+            <span
+              className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                isCheckedIn ? 'bg-emerald-500' : 'bg-slate-400'
+              }`}
+            />
           </div>
           <div>
-            <h2 className="font-bold text-slate-900 text-base leading-tight">{activeRider.name}</h2>
-            <p className="text-xs text-sky-700 font-mono font-medium">{activeRider.vehicleNumber}</p>
+            <div className="flex items-center gap-2">
+              <h2 className="font-bold text-slate-900 text-base sm:text-lg">{activeRider.name}</h2>
+              <span className="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                {activeRider.vehicleNumber}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+              <Bike className="w-3.5 h-3.5 text-sky-700" />
+              <span>{activeRider.vehicleType}</span>
+              <span className="text-slate-300">•</span>
+              <span className="font-medium text-slate-700">{activeRider.shiftTimings || '08:00 AM - 04:00 PM'}</span>
+            </p>
           </div>
         </div>
 
-        {/* Check-In Toggle button */}
-        <button
-          onClick={handleToggleAttendance}
-          className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
-            isCheckedIn
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-              : 'bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-300'
-          }`}
-        >
-          <UserCheck className="w-4 h-4 text-emerald-600" />
-          <span>{isCheckedIn ? 'On Duty (GPS ON)' : 'Check In'}</span>
-        </button>
+        {/* Action / Attendance Toggle */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700">
+            {isOnline ? <Wifi className="w-3.5 h-3.5 text-emerald-600" /> : <WifiOff className="w-3.5 h-3.5 text-red-600" />}
+            <span>{isOnline ? 'Cloud Synced' : 'Offline Mode'}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleToggleAttendance}
+            className={`px-4 py-2 rounded-lg font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95 ${
+              isCheckedIn
+                ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                : 'bg-slate-800 hover:bg-slate-900 text-white'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>{isCheckedIn ? 'ON DUTY (LIVE GPS)' : 'PUNCH IN (START SHIFT)'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Connectivity & Cold-Box Status Pill */}
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-white border border-slate-200 p-2.5 rounded-lg flex items-center justify-between shadow-xs">
-          <span className="text-slate-500 flex items-center gap-1.5 text-[11px] font-medium">
-            <Thermometer className="w-4 h-4 text-sky-700" /> Cold-Box:
+      {/* KPI Stats Quick Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Loops</span>
+          <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">{assignedRoutes.length}</span>
+          <span className="text-[10px] text-slate-500 truncate block mt-0.5">
+            {assignedRoutes.map((r) => r.name).join(', ') || 'Western Suburbs'}
           </span>
-          <span className="font-mono font-bold text-emerald-800 text-xs">4.0°C (Safe)</span>
         </div>
 
-        <div className="bg-white border border-slate-200 p-2.5 rounded-lg flex items-center justify-between shadow-xs">
-          <span className="text-slate-500 flex items-center gap-1.5 text-[11px] font-medium">
-            {isOnline ? <Wifi className="w-4 h-4 text-emerald-600" /> : <WifiOff className="w-4 h-4 text-amber-600" />}
-            <span>Sync:</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Stops Progress</span>
+          <span className="text-xl font-bold font-mono text-sky-800 mt-1 block">
+            {completedStopsCount} / {scheduleStops.length}
           </span>
-          <span className="font-mono font-bold text-slate-700 text-xs">{isOnline ? 'Online (PWA)' : 'Offline Store'}</span>
+          <span className="text-[10px] text-sky-700 font-semibold block mt-0.5">
+            {scheduleStops.length > 0 ? `${Math.round((completedStopsCount / scheduleStops.length) * 100)}% Completed` : '0%'}
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Collected Vials</span>
+          <span className="text-xl font-bold font-mono text-emerald-800 mt-1 block">{totalCollectedVials}</span>
+          <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">2°C – 8°C Cold Chain Certified</span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">GPS Status</span>
+          <span className="text-xl font-bold font-mono text-emerald-700 mt-1 block flex items-center gap-1.5">
+            <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
+            <span>Active</span>
+          </span>
+          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+            {gpsStatus.mode === 'real' ? 'High Precision GPS' : 'Simulated GPS'}
+          </span>
         </div>
       </div>
 
       {/* Active Loop Command Hero Card */}
       {activeTask && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <span className="bg-sky-700 text-white font-mono font-bold text-xs px-2 py-0.5 rounded">
-                {activeTask.timeSlot}
+              <span className="px-2.5 py-1 rounded-md font-mono font-bold text-xs bg-sky-700 text-white">
+                {activeTask.timeSlot} LOOP
               </span>
               <div>
-                <h3 className="font-bold text-slate-900 text-xs sm:text-sm">{activeTask.clientName}</h3>
-                <p className="text-[11px] text-slate-500">{activeTask.routeName}</p>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base">{activeTask.routeName}</h3>
+                <p className="text-xs text-slate-500">{activeTask.clientName}</p>
               </div>
             </div>
 
-            <button
-              onClick={() => setShowDelayModal(true)}
-              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-[11px] rounded-lg border border-amber-300 flex items-center gap-1 active:scale-95 cursor-pointer shadow-xs"
-            >
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-              <span>Delay</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDelayModal(true)}
+                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                <span>Report Delay</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowLiveMap(!showLiveMap)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <Navigation className="w-3.5 h-3.5 text-sky-700" />
+                <span>{showLiveMap ? 'Hide Map' : 'Show Map'}</span>
+              </button>
+            </div>
           </div>
 
-          {/* If Task is Upcoming: Big 1-Touch START BUTTON */}
-          {activeTask.status === 'upcoming' && (
-            <div className="pt-1">
-              <button
-                onClick={() => handleStartRoute(activeTask)}
-                className="w-full py-3.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-base rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
-              >
-                <Bike className="w-5 h-5" />
-                <span>START {activeTask.timeSlot} COLLECTION LOOP</span>
-              </button>
+          {/* Optional Live Route Map */}
+          {showLiveMap && (
+            <div className="rounded-xl overflow-hidden border border-slate-200 shadow-2xs">
+              <LiveMap
+                tasks={[activeTask]}
+                riders={[activeRider]}
+                height="280px"
+                activeTaskId={activeTask.id}
+              />
             </div>
           )}
 
-          {/* Stops List & Action Stepper */}
-          {activeTask.status !== 'upcoming' && (
-            <div className="space-y-3 pt-1">
-              {/* Dynamic Live Route Map Card */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                <div className="p-2.5 px-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                    <Navigation className="w-3.5 h-3.5 text-sky-700" />
-                    <span>Live GPS Navigation & Polyline Route</span>
-                  </div>
-                  <button
-                    onClick={() => setShowLiveMap(!showLiveMap)}
-                    className="text-[11px] font-bold text-sky-700 hover:text-sky-800 cursor-pointer"
+          {/* Active Loop Stops Stepper */}
+          <div className="space-y-2.5">
+            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+              Active Round Stops Checklist
+            </span>
+            <div className="space-y-2">
+              {activeTask.stopsProgress.map((stop, idx) => {
+                const isPicked = stop.status === 'picked_up';
+                const isCurrent = currentStopIndex === idx && !isPicked;
+                const cleanPhone = (stop.phone || '').replace(/\D/g, '');
+
+                return (
+                  <div
+                    key={stop.stopId}
+                    className={`p-3 sm:p-4 rounded-xl border transition-all ${
+                      isPicked
+                        ? 'bg-emerald-50/50 border-emerald-200'
+                        : isCurrent
+                        ? 'bg-sky-50/60 border-sky-300 ring-1 ring-sky-300'
+                        : 'bg-white border-slate-200'
+                    }`}
                   >
-                    {showLiveMap ? 'Hide Map' : 'Show Map'}
-                  </button>
-                </div>
-                {showLiveMap && (
-                  <LiveMap
-                    stops={activeRoute?.stops || []}
-                    destination={activeRoute?.destinationLab}
-                    rider={activeRider}
-                    tasks={[activeTask]}
-                    activeTaskId={activeTask.id}
-                    height="280px"
-                    autoFit={true}
-                    enableFirestoreSync={true}
-                  />
-                )}
-              </div>
-
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider text-[11px]">
-                <span>Collection Stops ({activeTask.stopsProgress.length})</span>
-                <span className="text-sky-700">
-                  {activeTask.stopsProgress.filter((s) => s.status === 'picked_up').length} / {activeTask.stopsProgress.length} Picked
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {activeTask.stopsProgress.map((stop, sIdx) => {
-                  const isPicked = stop.status === 'picked_up';
-
-                  return (
-                    <div
-                      key={stop.stopId || sIdx}
-                      className={`p-3 rounded-lg border transition-all shadow-xs ${
-                        isPicked
-                          ? 'bg-emerald-50/50 border-emerald-200 text-slate-700'
-                          : 'bg-white border-sky-300'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2.5">
-                          <span
-                            className={`w-5 h-5 rounded-full font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5 ${
-                              isPicked
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-sky-700 text-white'
-                            }`}
-                          >
-                            {isPicked ? <Check className="w-3.5 h-3.5" /> : sIdx + 1}
-                          </span>
-                          <div>
-                            <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{stop.stopName}</h4>
-                            <p className="text-[11px] text-slate-500 mt-0.5">{stop.address}</p>
-                            <span className="text-[11px] text-sky-700 font-medium block mt-1">
-                              Contact: {stop.contactPerson} ({stop.phone})
-                            </span>
-                          </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
+                            isPicked
+                              ? 'bg-emerald-700 text-white'
+                              : isCurrent
+                              ? 'bg-sky-700 text-white animate-pulse'
+                              : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {isPicked ? <Check className="w-4 h-4" /> : idx + 1}
                         </div>
-
-                        {/* Navigation & Call shortcuts */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <a
-                            href={`tel:${stop.phone}`}
-                            className="p-1.5 bg-slate-50 hover:bg-slate-100 text-emerald-800 rounded-md border border-slate-200 transition-colors active:scale-95 shadow-xs"
-                            title="Call Hospital Contact"
-                          >
-                            <PhoneCall className="w-3.5 h-3.5" />
-                          </a>
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                              stop.address
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 bg-slate-50 hover:bg-slate-100 text-sky-700 rounded-md border border-slate-200 transition-colors active:scale-95 shadow-xs"
-                            title="Open Google Maps Navigation"
-                          >
-                            <Navigation className="w-3.5 h-3.5" />
-                          </a>
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{stop.stopName}</h4>
+                          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{stop.address}</span>
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Contact: <span className="font-medium text-slate-800">{stop.contactPerson}</span> ({stop.phone})
+                          </p>
                         </div>
                       </div>
 
-                      {/* Pickup Confirmation Action */}
-                      {!isPicked && (
-                        <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" /> Awaiting Pickup
-                          </span>
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {stop.phone && (
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
+                            title="Call contact"
+                          >
+                            <PhoneCall className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Call</span>
+                          </a>
+                        )}
+
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
+                          title="Navigate via Maps"
+                        >
+                          <Navigation className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Navigate</span>
+                        </a>
+
+                        {!isPicked ? (
                           <button
+                            type="button"
                             onClick={() => {
-                              const targetStop = activeTask.stopsProgress[sIdx];
-                              setCurrentStopIndex(sIdx);
-                              setVialCount(targetStop.sampleCount ?? 0);
-                              setColdBoxTemp(targetStop.coldBoxTemp ?? 4.0);
-                              setStopPhoto(targetStop.photoUrl || null);
+                              setCurrentStopIndex(idx);
+                              setVialCount(stop.sampleCount || 0);
+                              setColdBoxTemp(stop.coldBoxTemp || 4.0);
+                              setStopPhoto(stop.photoUrl || null);
+                              setStopPhoto2((stop as any).handoverPhotoUrl || (stop as any).photo2Url || null);
                               setIsProcessingStop(true);
                             }}
-                            className="px-3.5 py-1.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                            className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-98"
                           >
                             <Camera className="w-3.5 h-3.5" />
-                            <span>Collect Samples</span>
+                            <span>Capture 2-Photo Proof</span>
                           </button>
-                        </div>
-                      )}
-
-                      {isPicked && (
-                        <div className="mt-2 text-[11px] flex items-center justify-between text-emerald-800 font-mono font-medium">
-                          <span>✓ {stop.sampleCount ?? 0} Vials Picked</span>
-                          <span>Chiller: {stop.coldBoxTemp}°C</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Destination Lab Handover Card */}
-              <div
-                className={`p-3.5 rounded-lg border transition-all shadow-xs ${
-                  activeTask.status === 'delivered'
-                    ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900'
-                    : 'bg-white border-slate-200 text-slate-800'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
-                        Destination Lab: {activeTask.destination.name}
-                      </h4>
-                      <p className="text-[11px] text-slate-500">{activeTask.destination.address}</p>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-md border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>{stop.sampleCount ?? 0} Vials Collected</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                      activeTask.destination.address
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 bg-slate-50 hover:bg-slate-100 text-sky-700 rounded-md border border-slate-200 shadow-xs"
-                  >
-                    <Navigation className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-
-                {activeTask.status !== 'delivered' && (
-                  <button
-                    onClick={() => {
-                      setStopPhoto(activeTask.destination.dropPhotoUrl || activeTask.destination.handoverPhotoUrl || null);
-                      setColdBoxTemp(activeTask.destination.coldBoxTempAtDrop ?? 4.0);
-                      setReceiverName(activeTask.destination.receiverName || 'Dr. Ramesh Patil (Lab Head)');
-                      setIsProcessingDrop(true);
-                    }}
-                    className="w-full mt-2.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>HANDOVER SAMPLES AT DESTINATION LAB</span>
-                  </button>
-                )}
-
-                {activeTask.status === 'delivered' && (
-                  <div className="mt-2 text-xs text-emerald-800 flex items-center justify-between font-bold">
-                    <span>✓ Delivered & Verified</span>
-                    <button
-                      onClick={() => onOpenProof(activeTask)}
-                      className="text-sky-700 hover:underline text-xs cursor-pointer font-semibold"
-                    >
-                      View Handover Proof
-                    </button>
-                  </div>
-                )}
-              </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+
+          {/* Destination Central Lab Handover Section */}
+          <div className="p-3.5 sm:p-4 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/40 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                  Final Processing Destination
+                </span>
+                <h4 className="font-bold text-slate-900 text-sm">{activeTask.destination.name}</h4>
+                <p className="text-xs text-slate-600 mt-0.5">{activeTask.destination.address}</p>
+              </div>
+
+              {activeTask.destination.status !== 'delivered' ? (
+                <button
+                  type="button"
+                  onClick={() => setIsProcessingDrop(true)}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Handover to Lab</span>
+                </button>
+              ) : (
+                <span className="px-3 py-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs rounded-lg flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                  <span>Handover Verified ({activeTask.destination.receiverName})</span>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Today's Other Assigned Slots Schedule */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-2.5">
-        <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
-          <Clock className="w-4 h-4 text-sky-700" />
-          <span>My Daily Rounds Schedule</span>
-        </h3>
+      {/* "My Daily Rounds Schedule" Displaying Assigned Stops */}
+      <DailyRoundsSchedule
+        scheduleStops={scheduleStops}
+        assignedRoutes={assignedRoutes}
+        activeTaskId={activeTask?.id}
+        onStartCollection={handleStartStopCollectionFromSchedule}
+        onOpenProofModal={onOpenProof}
+        onSelectTask={(taskId) => setActiveTaskId(taskId)}
+      />
 
-        <div className="space-y-1.5">
-          {todayTasks.map((t) => (
-            <div
-              key={t.id}
-              onClick={() => setActiveTaskId(t.id)}
-              className={`p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-all shadow-xs ${
-                activeTask?.id === t.id
-                  ? 'bg-sky-50 border-sky-300'
-                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-xs bg-slate-50 px-2 py-0.5 rounded text-slate-900 border border-slate-200">
-                  {t.timeSlot}
-                </span>
-                <div>
-                  <div className="font-bold text-slate-900 text-xs">{t.clientName}</div>
-                  <div className="text-[10px] text-slate-500">{t.stopsProgress.length} Stops</div>
-                </div>
-              </div>
-
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  t.status === 'delivered'
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    : t.status === 'in_transit'
-                    ? 'bg-sky-100 text-sky-800 border border-sky-200'
-                    : 'bg-slate-100 text-slate-600 border border-slate-200'
-                }`}
-              >
-                {t.status === 'delivered' ? 'Delivered' : t.status === 'in_transit' ? 'In Progress' : 'Scheduled'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Modal: Process Stop Pickup (Watermarked photo + Vial Counter + Temp) */}
+      {/* Modal: Process Stop Pickup (2-Photo Proof: Specimen Vials + Signed Slip) */}
       {isProcessingStop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto animate-fadeIn">
-          <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-5 shadow-2xl space-y-4 my-6">
+          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-xl p-5 shadow-2xl space-y-4 my-6">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
               <div>
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <Camera className="w-4 h-4 text-sky-700" />
-                  <span>Confirm Sample Collection</span>
+                  <span>Upload 2-Photo Proof & Confirm Pickup</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
                   {activeTask?.stopsProgress[currentStopIndex]?.stopName}
@@ -760,7 +1048,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                   Vials / Blood Samples Count
                 </label>
-                <span className="text-[11px] text-slate-500 font-medium">Default: 0</span>
+                <span className="text-[11px] text-slate-500 font-medium">Recorded Vials: {vialCount}</span>
               </div>
 
               <div className="flex items-center justify-center gap-3">
@@ -799,7 +1087,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               </div>
 
               {/* Quick Preset Selector Chips */}
-              <div className="flex items-center justify-center gap-1.5 pt-1">
+              <div className="flex items-center justify-center gap-1.5 pt-1 flex-wrap">
                 <span className="text-[10px] text-slate-400 font-semibold mr-1">Quick:</span>
                 {[0, 2, 5, 10, 15, 20].map((preset) => (
                   <button
@@ -837,84 +1125,167 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               />
               <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                 <span>0°C</span>
-                <span className="text-emerald-700 font-bold">2°C – 8°C (Safe Range)</span>
+                <span className="text-emerald-700 font-bold">2°C – 8°C (Certified Safe Range)</span>
                 <span>12°C</span>
               </div>
             </div>
 
-            {/* Photo Capture & SecondMedic Watermark */}
-            <div className="space-y-2">
+            {/* 2-Photo Proof Section */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Photo Proof (Automated GPS Watermark)
+                  Mandatory 2-Photo Proof (Automated Geotagging)
                 </label>
-                {stopPhoto && (
-                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Geotagged
+                <span className="text-[10px] text-slate-500">Live GPS & Time Watermark</span>
+              </div>
+
+              {/* Photo 1: Specimen Vials in Rack */}
+              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Photo 1: Specimen Vials in Chiller Rack</span>
                   </span>
+                  {stopPhoto ? (
+                    <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Geotagged
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-700 font-semibold">Required</span>
+                  )}
+                </div>
+
+                <input
+                  ref={fileInputRef1}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => handlePhotoCapture(e, 'photo1')}
+                />
+
+                {stopPhoto ? (
+                  <div className="relative rounded-lg overflow-hidden border border-slate-200 group">
+                    <img src={stopPhoto} alt="Specimen Vials Proof" className="w-full h-32 object-cover" />
+                    <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
+                      <span className="text-[10px] text-white font-mono truncate max-w-[200px]">
+                        Vials Watermarked
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef1.current?.click()}
+                          className="px-2 py-0.5 bg-white/90 hover:bg-white text-slate-900 rounded text-[11px] font-semibold cursor-pointer"
+                        >
+                          Retake
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStopPhoto(null)}
+                          className="p-1 bg-red-600/90 hover:bg-red-600 text-white rounded text-[11px] cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef1.current?.click()}
+                      disabled={watermarking}
+                      className="py-3 px-2 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    >
+                      <Camera className="w-4 h-4 text-sky-700" />
+                      <span>{watermarking ? 'Processing...' : 'Camera Shot'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInstantPhotoSnap('photo1')}
+                      disabled={watermarking}
+                      className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-600" />
+                      <span>Instant Snap</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handlePhotoCapture}
-              />
-
-              {stopPhoto ? (
-                <div className="relative rounded-lg overflow-hidden border border-slate-200 group">
-                  <img src={stopPhoto} alt="Watermarked Proof" className="w-full h-44 object-cover" />
-                  <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
-                    <span className="text-[10px] text-white font-mono truncate max-w-[200px]">
-                      GPS & Time Watermarked
+              {/* Photo 2: Hospital Signed Intake Slip / Verification Proof */}
+              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Photo 2: Signed Intake Slip / Custody Form</span>
+                  </span>
+                  {stopPhoto2 ? (
+                    <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Geotagged
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-2.5 py-1 bg-white/90 hover:bg-white text-slate-900 rounded text-xs font-semibold shadow-xs cursor-pointer"
-                      >
-                        Retake
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setStopPhoto(null)}
-                        className="p-1 bg-red-600/90 hover:bg-red-600 text-white rounded text-xs cursor-pointer"
-                        title="Remove photo"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-semibold">Optional / Proof</span>
+                  )}
+                </div>
+
+                <input
+                  ref={fileInputRef2}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => handlePhotoCapture(e, 'photo2')}
+                />
+
+                {stopPhoto2 ? (
+                  <div className="relative rounded-lg overflow-hidden border border-slate-200 group">
+                    <img src={stopPhoto2} alt="Intake Slip Proof" className="w-full h-32 object-cover" />
+                    <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
+                      <span className="text-[10px] text-white font-mono truncate max-w-[200px]">
+                        Slip Watermarked
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef2.current?.click()}
+                          className="px-2 py-0.5 bg-white/90 hover:bg-white text-slate-900 rounded text-[11px] font-semibold cursor-pointer"
+                        >
+                          Retake
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStopPhoto2(null)}
+                          className="p-1 bg-red-600/90 hover:bg-red-600 text-white rounded text-[11px] cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={watermarking}
-                    className="py-4 px-3 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
-                  >
-                    <Camera className="w-5 h-5 text-sky-700" />
-                    <span>{watermarking ? 'Processing...' : 'Upload / Camera Shot'}</span>
-                    <span className="text-[10px] text-slate-500">Device camera or file</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleInstantPhotoSnap(false)}
-                    disabled={watermarking}
-                    className="py-4 px-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
-                  >
-                    <Sparkles className="w-5 h-5 text-amber-600" />
-                    <span>Instant Cam Snap</span>
-                    <span className="text-[10px] text-slate-500">Auto-generated proof</span>
-                  </button>
-                </div>
-              )}
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef2.current?.click()}
+                      disabled={watermarking}
+                      className="py-3 px-2 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    >
+                      <Camera className="w-4 h-4 text-emerald-700" />
+                      <span>{watermarking ? 'Processing...' : 'Capture Slip'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInstantPhotoSnap('photo2')}
+                      disabled={watermarking}
+                      className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    >
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span>Instant Slip</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="pt-1">
@@ -924,7 +1295,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 className="w-full py-2.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               >
                 <Check className="w-4 h-4" />
-                <span>CONFIRM PICKUP ({vialCount} VIALS)</span>
+                <span>CONFIRM 2-PHOTO PICKUP ({vialCount} VIALS)</span>
               </button>
             </div>
           </div>
@@ -998,7 +1369,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => handlePhotoCapture(e, true)}
+                onChange={(e) => handlePhotoCapture(e, 'drop')}
               />
 
               {stopPhoto ? (
@@ -1042,7 +1413,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handleInstantPhotoSnap(true)}
+                    onClick={() => handleInstantPhotoSnap('drop')}
                     disabled={watermarking}
                     className="py-4 px-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
                   >

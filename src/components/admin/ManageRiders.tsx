@@ -28,6 +28,7 @@ import {
   Car
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
+import { isRiderLocationStale } from '../../services/locationService';
 import { compressImageToBase64 } from '../../services/imageWatermark';
 import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 
@@ -329,17 +330,29 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                     </div>
                   </div>
 
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      rider.status === 'active'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        : rider.status === 'on_leave'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {rider.status === 'active' ? 'Active / On-Duty' : rider.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        rider.status === 'active'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : rider.status === 'on_leave'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {rider.status === 'active' ? 'Active / On-Duty' : rider.status}
+                    </span>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                        isRiderLocationStale(rider, 10)
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1'
+                      }`}
+                    >
+                      {!isRiderLocationStale(rider, 10) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>}
+                      {isRiderLocationStale(rider, 10) ? 'GPS Stale / Offline' : 'Live GPS'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Contact & Live Telemetry Info */}
@@ -350,8 +363,8 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px] font-semibold uppercase">Battery & GPS:</span>
-                    <span className="font-mono text-emerald-700 font-semibold flex items-center gap-1">
-                      <Battery className="w-3.5 h-3.5" /> {rider.batteryLevel || 88}% • GPS OK
+                    <span className={`font-mono font-semibold flex items-center gap-1 ${isRiderLocationStale(rider, 10) ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      <Battery className="w-3.5 h-3.5" /> {rider.batteryLevel || 88}% • {isRiderLocationStale(rider, 10) ? 'GPS Stale' : 'GPS OK'}
                     </span>
                   </div>
                   <div className="col-span-2">

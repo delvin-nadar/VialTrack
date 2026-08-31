@@ -28,6 +28,11 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
   return R * c;
 }
 
+// Distance in meters
+export function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  return calculateDistanceKm(lat1, lon1, lat2, lon2) * 1000;
+}
+
 // Calculate ETA in minutes based on distance and average Mumbai city bike speed (25 km/h)
 export function calculateEtaMinutes(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
   const distKm = calculateDistanceKm(fromLat, fromLng, toLat, toLng);
@@ -37,12 +42,59 @@ export function calculateEtaMinutes(fromLat: number, fromLng: number, toLat: num
   return Math.max(3, minutes);
 }
 
+/**
+ * Checks if a rider's last known location update is older than the staleness threshold (default 10 minutes).
+ */
+export function isRiderLocationStale(rider?: PickupBoy | null, maxAgeMinutes: number = 10): boolean {
+  if (!rider) return true;
+  if (!rider.isOnline && rider.status !== 'active') return true;
+
+  const rawTimestamp = rider.lastUpdated || rider.currentLocation?.timestamp || rider.lastPingTime;
+  if (!rawTimestamp) return true;
+
+  let timestampMs = 0;
+  if (typeof rawTimestamp === 'object' && typeof rawTimestamp.toMillis === 'function') {
+    timestampMs = rawTimestamp.toMillis();
+  } else if (typeof rawTimestamp === 'object' && typeof rawTimestamp.seconds === 'number') {
+    timestampMs = rawTimestamp.seconds * 1000;
+  } else if (typeof rawTimestamp === 'number') {
+    timestampMs = rawTimestamp;
+  } else if (typeof rawTimestamp === 'string') {
+    timestampMs = new Date(rawTimestamp).getTime();
+  }
+
+  if (isNaN(timestampMs) || timestampMs <= 0) return true;
+
+  const diffMinutes = (Date.now() - timestampMs) / (1000 * 60);
+  return diffMinutes > maxAgeMinutes;
+}
+
+export interface GpsStatusEvent {
+  isActive: boolean;
+  mode: 'real' | 'simulated' | 'idle';
+  isPermissionDenied: boolean;
+  errorCode: number | null;
+  errorMessage: string | null;
+  lastPingTime: string | null;
+}
+
 class LocationTrackerService {
   private watchId: number | null = null;
   private simulationInterval: any = null;
   private simIndex: number = 0;
   private isSimulating: boolean = false;
+  
+  // Throttling state: 10 seconds or 25 meters
+  private lastSentTimestamp: number = 0;
+  private lastSentCoords: { lat: number; lng: number } | null = null;
+  
+  // GPS Permission & Error state
+  private isPermissionDenied: boolean = false;
+  private lastErrorCode: number | null = null;
+  private lastErrorMessage: string | null = null;
+
   private listeners: Array<(ping: LocationPing) => void> = [];
+  private statusListeners: Array<(status: GpsStatusEvent) => void> = [];
 
   public subscribe(callback: (ping: LocationPing) => void) {
     this.listeners.push(callback);
@@ -51,47 +103,134 @@ class LocationTrackerService {
     };
   }
 
+  public subscribeStatus(callback: (status: GpsStatusEvent) => void) {
+    this.statusListeners.push(callback);
+    // Send current status immediately
+    callback(this.getStatus());
+    return () => {
+      this.statusListeners = this.statusListeners.filter((l) => l !== callback);
+    };
+  }
+
+  public getStatus(): GpsStatusEvent {
+    return {
+      isActive: this.watchId !== null || this.isSimulating,
+      mode: this.watchId !== null ? 'real' : this.isSimulating ? 'simulated' : 'idle',
+      isPermissionDenied: this.isPermissionDenied,
+      errorCode: this.lastErrorCode,
+      errorMessage: this.lastErrorMessage,
+      lastPingTime: this.lastSentCoords ? new Date(this.lastSentTimestamp).toISOString() : null
+    };
+  }
+
+  private notifyStatus() {
+    const status = this.getStatus();
+    this.statusListeners.forEach((fn) => fn(status));
+  }
+
   private notify(ping: LocationPing) {
     this.listeners.forEach((fn) => fn(ping));
   }
 
   /**
    * Start real browser geolocation watch
+   * Configured with { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+   * Throttles writes to Firestore every 10 seconds OR if moved > 25 meters.
    */
   public startRealGeolocation(riderId: string, riderName: string, taskId?: string) {
     this.stop();
+    this.isPermissionDenied = false;
+    this.lastErrorCode = null;
+    this.lastErrorMessage = null;
+
     if (!navigator.geolocation) {
-      console.warn('Geolocation is not supported by this browser');
+      this.lastErrorMessage = 'Geolocation is not supported by this browser';
+      this.lastErrorCode = 2;
+      this.notifyStatus();
       this.startSimulation(riderId, riderName, taskId);
       return;
     }
 
-    this.watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const ping: LocationPing = {
-          id: `ping-${Date.now()}`,
-          riderId,
-          riderName,
-          timestamp: new Date().toISOString(),
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          speed: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0,
-          heading: pos.coords.heading || 0,
-          battery: 90,
-          taskId
-        };
-        this.recordPing(ping);
-      },
-      (err) => {
-        console.warn('GPS watch error, falling back to live simulator:', err.message);
-        this.startSimulation(riderId, riderName, taskId);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 5000
-      }
-    );
+    try {
+      this.watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          this.isPermissionDenied = false;
+          this.lastErrorCode = null;
+          this.lastErrorMessage = null;
+
+          const currentLat = pos.coords.latitude;
+          const currentLng = pos.coords.longitude;
+          const currentHeading = pos.coords.heading || 0;
+          const currentSpeed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+          const now = Date.now();
+
+          let movedMeters = 0;
+          if (this.lastSentCoords) {
+            movedMeters = calculateDistanceMeters(
+              this.lastSentCoords.lat,
+              this.lastSentCoords.lng,
+              currentLat,
+              currentLng
+            );
+          }
+
+          const timeElapsedMs = now - this.lastSentTimestamp;
+          // Throttle: write to Firestore every 10s OR if moved > 25 meters (or on first ping)
+          const shouldWrite = !this.lastSentCoords || timeElapsedMs >= 10000 || movedMeters >= 25;
+
+          const ping: LocationPing = {
+            id: `ping-${Date.now()}`,
+            riderId,
+            riderName,
+            timestamp: new Date().toISOString(),
+            lat: currentLat,
+            lng: currentLng,
+            speed: currentSpeed,
+            heading: currentHeading,
+            battery: 90,
+            taskId
+          };
+
+          if (shouldWrite) {
+            this.lastSentTimestamp = now;
+            this.lastSentCoords = { lat: currentLat, lng: currentLng };
+            this.recordPing(ping);
+          } else {
+            // Local broadcast only without writing to Firestore
+            this.notify(ping);
+          }
+
+          this.notifyStatus();
+        },
+        (err) => {
+          console.warn('[LocationService] Geolocation watch error:', err.code, err.message);
+          this.lastErrorCode = err.code;
+          if (err.code === 1) { // PERMISSION_DENIED
+            this.isPermissionDenied = true;
+            this.lastErrorMessage = 'Location permission denied. Please allow GPS location access in your browser settings to broadcast live telemetry.';
+          } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            this.lastErrorMessage = 'GPS position unavailable. Please enable device location / GPS services.';
+          } else if (err.code === 3) { // TIMEOUT
+            this.lastErrorMessage = 'GPS location request timed out. Retrying high-accuracy signal...';
+          } else {
+            this.lastErrorMessage = err.message || 'Unknown GPS error';
+          }
+
+          this.notifyStatus();
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 5000,
+          timeout: 10000
+        }
+      );
+
+      this.notifyStatus();
+    } catch (e: any) {
+      console.warn('[LocationService] Exception starting watchPosition:', e);
+      this.lastErrorMessage = e?.message || 'Failed to start GPS tracking';
+      this.notifyStatus();
+    }
   }
 
   /**
@@ -100,6 +239,9 @@ class LocationTrackerService {
   public startSimulation(riderId: string, riderName: string, taskId?: string) {
     this.stop();
     this.isSimulating = true;
+    this.isPermissionDenied = false;
+    this.lastErrorCode = null;
+    this.lastErrorMessage = null;
 
     // Initial ping
     const initialWay = DEMO_ROUTE_WAYPOINTS[this.simIndex % DEMO_ROUTE_WAYPOINTS.length];
@@ -115,7 +257,10 @@ class LocationTrackerService {
       battery: 88,
       taskId
     };
+    this.lastSentTimestamp = Date.now();
+    this.lastSentCoords = { lat: initialPing.lat, lng: initialPing.lng };
     this.recordPing(initialPing);
+    this.notifyStatus();
 
     this.simulationInterval = setInterval(() => {
       this.simIndex = (this.simIndex + 1) % DEMO_ROUTE_WAYPOINTS.length;
@@ -137,8 +282,10 @@ class LocationTrackerService {
         taskId
       };
 
+      this.lastSentTimestamp = Date.now();
+      this.lastSentCoords = { lat: ping.lat, lng: ping.lng };
       this.recordPing(ping);
-    }, 4000); // update every 4 seconds in demo mode
+    }, 10000); // 10s interval for simulated throttle
   }
 
   public stepSimulationManually(riderId: string, riderName: string, taskId?: string) {
@@ -156,6 +303,8 @@ class LocationTrackerService {
       battery: 85,
       taskId
     };
+    this.lastSentTimestamp = Date.now();
+    this.lastSentCoords = { lat: ping.lat, lng: ping.lng };
     this.recordPing(ping);
   }
 
@@ -174,6 +323,7 @@ class LocationTrackerService {
           heading: ping.heading,
           accuracy: 5
         },
+        heading: ping.heading || 0,
         batteryLevel: ping.battery,
         isOnline: true,
         lastPingTime: ping.timestamp
@@ -181,7 +331,7 @@ class LocationTrackerService {
       StorageService.updateRider(updatedRider);
     }
 
-    // Sync to Firestore 'locations' and 'riders' with GeoPoint
+    // Sync to Firestore 'locations' and update 'riders/{riderId}' with currentLocation, heading, lastUpdated serverTimestamp
     CloudSync.recordLocationPing(ping).catch((err) => {
       console.warn('[LocationService] Firestore location sync notice:', err);
     });
@@ -213,6 +363,7 @@ class LocationTrackerService {
       this.simulationInterval = null;
     }
     this.isSimulating = false;
+    this.notifyStatus();
   }
 
   public stopSimulation() {

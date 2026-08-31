@@ -9,6 +9,7 @@ import {
   AttendanceRecord
 } from '../../types';
 import { CloudSync, parseFirestoreGeoPoint } from '../../services/firebase';
+import { isRiderLocationStale } from '../../services/locationService';
 import {
   MUMBAI_LANDMARKS
 } from '../../services/mumbaiSeed';
@@ -304,6 +305,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         if (typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
 
         const isSelected = selectedRiderId === r.id;
+        const isStale = isRiderLocationStale(r, 10);
         const assignedTask = cloudTasks.find((t) => t.riderId === r.id || t.assignedRiderId === r.id);
 
         const riderName = r.name || 'Courier';
@@ -315,17 +317,21 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
           className: 'custom-mumbai-rider',
           html: `
             <div class="relative group cursor-pointer">
-              <div class="absolute -inset-2 bg-sky-500 rounded-full animate-ping opacity-75"></div>
+              ${!isStale ? '<div class="absolute -inset-2 bg-sky-500 rounded-full animate-ping opacity-75"></div>' : ''}
               <div class="relative w-10 h-10 rounded-full ${
-                isSelected ? 'bg-slate-950 ring-4 ring-sky-400' : 'bg-slate-900 ring-2 ring-sky-500'
+                isStale
+                  ? 'bg-slate-800 ring-2 ring-amber-500'
+                  : isSelected
+                  ? 'bg-slate-950 ring-4 ring-sky-400'
+                  : 'bg-slate-900 ring-2 ring-sky-500'
               } text-white flex items-center justify-center shadow-xl transform transition-transform group-hover:scale-110">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>
-                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white animate-pulse"></span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${isStale ? '#fbbf24' : '#38bdf8'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>
+                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 ${isStale ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'} rounded-full ring-2 ring-white"></span>
               </div>
-              <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-950/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap shadow-lg border border-slate-700 flex items-center gap-1.5 pointer-events-none">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-950/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap shadow-lg border ${isStale ? 'border-amber-600' : 'border-slate-700'} flex items-center gap-1.5 pointer-events-none">
+                <span class="w-1.5 h-1.5 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
                 <span>${firstName}</span>
-                <span class="text-sky-300 font-mono text-[9px]">${vehicleSuffix || 'BIKE'}</span>
+                <span class="${isStale ? 'text-amber-300' : 'text-sky-300'} font-mono text-[9px]">${vehicleSuffix || 'BIKE'}</span>
               </div>
             </div>
           `,
@@ -347,7 +353,9 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
           <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 230px; padding: 6px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
               <span style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">Live GPS Specimen Courier</span>
-              <span style="font-size: 9px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 2px 6px; border-radius: 9999px; border: 1px solid #a7f3d0;">ONLINE</span>
+              <span style="font-size: 9px; font-weight: 700; background: ${isStale ? '#fef3c7' : '#ecfdf5'}; color: ${isStale ? '#b45309' : '#047857'}; padding: 2px 6px; border-radius: 9999px; border: 1px solid ${isStale ? '#fde68a' : '#a7f3d0'};">
+                ${isStale ? 'STALE / OFFLINE (>10M)' : 'ONLINE / LIVE GPS'}
+              </span>
             </div>
             
             <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${riderName}</div>
@@ -821,6 +829,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                 ) : (
                   filteredRiders.map((r) => {
                     const isSelected = selectedRiderId === r.id;
+                    const isStale = isRiderLocationStale(r, 10);
                     const assignedTask = cloudTasks.find((t) => t.riderId === r.id || t.assignedRiderId === r.id);
                     const coords = r.currentLocation
                       ? parseFirestoreGeoPoint(r.currentLocation.location) || {
@@ -852,7 +861,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                             <div>
                               <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
                                 <span>{r.name}</span>
-                                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
                               </div>
                               <div className="text-[11px] text-slate-500 font-mono">
                                 {r.vehicleNumber} • {r.area || 'Mumbai'}
@@ -860,9 +869,20 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                            <Battery className="w-3 h-3 text-emerald-600" />
-                            <span>{r.batteryLevel || 90}%</span>
+                          <div className="flex flex-col items-end gap-1">
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                                isStale
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              }`}
+                            >
+                              {isStale ? 'Stale / Offline' : 'Live GPS'}
+                            </span>
+                            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                              <Battery className="w-3 h-3 text-emerald-600" />
+                              <span>{r.batteryLevel || 90}%</span>
+                            </div>
                           </div>
                         </div>
 

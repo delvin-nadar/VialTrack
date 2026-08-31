@@ -10,7 +10,9 @@ import {
   writeBatch,
   getDocFromServer,
   GeoPoint,
-  Unsubscribe
+  Unsubscribe,
+  serverTimestamp,
+  updateDoc
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -21,7 +23,7 @@ import {
   User,
   UserCredential
 } from 'firebase/auth';
-import { UserRole, LocationPing, PickupBoy, PickupTask, Client, AttendanceRecord } from '../types';
+import { UserRole, LocationPing, PickupBoy, PickupTask, Client, AttendanceRecord, Route } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 /**
@@ -325,17 +327,20 @@ export const CloudSync = {
         speed: ping.speed ?? 0,
         heading: ping.heading ?? 0,
         battery: ping.battery ?? 100,
-        taskId: ping.taskId || null
+        taskId: ping.taskId || null,
+        lastUpdated: serverTimestamp()
       }, { merge: true });
 
-      // 2. Update rider document in 'riders' collection with current GeoPoint
+      // 2. Update rider document in 'riders' collection with current GeoPoint and serverTimestamp
       if (ping.riderId) {
         const riderDocRef = doc(db, 'riders', ping.riderId);
         await setDoc(riderDocRef, {
           id: ping.riderId,
           lastPingTime: ping.timestamp,
+          lastUpdated: serverTimestamp(),
           isOnline: true,
           batteryLevel: ping.battery ?? 100,
+          heading: ping.heading ?? 0,
           currentLocation: {
             lat: ping.lat,
             lng: ping.lng,
@@ -349,6 +354,53 @@ export const CloudSync = {
       }
     } catch (err: any) {
       console.warn('[CloudSync] Location ping sync notice:', err?.message || err);
+    }
+  },
+
+  // Update rider GPS location with serverTimestamp and online flag
+  async updateRiderGpsLocation(riderId: string, lat: number, lng: number, heading: number = 0, speed: number = 0, battery: number = 90, taskId?: string) {
+    try {
+      const geoPoint = toFirestoreGeoPoint(lat, lng);
+      const pingId = `ping-${Date.now()}`;
+      const nowIso = new Date().toISOString();
+
+      // Update rider document directly
+      const riderDocRef = doc(db, 'riders', riderId);
+      await setDoc(riderDocRef, {
+        id: riderId,
+        lastPingTime: nowIso,
+        lastUpdated: serverTimestamp(),
+        isOnline: true,
+        batteryLevel: battery,
+        heading: heading || 0,
+        currentLocation: {
+          lat,
+          lng,
+          location: geoPoint,
+          timestamp: nowIso,
+          heading: heading || 0,
+          speed: speed || 0,
+          accuracy: 5
+        }
+      }, { merge: true });
+
+      // Also record in locations collection
+      const locationDocRef = doc(db, 'locations', pingId);
+      await setDoc(locationDocRef, {
+        id: pingId,
+        riderId,
+        timestamp: nowIso,
+        lat,
+        lng,
+        location: geoPoint,
+        speed: speed || 0,
+        heading: heading || 0,
+        battery: battery || 90,
+        taskId: taskId || null,
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch (err: any) {
+      console.warn('[CloudSync] updateRiderGpsLocation notice:', err?.message || err);
     }
   },
 
@@ -489,6 +541,34 @@ export const CloudSync = {
         }
         return a;
       }) as AttendanceRecord[];
+      onUpdate(formatted);
+    });
+  },
+
+  // Dedicated real-time snapshot subscription for 'routes' collection
+  subscribeToRoutes(onUpdate: (routes: Route[]) => void): Unsubscribe {
+    return this.subscribeToCollection('routes', (items: any[]) => {
+      const formatted = items.map((r: any) => {
+        if (r.destinationLab) {
+          const coords = parseFirestoreGeoPoint(r.destinationLab.location) || {
+            lat: r.destinationLab.lat,
+            lng: r.destinationLab.lng
+          };
+          r.destinationLab.lat = coords.lat;
+          r.destinationLab.lng = coords.lng;
+        }
+        if (Array.isArray(r.stops)) {
+          r.stops = r.stops.map((s: any) => {
+            const coords = parseFirestoreGeoPoint(s.location) || { lat: s.lat, lng: s.lng };
+            return {
+              ...s,
+              lat: coords.lat,
+              lng: coords.lng
+            };
+          });
+        }
+        return r as Route;
+      });
       onUpdate(formatted);
     });
   }
