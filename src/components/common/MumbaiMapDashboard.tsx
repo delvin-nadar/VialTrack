@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   PickupBoy,
   PickupTask,
@@ -206,10 +207,10 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
       L.control.zoom({ position: 'topleft' }).addTo(map);
 
-      // Clean, high-contrast healthcare tile layer (CartoDB Positron / Voyager)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      // OpenStreetMap tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        subdomains: 'abcd'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
 
       polylinesLayerRef.current = L.layerGroup().addTo(map);
@@ -591,6 +592,25 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
     showRoutesLayer,
     showTrailLayer
   ]);
+
+  // Recalculate leaflet map size with MapInvalidateSize helper
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    map.invalidateSize();
+    const t1 = setTimeout(() => map.invalidateSize(), 50);
+    const t2 = setTimeout(() => map.invalidateSize(), 200);
+    const t3 = setTimeout(() => map.invalidateSize(), 500);
+
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [height, isSidebarOpen]);
 
   return (
     <div className="flex flex-col lg:flex-row w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">

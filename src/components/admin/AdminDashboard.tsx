@@ -357,7 +357,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
 
             {/* Map Container */}
-            <div className="rounded-lg overflow-hidden border border-slate-200">
+            <div
+              style={{ height: '380px', width: '100%', borderRadius: '12px' }}
+              className="h-[380px] w-full rounded-xl overflow-hidden my-3 relative z-0"
+            >
               <LiveMap
                 stops={activeRoute?.stops || []}
                 destination={activeRoute?.destinationLab}
@@ -365,7 +368,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 riders={riders}
                 tasks={todayTasks}
                 activeTaskId={selectedTaskId}
-                height="420px"
+                height="380px"
                 autoFit={false}
                 enableFirestoreSync={true}
               />

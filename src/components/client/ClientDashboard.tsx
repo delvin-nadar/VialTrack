@@ -324,15 +324,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             )}
           </div>
 
-          <LiveMap
-            stops={activeLiveRoute?.stops || []}
-            destination={activeLiveRoute?.destinationLab}
-            rider={activeLiveRider}
-            tasks={todayClientTasks}
-            activeTaskId={activeLiveTask?.id}
-            height="360px"
-            enableFirestoreSync={true}
-          />
+          {/* Map Container */}
+          <div
+            style={{ height: '380px', width: '100%', borderRadius: '12px' }}
+            className="h-[380px] w-full rounded-xl overflow-hidden my-3 relative z-0"
+          >
+            <LiveMap
+              stops={activeLiveRoute?.stops || []}
+              destination={activeLiveRoute?.destinationLab}
+              rider={activeLiveRider}
+              tasks={todayClientTasks}
+              activeTaskId={activeLiveTask?.id}
+              height="380px"
+              enableFirestoreSync={true}
+            />
+          </div>
 
           {/* Real-time Status Card */}
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2.5">

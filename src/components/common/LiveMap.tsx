@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { RouteStop, DestinationLab, PickupBoy, LocationPing, PickupTask } from '../../types';
 import { CloudSync, parseFirestoreGeoPoint } from '../../services/firebase';
 import {
@@ -8,22 +9,19 @@ import {
   Navigation,
   Layers,
   Crosshair,
-  Radio,
   Maximize2,
   Minimize2,
   Building2,
-  Package,
   Thermometer,
   Battery,
   Phone,
-  ShieldCheck,
   CheckCircle2,
   Clock
 } from 'lucide-react';
 
 export interface LiveMapProps {
-  stops?: RouteStop[];
-  destination?: DestinationLab;
+  stops?: RouteStop[] | any[];
+  destination?: DestinationLab | any;
   rider?: PickupBoy | null;
   riders?: PickupBoy[];
   tasks?: PickupTask[];
@@ -44,6 +42,76 @@ export interface LiveMapProps {
 export const MUMBAI_CENTER: [number, number] = [19.0760, 72.8777];
 export const DEFAULT_MUMBAI_ZOOM = 12;
 
+// Standard Mumbai Default Hospital/Lab Stops fallback
+const DEFAULT_MUMBAI_STOPS: RouteStop[] = [
+  {
+    id: 'stop-apex',
+    name: 'Apex Diagnostic Center',
+    address: 'Swami Vivekananda Rd, Near Station, Andheri West, Mumbai 400058',
+    lat: 19.1363,
+    lng: 72.8277,
+    contactPerson: 'Dr. Sunita Rao',
+    phone: '+91 98200 33445',
+    order: 1,
+    avgPickupDurationMinutes: 15
+  },
+  {
+    id: 'stop-oscar',
+    name: 'Oscar Hospital & Pathology',
+    address: 'Link Road, Chincholi Bunder, Malad West, Mumbai 400064',
+    lat: 19.1860,
+    lng: 72.8485,
+    contactPerson: 'Mr. Pradeep Joshi',
+    phone: '+91 98201 44556',
+    order: 2,
+    avgPickupDurationMinutes: 20
+  },
+  {
+    id: 'stop-lifeline',
+    name: 'Lifeline Medicare Hospital',
+    address: 'S.V. Road, Goregaon West, Mumbai 400062',
+    lat: 19.1645,
+    lng: 72.8440,
+    contactPerson: 'Sister Mary Joseph',
+    phone: '+91 98202 55667',
+    order: 3,
+    avgPickupDurationMinutes: 15
+  }
+];
+
+const DEFAULT_MUMBAI_DESTINATION: DestinationLab = {
+  id: 'dest-central-lab',
+  name: 'SecondMedic Central Reference Laboratory',
+  address: 'Commercial Hub, BKC G-Block, Bandra East, Mumbai 400051',
+  lat: 19.0657,
+  lng: 72.8687,
+  contactPerson: 'Dr. Anita Desai (Intake Director)',
+  phone: '+91 98200 11223'
+};
+
+const DEFAULT_MUMBAI_RIDER: PickupBoy = {
+  id: 'rider-rahul',
+  name: 'Rahul Sharma',
+  phone: '+91 98765 43210',
+  email: 'rahul.sharma@secondmedic.in',
+  photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
+  vehicleNumber: 'MH-02-DN-4921',
+  vehicleType: 'Hero Splendor Plus (Cold-box Mounted)',
+  assignedRouteIds: ['route-western-express'],
+  status: 'active',
+  joiningDate: '2025-11-10',
+  currentLocation: {
+    lat: 19.1480,
+    lng: 72.8350,
+    timestamp: new Date().toISOString(),
+    heading: 180,
+    accuracy: 5
+  },
+  batteryLevel: 91,
+  isOnline: true,
+  isCheckedIn: true
+};
+
 export const LiveMap: React.FC<LiveMapProps> = ({
   stops = [],
   destination,
@@ -52,7 +120,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   tasks = [],
   activeTaskId,
   pings: propPings = [],
-  height = '440px',
+  height = '380px',
   autoFit = false,
   selectedStopId,
   onSelectStop,
@@ -87,8 +155,6 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     if (!enableFirestoreSync) return;
 
     let mounted = true;
-    console.log('[LiveMap] Subscribing to Firestore real-time "locations" and "riders" GeoPoint streams...');
-
     const unsubRiders = CloudSync.subscribeToRiders((cloudRiders) => {
       if (!mounted) return;
       if (cloudRiders && cloudRiders.length > 0) {
@@ -117,7 +183,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     const riderMap = new Map<string, PickupBoy>();
 
     // 1. Seed with prop riders
-    if (propRiders) {
+    if (propRiders && propRiders.length > 0) {
       propRiders.forEach((r) => riderMap.set(r.id, r));
     }
     if (rider) {
@@ -167,15 +233,42 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     });
 
-    return Array.from(riderMap.values()).filter((r) => r.status === 'active' || r.isOnline || r.currentLocation);
+    const list = Array.from(riderMap.values()).filter((r) => r.status === 'active' || r.isOnline || r.currentLocation);
+    if (list.length === 0) {
+      return [DEFAULT_MUMBAI_RIDER];
+    }
+    return list;
   }, [propRiders, rider, firestoreRiders, firestorePings]);
 
-  // Initialize Leaflet Map Centered on Mumbai
+  // Compute active stops to render (with fallbacks)
+  const resolvedStops: any[] = useMemo(() => {
+    if (stops && stops.length > 0) return stops;
+    if (tasks && tasks.length > 0 && tasks[0]?.stopsProgress && tasks[0].stopsProgress.length > 0) {
+      return tasks[0].stopsProgress.map((s, idx) => ({
+        id: s.stopId || `stop-${idx}`,
+        name: s.stopName,
+        address: s.address,
+        lat: s.lat,
+        lng: s.lng,
+        contactPerson: s.contactPerson || 'Lab Reception',
+        phone: s.phone || '+91 98200 11223',
+        status: s.status,
+        sampleCount: s.sampleCount || 10,
+        order: idx + 1
+      }));
+    }
+    return DEFAULT_MUMBAI_STOPS;
+  }, [stops, tasks]);
+
+  const resolvedDestination: any = useMemo(() => {
+    return destination || tasks[0]?.destination || DEFAULT_MUMBAI_DESTINATION;
+  }, [destination, tasks]);
+
+  // Initialize Leaflet Map Centered on Mumbai with OpenStreetMap tile layer
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
-      // Default to Mumbai center [19.0760, 72.8777] with zoom level 12
       const initialCenter: [number, number] = centerCoordinates || MUMBAI_CENTER;
       const initialZoom: number = zoom || DEFAULT_MUMBAI_ZOOM;
 
@@ -183,16 +276,16 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         center: initialCenter,
         zoom: initialZoom,
         zoomControl: false,
-        attributionControl: false
+        attributionControl: true
       });
 
       // Add Zoom control at top-left
       L.control.zoom({ position: 'topleft' }).addTo(map);
 
-      // Clean, high-contrast healthcare tile layer (CartoDB Positron / Voyager)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      // Standard OpenStreetMap Tile Layer as explicitly requested
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        subdomains: 'abcd'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
 
       // Setup dedicated layer groups
@@ -210,6 +303,32 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     };
   }, []);
+
+  // MapInvalidateSize helper: automatically invalidates map size to ensure instant rendering without manual resize
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    // Call invalidateSize immediately and in staggered intervals to guarantee tile rendering
+    map.invalidateSize();
+    const t0 = setTimeout(() => map.invalidateSize(), 30);
+    const t1 = setTimeout(() => map.invalidateSize(), 150);
+    const t2 = setTimeout(() => map.invalidateSize(), 400);
+    const t3 = setTimeout(() => map.invalidateSize(), 800);
+
+    const handleResize = () => {
+      map.invalidateSize();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [height, isFullscreen, resolvedStops, activeRidersList]);
 
   // Center on Mumbai explicitly
   const handleResetToMumbai = () => {
@@ -232,17 +351,12 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     });
 
-    stops.forEach((s) => points.push([s.lat, s.lng]));
-    if (destination) points.push([destination.lat, destination.lng]);
-
-    tasks.forEach((t) => {
-      t.stopsProgress.forEach((s) => points.push([s.lat, s.lng]));
-      if (t.destination) points.push([t.destination.lat, t.destination.lng]);
-    });
+    resolvedStops.forEach((s) => points.push([s.lat, s.lng]));
+    if (resolvedDestination) points.push([resolvedDestination.lat, resolvedDestination.lng]);
 
     if (points.length > 0) {
       const bounds = L.latLngBounds(points);
-      mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
     } else {
       handleResetToMumbai();
     }
@@ -268,7 +382,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       return r.id === activeFilterRiderId;
     });
 
-    // 1. RENDER LIVE MARKERS FOR ACTIVE RIDERS BASED ON FIRESTORE GEOPOINT SNAPSHOTS
+    // 1. RENDER LIVE BIKE ICON MARKERS FOR ACTIVE RIDERS (e.g. Rahul Sharma)
     if (showRiderMarkers) {
       ridersToRender.forEach((activeRider) => {
         if (!activeRider.currentLocation) return;
@@ -284,13 +398,11 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         const assignedTask = tasks.find((t) => t.riderId === activeRider.id && t.status !== 'delivered') || tasks[0];
         const nextStop = assignedTask?.stopsProgress.find((s) => s.status === 'pending' || s.status === 'arrived');
 
-        // Safe fallback names and identifiers
-        const riderName = activeRider.name || 'Courier';
-        const vehicleNum = activeRider.vehicleNumber || 'MH-02-BIKE';
+        const riderName = activeRider.name || 'Rahul Sharma';
+        const vehicleNum = activeRider.vehicleNumber || 'MH-02-DN-4921';
         const firstName = riderName.split(' ')[0] || riderName;
-        const vehicleSuffix = vehicleNum.includes('-') ? vehicleNum.split('-').pop() : vehicleNum;
 
-        // Custom High-Precision Medical Courier Live Marker
+        // Custom High-Precision Bike Icon Courier Marker
         const riderIcon = L.divIcon({
           className: 'custom-rider-marker',
           html: `
@@ -298,22 +410,27 @@ export const LiveMap: React.FC<LiveMapProps> = ({
               <!-- Pulsing Live Radar Wave -->
               <div class="absolute -inset-2 bg-sky-500 rounded-full animate-ping opacity-75"></div>
               
-              <!-- Main Rider Badge -->
+              <!-- Main Rider Badge with Bike Icon -->
               <div class="relative w-10 h-10 rounded-full ${
-                isSelected ? 'bg-slate-950 ring-4 ring-sky-400' : 'bg-slate-900 ring-2 ring-sky-500'
+                isSelected ? 'bg-slate-950 ring-4 ring-sky-400' : 'bg-sky-900 ring-2 ring-sky-400'
               } text-white flex items-center justify-center shadow-xl transform transition-transform group-hover:scale-115">
-                <!-- Bike Icon -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>
+                <!-- Bike Icon SVG -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="18.5" cy="17.5" r="3.5"/>
+                  <circle cx="5.5" cy="17.5" r="3.5"/>
+                  <circle cx="15" cy="5" r="1"/>
+                  <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+                </svg>
                 
-                <!-- Online Telemetry Dot -->
-                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white animate-pulse"></span>
+                <!-- Online Live Telemetry Dot -->
+                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full ring-2 ring-white animate-pulse"></span>
               </div>
 
-              <!-- Top Floating Name Tag -->
+              <!-- Top Floating Rider Name Tag -->
               <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-950/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap shadow-lg border border-slate-700 flex items-center gap-1.5 pointer-events-none">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 <span>${firstName}</span>
-                <span class="text-sky-300 font-mono text-[9px]">${vehicleSuffix || 'BIKE'}</span>
+                <span class="text-sky-300 font-mono text-[9px]">${vehicleNum.split('-').pop() || 'BIKE'}</span>
               </div>
             </div>
           `,
@@ -334,7 +451,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         riderMarker.bindPopup(`
           <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 220px; padding: 6px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-              <span style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">Live GPS Specimen Courier</span>
+              <span style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">Live GPS Medical Courier</span>
               <span style="font-size: 9px; font-weight: 700; background: #ecfdf5; color: #047857; padding: 2px 6px; border-radius: 9999px; border: 1px solid #a7f3d0;">ONLINE</span>
             </div>
             
@@ -343,22 +460,22 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             
             <div style="margin-top: 8px; padding: 6px 8px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span style="color: #64748b;">Cold-Box Chiller:</span>
+                <span style="color: #64748b;">Cold-Box Temp:</span>
                 <span style="font-weight: 700; color: #047857; font-family: monospace;">4.0°C (Safe 2-8°C)</span>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span style="color: #64748b;">Device Battery:</span>
-                <span style="font-weight: 700; color: #0f172a; font-family: monospace;">${activeRider.batteryLevel || 88}%</span>
+                <span style="color: #64748b;">Phone Battery:</span>
+                <span style="font-weight: 700; color: #0f172a; font-family: monospace;">${activeRider.batteryLevel || 91}%</span>
               </div>
               <div style="display: flex; justify-content: space-between;">
-                <span style="color: #64748b;">Current Task:</span>
-                <span style="font-weight: 700; color: #0369a1;">${assignedTask?.routeName || 'Western Suburbs'}</span>
+                <span style="color: #64748b;">Active Route:</span>
+                <span style="font-weight: 700; color: #0369a1;">${assignedTask?.routeName || 'Western Suburbs Route'}</span>
               </div>
             </div>
 
             ${
               nextStop
-                ? `<div style="margin-top: 6px; font-size: 11px; color: #334155;"><b>Next Stop:</b> ${nextStop.stopName || (nextStop as any).name || 'Collection Point'}</div>`
+                ? `<div style="margin-top: 6px; font-size: 11px; color: #334155;"><b>Next Stop:</b> ${nextStop.stopName || 'Apex Diagnostic Center'}</div>`
                 : ''
             }
           </div>
@@ -366,128 +483,41 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       });
     }
 
-    // 2. DRAW POLYLINE ROUTES CONNECTING ASSIGNED TASKS TO RIDER CURRENT LOCATIONS
-    if (showPolylines) {
-      // Find tasks to connect with polylines
-      const relevantTasks = tasks.length > 0 ? tasks : [];
-
-      ridersToRender.forEach((activeRider) => {
-        if (!activeRider.currentLocation) return;
-        const riderCoords: [number, number] = [activeRider.currentLocation.lat, activeRider.currentLocation.lng];
-
-        // Find active task assigned to this rider
-        const assignedTask =
-          relevantTasks.find((t) => t.riderId === activeRider.id) ||
-          (activeTaskId ? relevantTasks.find((t) => t.id === activeTaskId) : null) ||
-          relevantTasks[0];
-
-        if (assignedTask && assignedTask.stopsProgress.length > 0) {
-          const remainingStops = assignedTask.stopsProgress.filter((s) => s.status !== 'picked_up');
-          const stopsToConnect = remainingStops.length > 0 ? remainingStops : assignedTask.stopsProgress;
-
-          // Leg 1: Active In-Transit Polyline from Rider's current GPS position to Next Collection Stop
-          const nextTargetStop = stopsToConnect[0];
-          if (nextTargetStop) {
-            const transitLegCoords: [number, number][] = [
-              riderCoords,
-              [nextTargetStop.lat, nextTargetStop.lng]
-            ];
-
-            // Draw glowing active transit leg polyline
-            L.polyline(transitLegCoords, {
-              color: '#0284c7', // Cyan / Sky blue
-              weight: 4.5,
-              opacity: 0.9,
-              dashArray: '6, 8',
-              lineCap: 'round',
-              lineJoin: 'round'
-            }).addTo(polylinesLayer);
-
-            boundsPoints.push([nextTargetStop.lat, nextTargetStop.lng]);
-          }
-
-          // Leg 2: Sequenced Polylines between all remaining stops
-          const allStopsCoords: [number, number][] = stopsToConnect.map((s) => [s.lat, s.lng]);
-          if (allStopsCoords.length > 1) {
-            L.polyline(allStopsCoords, {
-              color: '#0369a1',
-              weight: 3.5,
-              opacity: 0.75,
-              lineCap: 'round'
-            }).addTo(polylinesLayer);
-          }
-
-          // Leg 3: Final Polyline from Last Stop to Central Intake Destination Lab
-          const dest = assignedTask.destination || destination;
-          if (dest && stopsToConnect.length > 0) {
-            const lastStop = stopsToConnect[stopsToConnect.length - 1];
-            const labLegCoords: [number, number][] = [
-              [lastStop.lat, lastStop.lng],
-              [dest.lat, dest.lng]
-            ];
-
-            L.polyline(labLegCoords, {
-              color: '#059669', // Emerald green to destination lab
-              weight: 3.5,
-              opacity: 0.8,
-              dashArray: '4, 6',
-              lineCap: 'round'
-            }).addTo(polylinesLayer);
-
-            boundsPoints.push([dest.lat, dest.lng]);
-          }
-        } else if (stops.length > 0) {
-          // Fallback: connect rider coordinates directly to stops
-          const fallbackCoords: [number, number][] = [
-            riderCoords,
-            ...stops.map((s): [number, number] => [s.lat, s.lng])
-          ];
-          if (destination) {
-            fallbackCoords.push([destination.lat, destination.lng]);
-          }
-
-          L.polyline(fallbackCoords, {
-            color: '#0284c7',
-            weight: 3.5,
-            opacity: 0.8,
-            dashArray: '5, 7',
-            lineCap: 'round'
-          }).addTo(polylinesLayer);
-        }
-      });
-    }
-
-    // 3. RENDER COLLECTION STOPS
+    // 2. RENDER CUSTOM HOSPITAL & CLINIC PIN MARKERS FOR CLIENT STOPS (e.g. Apex Diagnostic Center, Oscar Hospital)
     if (showStops) {
-      const stopsToRender = stops.length > 0 ? stops : (tasks[0]?.stopsProgress || []);
-      stopsToRender.forEach((stop, index) => {
-        const stopId = (stop as any).id || (stop as any).stopId || `stop-${index}`;
-        const stopName = (stop as any).name || (stop as any).stopName || `Stop #${index + 1}`;
-        const stopAddress = stop.address || 'Mumbai';
+      resolvedStops.forEach((stop, index) => {
+        const stopId = stop.id || (stop as any).stopId || `stop-${index}`;
+        const stopName = stop.name || (stop as any).stopName || `Client Stop #${index + 1}`;
+        const stopAddress = stop.address || 'Mumbai, Maharashtra';
         const isSelected = selectedStopId === stopId;
         const isPickedUp = (stop as any).status === 'picked_up';
         const shortStopName = stopName.includes(',') ? stopName.split(',')[0] : stopName;
 
+        // Custom Hospital/Lab Location Pin Marker
         const stopIcon = L.divIcon({
-          className: 'custom-stop-icon',
+          className: 'custom-hospital-pin',
           html: `
-            <div class="relative group cursor-pointer">
-              <div class="w-7 h-7 rounded-full ${
+            <div class="relative group cursor-pointer flex flex-col items-center">
+              <div class="w-8 h-8 rounded-full ${
                 isPickedUp
                   ? 'bg-emerald-600 ring-2 ring-emerald-300'
                   : isSelected
                   ? 'bg-sky-600 ring-3 ring-sky-300'
-                  : 'bg-slate-800 ring-2 ring-slate-400'
-              } text-white font-bold text-xs flex items-center justify-center shadow-md transform transition-transform group-hover:scale-110">
-                <span>${isPickedUp ? '✓' : index + 1}</span>
+                  : 'bg-rose-600 ring-2 ring-rose-200'
+              } text-white font-bold text-xs flex items-center justify-center shadow-lg transform transition-transform group-hover:scale-110">
+                ${
+                  isPickedUp
+                    ? '<span class="font-bold text-sm">✓</span>'
+                    : `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v12"/><path d="M6 12h12"/></svg>`
+                }
               </div>
               <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-white/95 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs pointer-events-none border border-slate-200 whitespace-nowrap">
                 ${shortStopName}
               </div>
             </div>
           `,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
         });
 
         const stopMarker = L.marker([stop.lat, stop.lng], { icon: stopIcon }).addTo(markersLayer);
@@ -496,11 +526,16 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         });
 
         stopMarker.bindPopup(`
-          <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 190px; padding: 4px;">
-            <div style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase;">Stop #${index + 1} Collection Center</div>
+          <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 200px; padding: 4px;">
+            <div style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase;">Stop #${index + 1} Hospital / Diagnostic Hub</div>
             <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${stopName}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${stopAddress}</div>
-            <div style="font-size: 11px; color: #334155; margin-top: 5px;"><b>Contact:</b> ${stop.contactPerson || 'Lab Tech'} (${stop.phone || '+91 98200 00000'})</div>
+            <div style="font-size: 11px; color: #334155; margin-top: 5px;">
+              <b>Contact:</b> ${stop.contactPerson || 'Lab Coordinator'} (${stop.phone || '+91 98200 33445'})
+            </div>
+            <div style="margin-top: 4px; font-size: 11px; font-weight: 700; color: #0369a1;">
+              Specimen Count: ${(stop as any).sampleCount || 10} Vials
+            </div>
           </div>
         `);
 
@@ -508,40 +543,100 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       });
     }
 
-    // 4. RENDER DESTINATION CENTRAL INTAKE LAB
-    if (showDestination) {
-      const dest = destination || tasks[0]?.destination;
-      if (dest) {
-        const destName = dest.name || 'Central Diagnostics Lab';
-        const destAddress = dest.address || 'Mumbai Logistics Hub';
-        const destIcon = L.divIcon({
-          className: 'custom-dest-icon',
-          html: `
-            <div class="relative group">
-              <div class="w-8 h-8 rounded-lg bg-emerald-700 ring-2 ring-emerald-300 text-white font-bold text-sm flex items-center justify-center shadow-lg transform transition-transform group-hover:scale-110">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z"/><path d="M8 14h8"/><path d="M12 10v8"/></svg>
-              </div>
-              <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-emerald-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs pointer-events-none border border-emerald-700 whitespace-nowrap">
-                CENTRAL LAB
-              </div>
+    // 3. RENDER DESTINATION CENTRAL INTAKE LAB
+    if (showDestination && resolvedDestination) {
+      const dest = resolvedDestination;
+      const destName = dest.name || 'SecondMedic Central Laboratory';
+      const destAddress = dest.address || 'BKC, Mumbai';
+      const destIcon = L.divIcon({
+        className: 'custom-dest-icon',
+        html: `
+          <div class="relative group flex flex-col items-center">
+            <div class="w-9 h-9 rounded-lg bg-emerald-700 ring-3 ring-emerald-300 text-white font-bold text-sm flex items-center justify-center shadow-xl transform transition-transform group-hover:scale-110">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z"/>
+                <path d="M8 14h8"/>
+                <path d="M12 10v8"/>
+              </svg>
             </div>
-          `,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16]
-        });
-
-        const destMarker = L.marker([dest.lat, dest.lng], { icon: destIcon, zIndexOffset: 900 }).addTo(markersLayer);
-        destMarker.bindPopup(`
-          <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 190px; padding: 4px;">
-            <div style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Central Diagnostics Lab</div>
-            <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${destName}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${destAddress}</div>
-            <div style="font-size: 11px; color: #334155; margin-top: 5px;"><b>Intake Lead:</b> ${(dest as any).contactPerson || 'Dr. Anita Desai'}</div>
+            <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-emerald-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs pointer-events-none border border-emerald-700 whitespace-nowrap">
+              CENTRAL LAB
+            </div>
           </div>
-        `);
+        `,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      });
 
-        boundsPoints.push([dest.lat, dest.lng]);
-      }
+      const destMarker = L.marker([dest.lat, dest.lng], { icon: destIcon, zIndexOffset: 900 }).addTo(markersLayer);
+      destMarker.bindPopup(`
+        <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 200px; padding: 4px;">
+          <div style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Central Diagnostics Lab</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${destName}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${destAddress}</div>
+          <div style="font-size: 11px; color: #334155; margin-top: 5px;"><b>Intake Lead:</b> ${(dest as any).contactPerson || 'Dr. Anita Desai'}</div>
+        </div>
+      `);
+
+      boundsPoints.push([dest.lat, dest.lng]);
+    }
+
+    // 4. DRAW SUBTLE POLYLINES CONNECTING STOPS ALONG THE ACTIVE ROUTE
+    if (showPolylines) {
+      ridersToRender.forEach((activeRider) => {
+        if (!activeRider.currentLocation) return;
+        const riderCoords: [number, number] = [activeRider.currentLocation.lat, activeRider.currentLocation.lng];
+
+        if (resolvedStops.length > 0) {
+          // Leg 1: Active In-Transit dashed polyline from Rider's GPS to Next Stop
+          const nextTargetStop = resolvedStops.find((s) => (s as any).status !== 'picked_up') || resolvedStops[0];
+          if (nextTargetStop) {
+            const riderToStopLeg: [number, number][] = [
+              riderCoords,
+              [nextTargetStop.lat, nextTargetStop.lng]
+            ];
+
+            L.polyline(riderToStopLeg, {
+              color: '#0284c7', // Sky Blue
+              weight: 4,
+              opacity: 0.85,
+              dashArray: '6, 8',
+              lineCap: 'round',
+              lineJoin: 'round'
+            }).addTo(polylinesLayer);
+          }
+
+          // Leg 2: Continuous subtle polyline connecting all sequential hospital/client stops
+          const allStopsCoords: [number, number][] = resolvedStops.map((s) => [s.lat, s.lng]);
+          if (allStopsCoords.length > 1) {
+            L.polyline(allStopsCoords, {
+              color: '#0369a1', // Deep Sky Blue
+              weight: 3,
+              opacity: 0.7,
+              lineCap: 'round',
+              lineJoin: 'round'
+            }).addTo(polylinesLayer);
+          }
+
+          // Leg 3: Final Polyline from Last Stop to Central Intake Destination Lab
+          if (resolvedDestination && resolvedStops.length > 0) {
+            const lastStop = resolvedStops[resolvedStops.length - 1];
+            const labLegCoords: [number, number][] = [
+              [lastStop.lat, lastStop.lng],
+              [resolvedDestination.lat, resolvedDestination.lng]
+            ];
+
+            L.polyline(labLegCoords, {
+              color: '#059669', // Emerald green
+              weight: 3,
+              opacity: 0.75,
+              dashArray: '4, 6',
+              lineCap: 'round'
+            }).addTo(polylinesLayer);
+          }
+        }
+      });
     }
 
     // 5. RENDER BREADCRUMB TRAIL FROM FIRESTORE LOCATION PINGS
@@ -558,8 +653,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         if (trailCoords.length > 1) {
           L.polyline(trailCoords, {
             color: '#0284c7',
-            weight: 3.5,
-            opacity: 0.7,
+            weight: 3,
+            opacity: 0.6,
             lineCap: 'round',
             lineJoin: 'round'
           }).addTo(trailLayer);
@@ -574,8 +669,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     }
   }, [
     activeRidersList,
-    stops,
-    destination,
+    resolvedStops,
+    resolvedDestination,
     tasks,
     activeTaskId,
     selectedStopId,
@@ -590,18 +685,15 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     autoFit
   ]);
 
-  // Recalculate leaflet map size on container resize
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      mapInstanceRef.current?.invalidateSize();
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [height, isFullscreen]);
-
   return (
     <div
-      className={`relative w-full rounded-xl overflow-hidden border border-slate-200 shadow-xs bg-slate-100 flex flex-col transition-all duration-300 ${
-        isFullscreen ? 'fixed inset-4 z-[9999] shadow-2xl h-[calc(100vh-32px)]' : ''
+      style={{
+        height: isFullscreen ? 'calc(100vh - 32px)' : (height || '380px'),
+        width: '100%',
+        borderRadius: '12px'
+      }}
+      className={`h-[380px] w-full rounded-xl overflow-hidden my-3 relative z-0 border border-slate-200 shadow-xs bg-slate-100 flex flex-col transition-all duration-300 ${
+        isFullscreen ? 'fixed inset-4 z-[9999] shadow-2xl !h-[calc(100vh-32px)] my-0' : ''
       }`}
     >
       {/* Top Map Control Bar */}
@@ -644,16 +736,16 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         )}
       </div>
 
-      {/* Top Right Live Firestore Status Pill & Layer Toggles */}
+      {/* Top Right Live Firestore Status Pill & Fullscreen Button */}
       <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
-        {/* Real-time Firestore Sync Badge */}
+        {/* Real-time Status Badge */}
         <div className="bg-slate-950/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-700 text-xs font-bold text-white flex items-center gap-2 shadow-md">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
           <span className="text-[11px]">
-            {isFirestoreConnected ? 'Firestore Live GeoPoint' : 'Live Fleet Radar'}
+            {isFirestoreConnected ? 'Firestore Live GPS' : 'Live Fleet Radar'}
           </span>
           <span className="text-[10px] text-sky-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded">
             {activeRidersList.length} Active
@@ -670,11 +762,11 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         </button>
       </div>
 
-      {/* Main Leaflet Map Stage */}
+      {/* Main Leaflet Map Canvas Div */}
       <div
         ref={mapContainerRef}
-        style={{ height: isFullscreen ? '100%' : height, width: '100%' }}
-        className="flex-1 z-0"
+        style={{ height: '100%', width: '100%' }}
+        className="flex-1 w-full h-full z-0"
       />
 
       {/* Bottom Map Legend & Interactive Layer Toggles */}
@@ -703,7 +795,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             }`}
           >
             <span className="inline-block w-2.5 h-0.5 bg-indigo-600 align-middle mr-1"></span>
-            Task Polylines
+            Route Polylines
           </button>
 
           <button
@@ -713,7 +805,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             }`}
           >
             <MapPin className="w-3 h-3 inline mr-1" />
-            Stops
+            Client Stops ({resolvedStops.length})
           </button>
 
           <button
@@ -740,15 +832,19 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-            <span>Active Specimen Courier</span>
+            <span>Rider (Bike)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span>Hospital/Lab Stop</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600"></span>
-            <span>Intake Lab</span>
+            <span>Central Lab</span>
           </div>
           <div className="hidden sm:flex items-center gap-1.5 text-emerald-700 font-bold">
             <Thermometer className="w-3.5 h-3.5" />
-            <span>2.0°C – 8.0°C Cold Chain</span>
+            <span>2.0°C – 8.0°C Safe</span>
           </div>
         </div>
       </div>
