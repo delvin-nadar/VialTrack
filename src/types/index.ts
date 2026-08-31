@@ -154,19 +154,33 @@ export interface PickupBoy {
 }
 
 export type TaskStatus =
+  | 'assigned'
+  | 'in_transit'
+  | 'completed'
   | 'upcoming'
   | 'started'
   | 'at_stop'
   | 'picked_up'
-  | 'in_transit'
   | 'delivered'
   | 'delayed'
   | 'missed'
   | 'pending'
-  | 'in_progress'
-  | 'completed';
+  | 'in_progress';
 
 export type StopStatus = 'pending' | 'arrived' | 'picked_up' | 'no_sample';
+
+export interface UnifiedStopItem {
+  stopName: string;
+  address: string;
+  lat: number;
+  lng: number;
+  specimenCount: number;
+  status: 'pending' | 'arrived' | 'picked_up' | 'no_sample' | string;
+  id?: string;
+  contactPerson?: string;
+  phone?: string;
+  sampleCount?: number;
+}
 
 export interface StopExecution {
   stopId: string;
@@ -231,6 +245,14 @@ export interface IssueFlag {
 
 export interface PickupTask {
   id: string;
+  clientLabId?: string;
+  clientLabName?: string;
+  clientLabLocation?: { lat: number; lng: number };
+  riderId: string;
+  riderName: string;
+  riderPhone: string;
+  stops?: UnifiedStopItem[];
+  scheduledDate?: string;
   title?: string;
   type?: 'stat_urgent' | 'routine_loop' | 'temperature_critical' | 'biopsy_transfer' | string;
   assignedRiderId?: string;
@@ -260,9 +282,6 @@ export interface PickupTask {
   routeName: string;
   clientId: string;
   clientName: string;
-  riderId: string;
-  riderName: string;
-  riderPhone: string;
   riderVehicle: string;
   status: TaskStatus;
   activeRiderId?: string;

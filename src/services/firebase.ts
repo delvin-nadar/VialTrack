@@ -255,8 +255,180 @@ seedOperationalAuthAccounts().catch(() => {});
 
 export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
 
+// Helper to normalize and unify tasks across Admin, Rider, and Client schemas
+export function formatUnifiedTask(id: string, data: any): PickupTask {
+  const clientLabId = data.clientLabId || data.clientId || '';
+  const clientLabName = data.clientLabName || data.clientName || 'Diagnostic Facility';
+  const clientLocation = data.clientLabLocation || {
+    lat: data.destination?.lat || data.deliveryLocation?.lat || 19.1287852,
+    lng: data.destination?.lng || data.deliveryLocation?.lng || 72.8294183
+  };
+
+  const rawStops = Array.isArray(data.stops) && data.stops.length > 0
+    ? data.stops
+    : (Array.isArray(data.stopsProgress) ? data.stopsProgress : []);
+
+  const unifiedStops = rawStops.map((s: any, idx: number) => ({
+    stopName: s.stopName || s.name || `Collection Stop ${idx + 1}`,
+    address: s.address || 'Diagnostic Collection Point',
+    lat: Number(s.lat || 19.1287852),
+    lng: Number(s.lng || 72.8294183),
+    specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+    sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+    status: s.status || 'pending',
+    id: s.id || s.stopId || `stop-${idx + 1}`,
+    contactPerson: s.contactPerson || 'Hospital OPD Desk',
+    phone: s.phone || '+91 98201 11223'
+  }));
+
+  const stopsProgress: any[] = unifiedStops.map((s: any, idx: number) => ({
+    stopId: s.id || `stop-${idx + 1}`,
+    stopName: s.stopName,
+    address: s.address,
+    lat: s.lat,
+    lng: s.lng,
+    contactPerson: s.contactPerson || 'Hospital OPD Desk',
+    phone: s.phone || '+91 98201 11223',
+    status: s.status === 'picked_up' || s.status === 'arrived' || s.status === 'no_sample' ? s.status : 'pending',
+    sampleCount: s.specimenCount,
+    notes: s.notes || ''
+  }));
+
+  const scheduledDate = data.scheduledDate || data.date || new Date().toISOString().split('T')[0];
+
+  return {
+    id: id || data.id,
+    clientLabId,
+    clientLabName,
+    clientLabLocation: {
+      lat: Number(clientLocation.lat || 19.1287852),
+      lng: Number(clientLocation.lng || 72.8294183)
+    },
+    riderId: data.riderId || data.assignedRiderId || '',
+    riderName: data.riderName || data.assignedRiderName || '',
+    riderPhone: data.riderPhone || data.assignedRiderPhone || '',
+    stops: unifiedStops,
+    scheduledDate,
+    date: scheduledDate,
+    timeSlot: data.timeSlot || '09:00',
+    routeId: data.routeId || `route-${clientLabId || 'direct'}`,
+    routeName: data.routeName || `${clientLabName} Route`,
+    clientId: clientLabId,
+    clientName: clientLabName,
+    riderVehicle: data.riderVehicle || data.vehicleNumber || 'MH02TN0897',
+    status: data.status || 'assigned',
+    activeRiderId: data.activeRiderId || data.riderId,
+    activeRiderName: data.activeRiderName || data.riderName,
+    currentDestinationStop: data.currentDestinationStop || (stopsProgress[0]?.stopName),
+    tripStartedAt: data.tripStartedAt,
+    currentStopIndex: data.currentStopIndex || 0,
+    stopsProgress,
+    destination: data.destination || {
+      name: clientLabName,
+      address: data.deliveryLocation?.address || '',
+      lat: Number(clientLocation.lat || 19.1287852),
+      lng: Number(clientLocation.lng || 72.8294183),
+      notes: data.taskNotes || data.destination?.notes || 'Specimen cold-chain transport'
+    },
+    isDelayed: Boolean(data.isDelayed),
+    delayMinutes: data.delayMinutes || 0,
+    issueFlags: data.issueFlags || [],
+    createdAt: data.createdAt ? (typeof data.createdAt === 'object' ? new Date().toISOString() : data.createdAt) : new Date().toISOString(),
+    startedAt: data.startedAt,
+    completedAt: data.completedAt
+  };
+}
+
 // Realtime Firestore synchronization helpers
 export const CloudSync = {
+  // Dispatch a standardized task with unified schema directly to Firestore collection 'tasks'
+  async dispatchTask(payload: {
+    client: Client | { id: string; name: string; lat?: number; lng?: number; address?: string };
+    rider: PickupBoy | { id: string; name: string; phone: string; vehicleNumber?: string };
+    stops: Array<{ name?: string; stopName?: string; address?: string; lat?: number; lng?: number; specimenCount?: number; sampleCount?: number; status?: string }>;
+    route?: Partial<Route>;
+    timeSlot?: string;
+    scheduledDate?: string;
+    taskNotes?: string;
+    customTaskId?: string;
+  }): Promise<PickupTask> {
+    const todayStr = payload.scheduledDate || new Date().toISOString().split('T')[0];
+    const taskId = payload.customTaskId || `task-${todayStr.replace(/-/g, '')}-${(payload.timeSlot || '0900').replace(':', '')}-${Date.now().toString().slice(-4)}`;
+
+    const stopsFormatted = payload.stops.map((s: any, idx: number) => ({
+      stopName: s.name || s.stopName || `Stop ${idx + 1}`,
+      address: s.address || 'Mumbai Facility',
+      lat: Number(s.lat || 19.1287852),
+      lng: Number(s.lng || 72.8294183),
+      specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+      status: 'pending'
+    }));
+
+    const clientLocation = {
+      lat: Number(payload.client.lat || (payload.client as any).location?.lat || 19.1287852),
+      lng: Number(payload.client.lng || (payload.client as any).location?.lng || 72.8294183)
+    };
+
+    const firestorePayload = {
+      clientLabId: payload.client.id,
+      clientLabName: payload.client.name,
+      clientLabLocation: clientLocation,
+      riderId: payload.rider.id,
+      riderName: payload.rider.name,
+      riderPhone: payload.rider.phone,
+      stops: stopsFormatted,
+      status: 'assigned',
+      createdAt: serverTimestamp(),
+      scheduledDate: todayStr,
+      // Compatibility fields for existing dashboards
+      id: taskId,
+      clientId: payload.client.id,
+      clientName: payload.client.name,
+      routeId: payload.route?.id || `route-${payload.client.id}`,
+      routeName: payload.route?.name || `${payload.client.name} Collection Loop`,
+      timeSlot: payload.timeSlot || '09:00',
+      date: todayStr,
+      riderVehicle: payload.rider.vehicleNumber || 'MH02TN0897',
+      currentStopIndex: 0,
+      stopsProgress: stopsFormatted.map((s, idx) => ({
+        stopId: `stop-${idx + 1}`,
+        stopName: s.stopName,
+        address: s.address,
+        lat: s.lat,
+        lng: s.lng,
+        contactPerson: 'Lab Coordinator',
+        phone: '+91 98201 11223',
+        status: 'pending' as any,
+        sampleCount: s.specimenCount,
+        notes: ''
+      })),
+      destination: {
+        name: payload.route?.destinationLab?.name || payload.client.name,
+        address: payload.route?.destinationLab?.address || payload.client.address || '',
+        lat: Number(payload.route?.destinationLab?.lat || clientLocation.lat),
+        lng: Number(payload.route?.destinationLab?.lng || clientLocation.lng),
+        notes: payload.taskNotes || 'Specimen cold-chain transport'
+      },
+      isDelayed: false,
+      delayMinutes: 0,
+      issueFlags: []
+    };
+
+    try {
+      await setDoc(doc(db, 'tasks', taskId), firestorePayload);
+      console.log(`[CloudSync] Dispatched task ${taskId} directly to Firestore tasks collection.`);
+    } catch (e) {
+      console.warn('[CloudSync] Error saving dispatched task to Firestore:', e);
+    }
+
+    const localTask = formatUnifiedTask(taskId, {
+      ...firestorePayload,
+      createdAt: new Date().toISOString()
+    });
+
+    return localTask;
+  },
+
   // Sync a single document to Firestore
   async syncDocument(collectionName: string, docId: string, data: any) {
     try {
@@ -575,38 +747,46 @@ export const CloudSync = {
     });
   },
 
-  // Scoped Firestore query subscription: Client Tasks (strictly filtered to session.clientId)
-  subscribeToClientTasks(clientId: string, onUpdate: (tasks: PickupTask[]) => void): Unsubscribe {
-    if (!clientId) return () => {};
+  // Scoped Firestore query subscription: Client Tasks (strictly filtered to session.clientId or clientName)
+  subscribeToClientTasks(clientId: string, clientNameOrCb?: string | ((tasks: PickupTask[]) => void), maybeCb?: (tasks: PickupTask[]) => void): Unsubscribe {
+    let clientName: string | undefined;
+    let onUpdate: ((tasks: PickupTask[]) => void) | undefined;
+
+    if (typeof clientNameOrCb === 'function') {
+      onUpdate = clientNameOrCb;
+      clientName = undefined;
+    } else {
+      clientName = clientNameOrCb;
+      onUpdate = maybeCb;
+    }
+
+    if (!clientId && !clientName) return () => {};
+    if (!onUpdate) return () => {};
+
     try {
-      const q = query(collection(db, 'tasks'), where('clientId', '==', clientId));
+      const cleanName = (clientName || '').trim().toLowerCase();
       return onSnapshot(
-        q,
+        collection(db, 'tasks'),
         (snapshot) => {
           const list: PickupTask[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as any;
-            if (data.pickupGeoPoint) {
-              const coords = parseFirestoreGeoPoint(data.pickupGeoPoint);
-              if (coords) {
-                data.pickupLocation = { ...(data.pickupLocation || {}), lat: coords.lat, lng: coords.lng };
-              }
-            }
-            if (data.deliveryGeoPoint) {
-              const coords = parseFirestoreGeoPoint(data.deliveryGeoPoint);
-              if (coords) {
-                data.deliveryLocation = { ...(data.deliveryLocation || {}), lat: coords.lat, lng: coords.lng };
-              }
-            }
-            if (data.clientId === clientId) {
-              list.push(data as PickupTask);
+            const dataName = (data.clientLabName || data.clientName || '').trim().toLowerCase();
+            const isMatchClient =
+              (clientId && (data.clientLabId === clientId || data.clientId === clientId)) ||
+              (cleanName && dataName === cleanName);
+
+            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
+
+            if (isMatchClient && isMatchingStatus) {
+              const formatted = formatUnifiedTask(docSnap.id, data);
+              list.push(formatted);
             }
           });
-          onUpdate(list);
+          onUpdate!(list);
         },
         (err) => {
-          console.warn(`[CloudSync] Client tasks subscription notice for ${clientId}:`, err?.message || err);
-          // Fallback to local storage tasks filtered by clientId
+          console.warn(`[CloudSync] Client tasks subscription notice for ${clientId || clientName}:`, err?.message || err);
         }
       );
     } catch (e) {
@@ -660,17 +840,25 @@ export const CloudSync = {
   subscribeToRiderTasks(riderId: string, riderPhone?: string, onUpdate?: (tasks: PickupTask[]) => void): Unsubscribe {
     if (!riderId || !onUpdate) return () => {};
     try {
-      const q = query(collection(db, 'tasks'), where('riderId', '==', riderId));
       const cleanPhone = (riderPhone || '').replace(/\D/g, '');
       return onSnapshot(
-        q,
+        collection(db, 'tasks'),
         (snapshot) => {
           const list: PickupTask[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as any;
             const tPhone = (data.riderPhone || '').replace(/\D/g, '');
-            if (data.riderId === riderId || data.assignedRiderId === riderId || (cleanPhone && tPhone === cleanPhone)) {
-              list.push(data as PickupTask);
+            const isMatchRider =
+              data.riderId === riderId ||
+              data.assignedRiderId === riderId ||
+              (cleanPhone && tPhone === cleanPhone) ||
+              (riderPhone && data.riderPhone === riderPhone);
+
+            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
+
+            if (isMatchRider && isMatchingStatus) {
+              const formatted = formatUnifiedTask(docSnap.id, data);
+              list.push(formatted);
             }
           });
           onUpdate(list);

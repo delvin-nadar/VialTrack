@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { PickupTask, PickupBoy, Route, Client, NotificationLog, StopProgress } from '../../types';
+import { PickupTask, PickupBoy, Route, Client, NotificationLog } from '../../types';
 import { LiveMap } from '../common/LiveMap';
+import { DispatchModal } from './DispatchModal';
 import {
   Calendar,
   Clock,
@@ -53,101 +54,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Dispatch Task Modal State
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState<string>(clients[0]?.id || '');
-  const [selectedRouteId, setSelectedRouteId] = useState<string>(routes[0]?.id || '');
-  const [selectedRiderId, setSelectedRiderId] = useState<string>(riders[0]?.id || '');
-  const [taskTimeSlot, setTaskTimeSlot] = useState<string>('14:00');
-  const [taskDate, setTaskDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [taskNotes, setTaskNotes] = useState<string>('');
 
-  // Available routes for selected client
-  const clientRoutes = useMemo(() => {
-    if (!selectedClientId) return routes;
-    const filtered = routes.filter((r) => r.clientId === selectedClientId);
-    return filtered.length > 0 ? filtered : routes;
-  }, [routes, selectedClientId]);
-
-  // Handle client selection change in dispatch modal
-  const handleClientChange = (cId: string) => {
-    setSelectedClientId(cId);
-    const matchingRoutes = routes.filter((r) => r.clientId === cId);
-    if (matchingRoutes.length > 0) {
-      setSelectedRouteId(matchingRoutes[0].id);
-    }
-  };
-
-  // Dispatch New Task to Firestore
-  const handleCreateTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    const client = clients.find((c) => c.id === selectedClientId) || clients[0];
-    const route = routes.find((r) => r.id === selectedRouteId) || clientRoutes[0] || routes[0];
-    const rider = riders.find((r) => r.id === selectedRiderId) || riders[0];
-
-    if (!client || !route || !rider) {
-      alert('Please ensure at least one Client, Route, and Rider are configured.');
-      return;
-    }
-
-    const newTaskId = `task-${taskDate.replace(/-/g, '')}-${taskTimeSlot.replace(':', '')}-${Date.now().toString().slice(-4)}`;
-
-    const stopsProgress: StopProgress[] = route.stops.map((s, idx) => ({
-      stopId: s.id || `stop-${idx}`,
-      stopName: s.name,
-      address: s.address,
-      lat: s.lat,
-      lng: s.lng,
-      contactPerson: s.contactPerson || '',
-      phone: s.phone || '',
-      status: 'pending'
-    }));
-
-    const newTask: PickupTask = {
-      id: newTaskId,
-      date: taskDate,
-      timeSlot: taskTimeSlot,
-      routeId: route.id,
-      routeName: route.name,
-      clientId: client.id,
-      clientName: client.name,
-      riderId: rider.id,
-      riderName: rider.name,
-      riderPhone: rider.phone,
-      riderVehicle: rider.vehicleNumber,
-      status: 'pending',
-      currentStopIndex: 0,
-      pickupLocation: {
-        name: route.stops[0]?.name || client.name,
-        address: route.stops[0]?.address || client.address,
-        lat: route.stops[0]?.lat || client.lat || 19.1363,
-        lng: route.stops[0]?.lng || client.lng || 72.8277,
-        area: client.area || 'Mumbai'
-      },
-      deliveryLocation: {
-        name: route.destinationLab?.name || 'Central Diagnostic Processing Lab',
-        address: route.destinationLab?.address || 'Mumbai Central Facility',
-        lat: route.destinationLab?.lat || 19.1860,
-        lng: route.destinationLab?.lng || 72.8485,
-        area: 'Mumbai'
-      },
-      stopsProgress,
-      destination: {
-        name: route.destinationLab?.name || 'Central Diagnostic Processing Lab',
-        address: route.destinationLab?.address || 'Mumbai Central Facility',
-        lat: route.destinationLab?.lat || 19.1860,
-        lng: route.destinationLab?.lng || 72.8485,
-        notes: taskNotes || 'Specimen cold-chain transport'
-      },
-      isDelayed: false,
-      delayMinutes: 0,
-      issueFlags: [],
-      createdAt: new Date().toISOString()
-    };
-
-    StorageService.addTask(newTask);
-    setIsDispatchModalOpen(false);
+  const handleTaskDispatched = (newTask: PickupTask) => {
     setSelectedTaskId(newTask.id);
     onRefresh();
-    setDispatchNotice(`Dispatched new pickup round #${newTask.id} to ${rider.name}!`);
+    setDispatchNotice(`Dispatched new pickup round #${newTask.id} to ${newTask.riderName}!`);
     setTimeout(() => setDispatchNotice(null), 4000);
   };
 
@@ -567,138 +478,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Dispatch New Task Modal */}
-      {isDispatchModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-bold">
-                  <Send className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Dispatch New Collection Round</h3>
-                  <p className="text-xs text-slate-500">Live operational assignment to rider fleet</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsDispatchModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
-              {/* Select Client */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Select Diagnostic Client / Hospital *</label>
-                <select
-                  required
-                  value={selectedClientId}
-                  onChange={(e) => handleClientChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-600 outline-hidden"
-                >
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name} ({client.area || 'Mumbai'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Select Route */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Pickup Route Loop *</label>
-                <select
-                  required
-                  value={selectedRouteId}
-                  onChange={(e) => setSelectedRouteId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-600 outline-hidden"
-                >
-                  {clientRoutes.map((route) => (
-                    <option key={route.id} value={route.id}>
-                      {route.name} ({route.stops?.length || 0} stops)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Select Rider */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Assign Specimen Courier (Rider) *</label>
-                <select
-                  required
-                  value={selectedRiderId}
-                  onChange={(e) => setSelectedRiderId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-600 outline-hidden"
-                >
-                  {riders.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} - {r.vehicleNumber} {r.isCheckedIn ? '(Checked-in)' : '(Offline)'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Date & Time Slot */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Scheduled Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={taskDate}
-                    onChange={(e) => setTaskDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-600 outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Pickup Time Slot *</label>
-                  <select
-                    value={taskTimeSlot}
-                    onChange={(e) => setTaskTimeSlot(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-600 outline-hidden"
-                  >
-                    <option value="09:00">09:00 AM (Morning STAT)</option>
-                    <option value="11:30">11:30 AM (Midday Routine)</option>
-                    <option value="14:00">02:00 PM (Afternoon Cycle)</option>
-                    <option value="17:00">05:00 PM (Evening Batch)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Handling Instructions / Notes</label>
-                <input
-                  type="text"
-                  placeholder="e.g., EDTA + Serum vials, strict 4°C cold chain"
-                  value={taskNotes}
-                  onChange={(e) => setTaskNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white font-medium focus:ring-2 focus:ring-sky-600 outline-hidden"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsDispatchModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Dispatch Round</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <DispatchModal
+        isOpen={isDispatchModalOpen}
+        onClose={() => setIsDispatchModalOpen(false)}
+        clients={clients}
+        routes={routes}
+        riders={riders}
+        onDispatched={handleTaskDispatched}
+      />
     </div>
   );
 };
