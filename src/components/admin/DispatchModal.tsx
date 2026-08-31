@@ -14,6 +14,8 @@ import {
   Trash2,
   FileText,
   CheckCircle2,
+  CheckSquare,
+  Square,
   AlertCircle
 } from 'lucide-react';
 
@@ -51,8 +53,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       lat: number;
       lng: number;
       specimenCount: number;
+      contactPerson?: string;
+      phone?: string;
     }>
   >([]);
+
+  // Array of selected stop IDs for dispatch batch assignment
+  const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
 
   // Initialize selections when modal opens or props change
   useEffect(() => {
@@ -74,19 +81,29 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       setTaskNotes('');
 
       if (initialRoute?.stops) {
-        setCustomStops(
-          initialRoute.stops.map((s, idx) => ({
-            id: s.id || `stop-${idx}`,
-            name: s.name,
-            address: s.address,
-            lat: Number(s.lat || 19.1287852),
-            lng: Number(s.lng || 72.8294183),
-            specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8)
-          }))
-        );
+        const formattedStops = initialRoute.stops.map((s, idx) => ({
+          id: s.id || `stop-${idx + 1}`,
+          name: s.name,
+          address: s.address,
+          lat: Number(s.lat || 19.1287852),
+          lng: Number(s.lng || 72.8294183),
+          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8),
+          contactPerson: s.contactPerson || 'Lab Coordinator',
+          phone: s.phone || '+91 98201 11223'
+        }));
+        setCustomStops(formattedStops);
+        // Automatically select/check ALL available pickup stops in the current collection route by default
+        setSelectedStopIds(formattedStops.map((s) => s.id));
       }
     }
   }, [isOpen, clients, routes, riders]);
+
+  // When Rider is selected: Automatically select/check ALL available pickup stops in the current collection route
+  const handleRiderChange = (rId: string) => {
+    setSelectedRiderId(rId);
+    // Auto-select all available stops by default when rider is selected/changed
+    setSelectedStopIds(customStops.map((s) => s.id));
+  };
 
   // Update route and stops when client changes
   const handleClientChange = (cId: string) => {
@@ -96,16 +113,18 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     if (targetRoute) {
       setSelectedRouteId(targetRoute.id);
       if (targetRoute.stops) {
-        setCustomStops(
-          targetRoute.stops.map((s, idx) => ({
-            id: s.id || `stop-${idx}`,
-            name: s.name,
-            address: s.address,
-            lat: Number(s.lat || 19.1287852),
-            lng: Number(s.lng || 72.8294183),
-            specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8)
-          }))
-        );
+        const formattedStops = targetRoute.stops.map((s, idx) => ({
+          id: s.id || `stop-${idx + 1}`,
+          name: s.name,
+          address: s.address,
+          lat: Number(s.lat || 19.1287852),
+          lng: Number(s.lng || 72.8294183),
+          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8),
+          contactPerson: s.contactPerson || 'Lab Coordinator',
+          phone: s.phone || '+91 98201 11223'
+        }));
+        setCustomStops(formattedStops);
+        setSelectedStopIds(formattedStops.map((s) => s.id));
       }
     }
   };
@@ -115,39 +134,65 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     setSelectedRouteId(rId);
     const targetRoute = routes.find((r) => r.id === rId);
     if (targetRoute?.stops) {
-      setCustomStops(
-        targetRoute.stops.map((s, idx) => ({
-          id: s.id || `stop-${idx}`,
-          name: s.name,
-          address: s.address,
-          lat: Number(s.lat || 19.1287852),
-          lng: Number(s.lng || 72.8294183),
-          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8)
-        }))
-      );
+      const formattedStops = targetRoute.stops.map((s, idx) => ({
+        id: s.id || `stop-${idx + 1}`,
+        name: s.name,
+        address: s.address,
+        lat: Number(s.lat || 19.1287852),
+        lng: Number(s.lng || 72.8294183),
+        specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8),
+        contactPerson: s.contactPerson || 'Lab Coordinator',
+        phone: s.phone || '+91 98201 11223'
+      }));
+      setCustomStops(formattedStops);
+      setSelectedStopIds(formattedStops.map((s) => s.id));
       if (targetRoute.timeSlots && targetRoute.timeSlots.length > 0) {
         setTaskTimeSlot(targetRoute.timeSlots[0]);
       }
     }
   };
 
+  // Toggle individual stop selection
+  const handleToggleStop = (stopId: string) => {
+    setSelectedStopIds((prev) =>
+      prev.includes(stopId) ? prev.filter((id) => id !== stopId) : [...prev, stopId]
+    );
+  };
+
+  // Master Select All / Deselect All toggle
+  const isAllSelected = customStops.length > 0 && selectedStopIds.length === customStops.length;
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedStopIds([]);
+    } else {
+      setSelectedStopIds(customStops.map((s) => s.id));
+    }
+  };
+
   const handleAddStop = () => {
     const newIdx = customStops.length + 1;
-    setCustomStops([
-      ...customStops,
-      {
-        id: `stop-custom-${Date.now()}`,
-        name: `Collection Center OPD #${newIdx}`,
-        address: 'Diagnostic Collection Point, Mumbai',
-        lat: 19.1500,
-        lng: 72.8400,
-        specimenCount: 5
-      }
-    ]);
+    const newStopId = `stop-custom-${Date.now()}`;
+    const newStop = {
+      id: newStopId,
+      name: `Collection Center OPD #${newIdx}`,
+      address: 'Diagnostic Collection Point, Mumbai',
+      lat: 19.1500,
+      lng: 72.8400,
+      specimenCount: 5,
+      contactPerson: 'Lab Coordinator',
+      phone: '+91 98201 11223'
+    };
+    setCustomStops([...customStops, newStop]);
+    // Automatically select the new stop by default
+    setSelectedStopIds((prev) => [...prev, newStopId]);
   };
 
   const handleRemoveStop = (index: number) => {
-    setCustomStops(customStops.filter((_, idx) => idx !== index));
+    const targetStop = customStops[index];
+    if (targetStop) {
+      setCustomStops(customStops.filter((_, idx) => idx !== index));
+      setSelectedStopIds((prev) => prev.filter((id) => id !== targetStop.id));
+    }
   };
 
   const handleUpdateStopSpecimenCount = (index: number, count: number) => {
@@ -156,7 +201,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     setCustomStops(updated);
   };
 
-  const totalSpecimens = customStops.reduce((sum, s) => sum + (s.specimenCount || 0), 0);
+  // Metrics for selected stops
+  const selectedStopsList = customStops.filter((s) => selectedStopIds.includes(s.id));
+  const selectedSpecimensCount = selectedStopsList.reduce((sum, s) => sum + (s.specimenCount || 0), 0);
+  const totalSpecimensAllStops = customStops.reduce((sum, s) => sum + (s.specimenCount || 0), 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,9 +222,33 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       return;
     }
 
+    if (selectedStopIds.length === 0) {
+      alert('Please select at least one pickup stop to assign to the rider.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Direct unified dispatch to Firestore 'tasks'
+      // Map every selected stop into the unified task/route document with assigned status & rider details
+      const stopsPayload = selectedStopsList.map((stop, idx) => ({
+        id: stop.id,
+        stopId: `stop-${idx + 1}`,
+        name: stop.name,
+        stopName: stop.name,
+        address: stop.address,
+        lat: Number(stop.lat || 19.1287852),
+        lng: Number(stop.lng || 72.8294183),
+        specimenCount: Number(stop.specimenCount || 0),
+        sampleCount: Number(stop.specimenCount || 0),
+        status: 'assigned',
+        assignedRiderId: rider.id,
+        assignedRiderName: rider.name,
+        contactPerson: stop.contactPerson || 'Lab Coordinator',
+        phone: stop.phone || '+91 98201 11223',
+        notes: ''
+      }));
+
+      // Direct unified dispatch to Firestore 'tasks' with status 'assigned'
       const newTask = await CloudSync.dispatchTask({
         client: {
           id: client.id,
@@ -191,16 +263,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           phone: rider.phone,
           vehicleNumber: rider.vehicleNumber
         },
-        stops: customStops.map((s) => ({
-          stopName: s.name,
-          name: s.name,
-          address: s.address,
-          lat: s.lat,
-          lng: s.lng,
-          specimenCount: s.specimenCount,
-          sampleCount: s.specimenCount,
-          status: 'pending'
-        })),
+        stops: stopsPayload,
         route,
         timeSlot: taskTimeSlot,
         scheduledDate: taskDate,
@@ -280,7 +343,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               </label>
               <select
                 value={selectedRiderId}
-                onChange={(e) => setSelectedRiderId(e.target.value)}
+                onChange={(e) => handleRiderChange(e.target.value)}
                 className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all"
                 required
               >
@@ -353,68 +416,130 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </div>
           </div>
 
-          {/* Stops List & Specimen Allocation */}
+          {/* Stops List & Specimen Allocation with Assign All Stops Checkbox Header */}
           <div className="space-y-2.5 bg-slate-50/80 p-3.5 sm:p-4 rounded-xl border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-900 block">
-                  Collection Stops ({customStops.length} Total)
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Total Specimens Scheduled: <strong className="text-emerald-700">{totalSpecimens} Vials</strong>
-                </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+              <div className="flex items-center gap-3">
+                {/* Visible Master Toggle / Checkbox Header */}
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(input) => {
+                      if (input) {
+                        input.indeterminate =
+                          selectedStopIds.length > 0 && selectedStopIds.length < customStops.length;
+                      }
+                    }}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 text-sky-700 bg-white border-slate-300 rounded focus:ring-2 focus:ring-sky-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-900">
+                    Assign All Stops (Selected: {selectedStopIds.length}/{customStops.length})
+                  </span>
+                </label>
               </div>
-              <button
-                type="button"
-                onClick={handleAddStop}
-                className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-sky-700" />
-                <span>Add Stop</span>
-              </button>
-            </div>
 
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {customStops.map((stop, idx) => (
-                <div
-                  key={stop.id || idx}
-                  className="bg-white p-2.5 rounded-lg border border-slate-200 flex items-center justify-between gap-3 shadow-2xs"
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <span className="text-[11px] text-slate-500">
+                  Total Specimens:{' '}
+                  <strong className="text-emerald-700 font-bold">
+                    {selectedSpecimensCount} Vials
+                  </strong>{' '}
+                  <span className="text-slate-400">({totalSpecimensAllStops} max)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddStop}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-bold flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="truncate">
-                      <p className="text-xs font-bold text-slate-900 truncate">{stop.name}</p>
-                      <p className="text-[10px] text-slate-500 truncate">{stop.address}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1">
-                      <label className="text-[10px] font-bold text-slate-500">Vials:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="200"
-                        value={stop.specimenCount}
-                        onChange={(e) => handleUpdateStopSpecimenCount(idx, parseInt(e.target.value) || 0)}
-                        className="w-14 px-2 py-1 text-center bg-slate-50 border border-slate-300 rounded text-xs font-bold text-slate-800 focus:ring-1 focus:ring-sky-500 focus:outline-hidden"
-                      />
-                    </div>
-                    {customStops.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveStop(idx)}
-                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                  <Plus className="w-3.5 h-3.5 text-sky-700" />
+                  <span>Add Stop</span>
+                </button>
+              </div>
             </div>
+
+            {/* List of stops with individual checkboxes */}
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {customStops.map((stop, idx) => {
+                const isChecked = selectedStopIds.includes(stop.id);
+                return (
+                  <div
+                    key={stop.id || idx}
+                    className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 shadow-2xs ${
+                      isChecked
+                        ? 'bg-white border-sky-300 ring-1 ring-sky-200'
+                        : 'bg-slate-100/70 border-slate-200 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Individual Stop Selection Checkbox */}
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleStop(stop.id)}
+                        className="w-4 h-4 text-sky-700 bg-white border-slate-300 rounded focus:ring-2 focus:ring-sky-500 cursor-pointer shrink-0"
+                      />
+                      <span
+                        className={`w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0 ${
+                          isChecked ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {idx + 1}
+                      </span>
+                      <div className="truncate">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <p className="text-xs font-bold text-slate-900 truncate">{stop.name}</p>
+                          {isChecked ? (
+                            <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[9px] font-semibold">
+                              Assigned
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[9px] font-semibold">
+                              Excluded
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 truncate">{stop.address}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1">
+                        <label className="text-[10px] font-bold text-slate-500">Vials:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="200"
+                          value={stop.specimenCount}
+                          onChange={(e) =>
+                            handleUpdateStopSpecimenCount(idx, parseInt(e.target.value) || 0)
+                          }
+                          className="w-14 px-2 py-1 text-center bg-slate-50 border border-slate-300 rounded text-xs font-bold text-slate-800 focus:ring-1 focus:ring-sky-500 focus:outline-hidden"
+                        />
+                      </div>
+                      {customStops.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStop(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                          title="Remove stop"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {selectedStopIds.length === 0 && (
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-amber-800 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>No stops selected. Please check at least one stop to dispatch.</span>
+              </div>
+            )}
           </div>
 
           {/* Notes */}
@@ -443,7 +568,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || selectedStopIds.length === 0}
               className="px-5 py-2.5 bg-sky-700 hover:bg-sky-800 disabled:bg-sky-400 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-98"
             >
               {isSubmitting ? (
@@ -454,7 +579,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>Dispatch Task</span>
+                  <span>Dispatch {selectedStopIds.length} Assigned Stops</span>
                 </>
               )}
             </button>

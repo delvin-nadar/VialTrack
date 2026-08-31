@@ -345,7 +345,7 @@ export const CloudSync = {
   async dispatchTask(payload: {
     client: Client | { id: string; name: string; lat?: number; lng?: number; address?: string };
     rider: PickupBoy | { id: string; name: string; phone: string; vehicleNumber?: string };
-    stops: Array<{ name?: string; stopName?: string; address?: string; lat?: number; lng?: number; specimenCount?: number; sampleCount?: number; status?: string }>;
+    stops: Array<{ id?: string; stopId?: string; name?: string; stopName?: string; address?: string; lat?: number; lng?: number; specimenCount?: number; sampleCount?: number; status?: string; assignedRiderId?: string; assignedRiderName?: string; contactPerson?: string; phone?: string; notes?: string }>;
     route?: Partial<Route>;
     timeSlot?: string;
     scheduledDate?: string;
@@ -356,12 +356,21 @@ export const CloudSync = {
     const taskId = payload.customTaskId || `task-${todayStr.replace(/-/g, '')}-${(payload.timeSlot || '0900').replace(':', '')}-${Date.now().toString().slice(-4)}`;
 
     const stopsFormatted = payload.stops.map((s: any, idx: number) => ({
+      id: s.id || s.stopId || `stop-${idx + 1}`,
+      stopId: s.stopId || s.id || `stop-${idx + 1}`,
       stopName: s.name || s.stopName || `Stop ${idx + 1}`,
-      address: s.address || 'Mumbai Facility',
+      name: s.name || s.stopName || `Stop ${idx + 1}`,
+      address: s.address || 'Diagnostic Collection Point, Mumbai',
       lat: Number(s.lat || 19.1287852),
       lng: Number(s.lng || 72.8294183),
       specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
-      status: 'pending'
+      sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+      status: 'assigned',
+      assignedRiderId: payload.rider.id,
+      assignedRiderName: payload.rider.name,
+      contactPerson: s.contactPerson || 'Lab Coordinator',
+      phone: s.phone || '+91 98201 11223',
+      notes: s.notes || ''
     }));
 
     const clientLocation = {
@@ -376,6 +385,8 @@ export const CloudSync = {
       riderId: payload.rider.id,
       riderName: payload.rider.name,
       riderPhone: payload.rider.phone,
+      assignedRiderId: payload.rider.id,
+      assignedRiderName: payload.rider.name,
       stops: stopsFormatted,
       status: 'assigned',
       createdAt: serverTimestamp(),
@@ -390,18 +401,7 @@ export const CloudSync = {
       date: todayStr,
       riderVehicle: payload.rider.vehicleNumber || 'MH02TN0897',
       currentStopIndex: 0,
-      stopsProgress: stopsFormatted.map((s, idx) => ({
-        stopId: `stop-${idx + 1}`,
-        stopName: s.stopName,
-        address: s.address,
-        lat: s.lat,
-        lng: s.lng,
-        contactPerson: 'Lab Coordinator',
-        phone: '+91 98201 11223',
-        status: 'pending' as any,
-        sampleCount: s.specimenCount,
-        notes: ''
-      })),
+      stopsProgress: stopsFormatted,
       destination: {
         name: payload.route?.destinationLab?.name || payload.client.name,
         address: payload.route?.destinationLab?.address || payload.client.address || '',
@@ -417,6 +417,20 @@ export const CloudSync = {
     try {
       await setDoc(doc(db, 'tasks', taskId), firestorePayload);
       console.log(`[CloudSync] Dispatched task ${taskId} directly to Firestore tasks collection.`);
+
+      // Update the rider's active task reference in Firestore so all stops reflect instantly on the rider app
+      const riderDocRef = doc(db, 'riders', payload.rider.id);
+      await setDoc(riderDocRef, {
+        id: payload.rider.id,
+        currentTaskId: taskId,
+        activeTaskId: taskId,
+        activeRouteId: payload.route?.id || `route-${payload.client.id}`,
+        lastDispatchedAt: serverTimestamp(),
+        lastUpdated: serverTimestamp(),
+        status: 'active',
+        isOnline: true
+      }, { merge: true });
+      console.log(`[CloudSync] Updated rider ${payload.rider.id} active task reference to ${taskId}`);
     } catch (e) {
       console.warn('[CloudSync] Error saving dispatched task to Firestore:', e);
     }
