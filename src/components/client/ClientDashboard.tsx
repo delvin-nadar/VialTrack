@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserAuth, PickupTask, Route, PickupBoy, Client, StopProgress } from '../../types';
 import { LiveMap } from '../common/LiveMap';
+import { ClientLiveTracking } from './ClientLiveTracking';
 import { isRiderLocationStale } from '../../services/locationService';
 import {
   Building2,
@@ -67,6 +68,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   }, [navigate]);
 
   const activeClientId = user.clientId || StorageService.getClientSession()?.clientId || '';
+  const clientRecord = useMemo(() => StorageService.getClientById(activeClientId), [activeClientId]);
 
   // Real-time scoped Firestore subscriptions strictly for active client account
   const [liveClientTasks, setLiveClientTasks] = useState<PickupTask[]>([]);
@@ -357,77 +359,19 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
       {/* Live Map & Today's Slots Tracking */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left: Live Rider Radar (7 cols) */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-sky-700" />
-                <span>Live Rider Radar & Destination ETA</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Tracking assigned rider for route: <span className="text-slate-900 font-semibold">{activeLiveRoute?.name}</span>
-              </p>
-            </div>
-
-            {activeLiveRider && (
-              <a
-                href={`tel:${activeLiveRider.phone}`}
-                className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-emerald-800 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-1.5 transition-colors shadow-xs"
-              >
-                <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Call Rider</span>
-              </a>
-            )}
-          </div>
-
-          {/* Map Container */}
-          <div
-            style={{ height: '380px', width: '100%', borderRadius: '12px' }}
-            className="h-[380px] w-full rounded-xl overflow-hidden my-3 relative z-0"
-          >
-            <LiveMap
-              stops={activeLiveRoute?.stops || []}
-              destination={activeLiveRoute?.destinationLab}
-              rider={activeLiveRider}
-              riders={activeLiveRider ? [activeLiveRider] : []}
-              tasks={todayClientTasks}
-              activeTaskId={activeLiveTask?.id}
-              height="380px"
-              enableFirestoreSync={true}
-            />
-          </div>
-
-          {/* Real-time Status Card */}
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${activeLiveRider && isRiderLocationStale(activeLiveRider, 10) ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}></span>
-              <span className="font-bold text-slate-900">Live Status:</span>
-              <span className="text-slate-600">
-                {activeLiveTask?.status === 'delivered'
-                  ? 'Completed handover at central lab'
-                  : activeLiveRider && isRiderLocationStale(activeLiveRider, 10)
-                  ? 'Rider GPS paused / offline (>10 min ago)'
-                  : 'Rider in transit between hospital collection points (Live GPS)'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {activeLiveRider && (
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    isRiderLocationStale(activeLiveRider, 10)
-                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  }`}
-                >
-                  {isRiderLocationStale(activeLiveRider, 10) ? 'GPS Stale' : 'Live GPS'}
-                </span>
-              )}
-              <span className="text-sky-700 font-mono font-semibold text-[11px]">
-                Estimated Lab Arrival: ~18 mins
-              </span>
-            </div>
-          </div>
+        {/* Left: Live Rider Radar & Telemetry HUD (7 cols) */}
+        <div className="lg:col-span-7">
+          <ClientLiveTracking
+            activeClientId={clientRecord?.id || 'client-lifecare'}
+            clientName={clientRecord?.name || user.name || 'Lifecare Diagnostics (Andheri West)'}
+            clientAddress={clientRecord?.address || 'SV Road, Andheri West, Mumbai'}
+            clientLocation={clientRecord?.location || { lat: 19.1287852, lng: 72.8294183 }}
+            activeTask={activeLiveTask}
+            activeRoute={activeLiveRoute}
+            assignedRiderId={activeLiveRider?.id}
+            onOpenProof={onOpenProof}
+            height="360px"
+          />
         </div>
 
         {/* Right: Today's Time Slots Timeline (5 cols) */}

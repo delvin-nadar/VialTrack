@@ -422,7 +422,7 @@ function AppContent() {
                             <span>Mumbai Diagnostic Logistics Map (Center: 19.0760° N, 72.8777° E)</span>
                           </h2>
                           <p className="text-xs text-slate-500 mt-0.5">
-                            Real-time Firestore GeoPoint tracking across BKC, Nerul, Andheri West, Dadar, Powai, and Vashi with area filters and route polylines.
+                            Real-time GPS specimen telemetry and live cold-chain logistics across active client collection routes.
                           </p>
                         </div>
                       </div>

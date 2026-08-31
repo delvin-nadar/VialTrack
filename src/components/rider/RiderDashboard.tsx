@@ -902,6 +902,86 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     });
   };
 
+  // Trigger: Start Route / En Route to Next Stop with real-time Firestore sync
+  const handleStartRouteOrEnRoute = async (targetStopIdx?: number) => {
+    if (!activeTask) return;
+
+    const stopIdx = targetStopIdx !== undefined ? targetStopIdx : currentStopIndex;
+    const targetStop = activeTask.stopsProgress[stopIdx] || activeTask.stopsProgress[0];
+    const destinationStopName = targetStop?.stopName || activeTask.destination.name;
+    const riderId = sessionRiderId || activeRider.id || 'pb-1';
+    const riderName = activeRider.name || 'Asif';
+
+    // 1. Update local task state and storage
+    const updatedTask: PickupTask = {
+      ...activeTask,
+      status: 'in_transit',
+      riderId: riderId,
+      riderName: riderName,
+      activeRiderId: riderId,
+      activeRiderName: riderName,
+      currentDestinationStop: destinationStopName,
+      tripStartedAt: new Date().toISOString(),
+      startedAt: activeTask.startedAt || new Date().toISOString(),
+      currentStopIndex: stopIdx
+    } as any;
+
+    StorageService.updateTask(updatedTask);
+    setCurrentStopIndex(stopIdx);
+
+    // 2. Update task in Firestore with in_transit status, rider info, destination stop & timestamp
+    try {
+      await setDoc(
+        doc(db, 'tasks', activeTask.id),
+        {
+          status: 'in_transit',
+          activeRiderId: riderId,
+          activeRiderName: riderName,
+          riderId: riderId,
+          riderName: riderName,
+          currentDestinationStop: destinationStopName,
+          tripStartedAt: serverTimestamp(),
+          startedAt: activeTask.startedAt || new Date().toISOString(),
+          lastUpdated: serverTimestamp()
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn('Error updating Firestore task status to in_transit:', err);
+    }
+
+    // 3. Update rider document in Firestore with current active task and destination
+    try {
+      await setDoc(
+        doc(db, 'riders', riderId),
+        {
+          id: riderId,
+          name: riderName,
+          currentTaskId: activeTask.id,
+          currentDestinationStop: destinationStopName,
+          tripStartedAt: serverTimestamp(),
+          status: 'active',
+          isOnline: true,
+          lastUpdated: serverTimestamp()
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn('Error updating Firestore rider current destination:', err);
+    }
+
+    // 4. Send operational notification alert
+    NotificationService.sendAlert({
+      type: 'task_started',
+      title: `Rider En Route: ${riderName}`,
+      message: `${riderName} has started trip and is en route to ${destinationStopName}. Client tracking is live.`,
+      recipientRole: 'both',
+      channel: 'both'
+    });
+
+    onRefresh();
+  };
+
   // Calculate live summary counters
   const totalCollectedVials = useMemo(() => {
     return todayRiderTasks.reduce((sum, t) => {
@@ -1070,6 +1150,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => handleStartRouteOrEnRoute()}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-transform active:scale-95 cursor-pointer"
+              >
+                <Bike className="w-3.5 h-3.5" />
+                <span>{activeTask.status === 'in_transit' ? 'En Route (Live)' : 'Start Route'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowDelayModal(true)}
                 className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
@@ -1174,6 +1263,18 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                           <Navigation className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">Navigate</span>
                         </a>
+
+                        {!isPicked && (
+                          <button
+                            type="button"
+                            onClick={() => handleStartRouteOrEnRoute(idx)}
+                            className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                            title="Mark En Route to this stop"
+                          >
+                            <Bike className="w-3.5 h-3.5 text-sky-700" />
+                            <span className="hidden sm:inline">En Route</span>
+                          </button>
+                        )}
 
                         {!isPicked ? (
                           <button

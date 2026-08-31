@@ -32,21 +32,6 @@ interface RouteStopsManagerProps {
   onDeleteRoute?: (routeId: string, routeName: string) => void;
 }
 
-// Preset Mumbai Healthcare Hubs for quick coordinate picking
-const MUMBAI_LANDMARKS = [
-  { name: 'Kandivali West (Oscar Hospital)', lat: 19.2082, lng: 72.8398, address: 'Mathuradas Road, Kandivali West, Mumbai' },
-  { name: 'Goregaon West (Oscar Hospital)', lat: 19.1624, lng: 72.8465, address: 'Station Road, Jawahar Nagar, Goregaon West, Mumbai' },
-  { name: 'Andheri West (Lifecare Diagnostic Hub)', lat: 19.1287852, lng: 72.8294183, address: 'SV Road, Andheri West, Mumbai' },
-  { name: 'Malad West (Apex Central Lab)', lat: 19.1860, lng: 72.8485, address: 'New Link Road, Malad West, Mumbai' },
-  { name: 'Andheri West (Kokilaben Hospital Hub)', lat: 19.1310, lng: 72.8252, address: 'Rao Saheb Achutrao Patwardhan Marg, Andheri West, Mumbai' },
-  { name: 'Bandra West (Lilavati Hospital Hub)', lat: 19.0514, lng: 72.8295, address: 'A-791, Bandra Reclamation, Bandra West, Mumbai' },
-  { name: 'BKC (Asian Heart Institute)', lat: 19.0657, lng: 72.8688, address: 'G Block, Bandra Kurla Complex, Mumbai' },
-  { name: 'Dadar East (Hinduja / Parel Hub)', lat: 19.0178, lng: 72.8478, address: 'Dr. Babasaheb Ambedkar Road, Dadar East, Mumbai' },
-  { name: 'Powai (Hiranandani Hospital Hub)', lat: 19.1197, lng: 72.9051, address: 'Hillside Avenue, Hiranandani Gardens, Powai, Mumbai' },
-  { name: 'Vashi (Fortis Hiranandani Navi Mumbai)', lat: 19.0760, lng: 72.9984, address: 'Sector 10A, Vashi, Navi Mumbai' },
-  { name: 'Nerul (Apollo Hospital Navi Mumbai)', lat: 19.0330, lng: 73.0297, address: 'Parsik Hill Road, Sector 23, CBD Belapur / Nerul, Navi Mumbai' }
-];
-
 export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
   route,
   onRouteUpdated,
@@ -454,17 +439,6 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
     }
   };
 
-  // Preset location selector
-  const handleSelectLandmarkPreset = (landmark: typeof MUMBAI_LANDMARKS[0]) => {
-    setStopForm((prev) => ({
-      ...prev,
-      name: prev.name.startsWith('Collection Center') ? landmark.name : prev.name,
-      address: landmark.address,
-      lat: landmark.lat,
-      lng: landmark.lng
-    }));
-  };
-
   return (
     <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
       {/* Route Card Header */}
@@ -762,29 +736,6 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
             )}
 
             <form onSubmit={handleSaveStopForm} className="space-y-3.5">
-              {/* Quick Preset Location Selector */}
-              <div className="p-2.5 bg-sky-50/60 rounded-lg border border-sky-100 space-y-1.5">
-                <label className="text-[11px] font-bold text-sky-900 flex items-center gap-1">
-                  <Compass className="w-3.5 h-3.5 text-sky-700" />
-                  <span>Quick-Select Mumbai Medical Hub Coordinates:</span>
-                </label>
-                <select
-                  onChange={(e) => {
-                    const found = MUMBAI_LANDMARKS.find((m) => m.name === e.target.value);
-                    if (found) handleSelectLandmarkPreset(found);
-                  }}
-                  className="w-full px-2.5 py-1.5 bg-white border border-sky-200 rounded-md text-xs text-slate-800 cursor-pointer"
-                  defaultValue=""
-                >
-                  <option value="" disabled>Choose a preset landmark (or type custom below)...</option>
-                  {MUMBAI_LANDMARKS.map((lm) => (
-                    <option key={lm.name} value={lm.name}>
-                      {lm.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Stop Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">

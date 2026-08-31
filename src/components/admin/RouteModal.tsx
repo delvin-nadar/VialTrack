@@ -24,15 +24,6 @@ interface RouteModalProps {
   initialRoute?: Route | null;
 }
 
-const PRESET_MUMBAI_HUBS = [
-  { name: 'Oscar Hospital (Kandivali West)', lat: 19.2082, lng: 72.8398, address: 'Mathuradas Road, Kandivali West, Mumbai' },
-  { name: 'Oscar Hospital (Goregaon West)', lat: 19.1624, lng: 72.8465, address: 'Station Road, Jawahar Nagar, Goregaon West, Mumbai' },
-  { name: 'Lifecare Diagnostic (Andheri West)', lat: 19.1287852, lng: 72.8294183, address: 'SV Road, Andheri West, Mumbai' },
-  { name: 'Apex Central Lab (Malad West)', lat: 19.1860, lng: 72.8485, address: 'Link Road, Malad West, Mumbai' },
-  { name: 'Kokilaben Hospital Hub (Andheri West)', lat: 19.1310, lng: 72.8252, address: 'Achutrao Patwardhan Marg, Andheri West, Mumbai' },
-  { name: 'Lilavati Hospital Hub (Bandra West)', lat: 19.0514, lng: 72.8295, address: 'Bandra Reclamation, Bandra West, Mumbai' }
-];
-
 export const RouteModal: React.FC<RouteModalProps> = ({
   isOpen,
   onClose,

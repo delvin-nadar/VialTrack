@@ -25,16 +25,6 @@ interface RouteBuilderProps {
   onSave?: (routeData: { name: string; stops: RouteStop[]; destinationPos: [number, number] }) => void;
 }
 
-// Preset verified Mumbai Medical hubs
-const PRESET_MUMBAI_HUBS = [
-  { name: 'Oscar Hospital (Kandivali West)', lat: 19.2082, lng: 72.8398, address: 'Mathuradas Road, Kandivali West, Mumbai' },
-  { name: 'Oscar Hospital (Goregaon West)', lat: 19.1624, lng: 72.8465, address: 'Station Road, Jawahar Nagar, Goregaon West, Mumbai' },
-  { name: 'Lifecare Diagnostic (Andheri West)', lat: 19.1287852, lng: 72.8294183, address: 'SV Road, Andheri West, Mumbai' },
-  { name: 'Apex Central Lab (Malad West)', lat: 19.1860, lng: 72.8485, address: 'Link Road, Malad West, Mumbai' },
-  { name: 'Kokilaben Hospital Hub (Andheri West)', lat: 19.1310, lng: 72.8252, address: 'Achutrao Patwardhan Marg, Andheri West, Mumbai' },
-  { name: 'Lilavati Hospital Hub (Bandra West)', lat: 19.0514, lng: 72.8295, address: 'Bandra Reclamation, Bandra West, Mumbai' }
-];
-
 export const RouteBuilder: React.FC<RouteBuilderProps> = ({
   client = {
     name: 'Lifecare Diagnostic Hub (Andheri West)',
@@ -272,14 +262,6 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
     if (onStopsChange) onStopsChange(updated);
   };
 
-  // Handle Preset Select
-  const handleSelectPreset = (hub: typeof PRESET_MUMBAI_HUBS[0]) => {
-    setNewStopName(hub.name);
-    setNewStopAddress(hub.address);
-    setNewStopLat(hub.lat);
-    setNewStopLng(hub.lng);
-  };
-
   // Handle Add Stop
   const handleAddStop = (e: React.FormEvent) => {
     e.preventDefault();
@@ -443,28 +425,6 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
                 <Plus className="w-3.5 h-3.5 text-sky-700" />
                 Add Collection Stop
               </span>
-            </div>
-
-            {/* Presets */}
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                Quick Select Hub Preset:
-              </label>
-              <select
-                onChange={(e) => {
-                  const found = PRESET_MUMBAI_HUBS.find((h) => h.name === e.target.value);
-                  if (found) handleSelectPreset(found);
-                }}
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs text-slate-800 cursor-pointer"
-                defaultValue=""
-              >
-                <option value="" disabled>Choose a preset hospital / hub...</option>
-                {PRESET_MUMBAI_HUBS.map((h) => (
-                  <option key={h.name} value={h.name}>
-                    {h.name}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

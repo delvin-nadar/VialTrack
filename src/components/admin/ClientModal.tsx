@@ -22,13 +22,6 @@ interface ClientModalProps {
   client?: Client | null;
 }
 
-const PRESET_CLIENT_HUBS = [
-  { name: 'Lifecare Diagnostic Hub (Andheri West)', lat: 19.1287852, lng: 72.8294183, address: 'SV Road, Andheri West, Mumbai' },
-  { name: 'Apex Central Processing Lab (Malad West)', lat: 19.1860, lng: 72.8485, address: 'Link Road, Malad West, Mumbai' },
-  { name: 'Kokilaben Hospital Diagnostic Central (Andheri West)', lat: 19.1310, lng: 72.8252, address: 'Achutrao Patwardhan Marg, Andheri West, Mumbai' },
-  { name: 'Lilavati Hospital Diagnostic Annex (Bandra West)', lat: 19.0514, lng: 72.8295, address: 'Bandra Reclamation, Bandra West, Mumbai' }
-];
-
 export const ClientModal: React.FC<ClientModalProps> = ({
   isOpen,
   onClose,
@@ -51,13 +44,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({
 
   const handleGeneratePassword = () => {
     setPassword(generateStrongPassword(9));
-  };
-
-  const handleSelectPreset = (hub: typeof PRESET_CLIENT_HUBS[0]) => {
-    if (!name) setName(hub.name);
-    setAddress(hub.address);
-    setLat(hub.lat);
-    setLng(hub.lng);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -117,28 +103,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
-          {/* Preset Picker */}
-          <div className="p-2.5 bg-sky-50/70 rounded-lg border border-sky-100 space-y-1">
-            <label className="text-[10px] font-bold text-sky-900 uppercase">
-              Quick Landmark Preset (Mumbai Suburbs):
-            </label>
-            <select
-              onChange={(e) => {
-                const found = PRESET_CLIENT_HUBS.find((h) => h.name === e.target.value);
-                if (found) handleSelectPreset(found);
-              }}
-              className="w-full px-2.5 py-1.5 bg-white border border-sky-200 rounded text-slate-800 text-xs cursor-pointer"
-              defaultValue=""
-            >
-              <option value="" disabled>Choose a preset diagnostic center...</option>
-              {PRESET_CLIENT_HUBS.map((h) => (
-                <option key={h.name} value={h.name}>
-                  {h.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
               Diagnostic Center / Hospital Name *

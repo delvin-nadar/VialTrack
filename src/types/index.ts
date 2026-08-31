@@ -262,6 +262,10 @@ export interface PickupTask {
   riderPhone: string;
   riderVehicle: string;
   status: TaskStatus;
+  activeRiderId?: string;
+  activeRiderName?: string;
+  currentDestinationStop?: string;
+  tripStartedAt?: string;
   currentStopIndex: number;
   stopsProgress: StopExecution[];
   destination: DestinationDropExecution;
