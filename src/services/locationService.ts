@@ -121,8 +121,7 @@ class LocationTrackerService {
 
   /**
    * Start real browser geolocation watch for production live telemetry
-   * Configured with { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
-   * Throttles writes to Firestore every 5-10 seconds OR if moved > 15 meters.
+   * Throttles writes to Firestore to at most once every 15 seconds OR if moved > 30 meters.
    */
   public startRealGeolocation(riderId: string, riderName: string, taskId?: string) {
     this.stop();
@@ -150,9 +149,6 @@ class LocationTrackerService {
           const currentSpeed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
           const now = Date.now();
 
-          this.lastSentTimestamp = now;
-          this.lastSentCoords = { lat: currentLat, lng: currentLng };
-
           const ping: LocationPing = {
             id: `ping-${Date.now()}`,
             riderId,
@@ -166,41 +162,65 @@ class LocationTrackerService {
             taskId
           };
 
+          // Always record locally and notify active UI subscribers immediately
           this.recordPing(ping);
+          this.notify(ping);
+
+          // Check throttle: Only write to Firestore if >= 15 seconds passed OR moved >= 30 meters
+          const timeSinceLastWrite = now - this.lastSentTimestamp;
+          const distMoved = this.lastSentCoords
+            ? calculateDistanceMeters(this.lastSentCoords.lat, this.lastSentCoords.lng, currentLat, currentLng)
+            : 999;
+
+          if (this.lastSentCoords && timeSinceLastWrite < 15000 && distMoved < 30) {
+            this.notifyStatus();
+            return;
+          }
+
+          this.lastSentTimestamp = now;
+          this.lastSentCoords = { lat: currentLat, lng: currentLng };
 
           // Direct setDoc write to Firestore collection 'riders' with merge: true
           try {
-            await setDoc(
-              doc(db, 'riders', riderId),
-              {
-                id: riderId,
-                name: riderName || 'Mr. Satish',
-                vehicleNo: 'MH02TN0897',
-                vehicleNumber: 'MH02TN0897',
-                lat: currentLat,
-                lng: currentLng,
-                currentLocation: {
+            if (taskId) {
+              await CloudSync.updateTripRiderLocation(taskId, riderId, currentLat, currentLng, {
+                heading: currentHeading,
+                speed: currentSpeed,
+                battery: 88,
+                riderName
+              });
+            } else {
+              await setDoc(
+                doc(db, 'riders', riderId),
+                {
+                  id: riderId,
+                  name: riderName || 'Rider',
                   lat: currentLat,
                   lng: currentLng,
-                  timestamp: new Date().toISOString(),
+                  currentLocation: {
+                    lat: currentLat,
+                    lng: currentLng,
+                    timestamp: new Date().toISOString(),
+                    heading: currentHeading,
+                    speed: currentSpeed,
+                    accuracy: pos.coords.accuracy || 5
+                  },
                   heading: currentHeading,
-                  speed: currentSpeed,
-                  accuracy: pos.coords.accuracy || 5
+                  battery: 88,
+                  batteryLevel: 88,
+                  isOnline: true,
+                  status: 'active',
+                  lastUpdated: serverTimestamp()
                 },
-                heading: currentHeading,
-                battery: 88,
-                batteryLevel: 88,
-                coldBoxTemp: 4.0,
-                isOnline: true,
-                status: 'active',
-                lastUpdated: serverTimestamp()
-              },
-              { merge: true }
-            );
-
-            console.log('GPS broadcasted successfully to Firestore:', pos.coords.latitude, pos.coords.longitude);
-          } catch (fireErr) {
-            console.warn('[LocationService] Firestore direct write error:', fireErr);
+                { merge: true }
+              );
+            }
+          } catch (fireErr: any) {
+            if (fireErr?.code === 'resource-exhausted' || fireErr?.message?.includes('Quota exceeded')) {
+              console.warn('[LocationService] Firestore rate limit or quota reached; continuing with local tracking.');
+            } else {
+              console.error("Firestore Write Error:", fireErr);
+            }
           }
 
           this.notifyStatus();
@@ -223,7 +243,7 @@ class LocationTrackerService {
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 0,
+          maximumAge: 5000,
           timeout: 10000
         }
       );

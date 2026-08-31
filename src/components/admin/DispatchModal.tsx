@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Client, Route, PickupBoy, PickupTask } from '../../types';
-import { CloudSync } from '../../services/firebase';
+import { CloudSync, formatUnifiedTask } from '../../services/firebase';
 import { StorageService } from '../../services/storage';
 import {
   X,
@@ -228,26 +228,46 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     }
 
     setIsSubmitting(true);
-    try {
-      // Map every selected stop into the unified task/route document with assigned status & rider details
-      const stopsPayload = selectedStopsList.map((stop, idx) => ({
-        id: stop.id,
-        stopId: `stop-${idx + 1}`,
-        name: stop.name,
-        stopName: stop.name,
-        address: stop.address,
-        lat: Number(stop.lat || 19.1287852),
-        lng: Number(stop.lng || 72.8294183),
-        specimenCount: Number(stop.specimenCount || 0),
-        sampleCount: Number(stop.specimenCount || 0),
-        status: 'assigned',
-        assignedRiderId: rider.id,
-        assignedRiderName: rider.name,
-        contactPerson: stop.contactPerson || 'Lab Coordinator',
-        phone: stop.phone || '+91 98201 11223',
-        notes: ''
-      }));
+    const taskId = `task-${Date.now()}`;
+    const stopsPayload = selectedStopsList.map((stop, idx) => ({
+      id: stop.id,
+      stopId: `stop-${idx + 1}`,
+      name: stop.name,
+      stopName: stop.name,
+      address: stop.address,
+      lat: Number(stop.lat || 19.1287852),
+      lng: Number(stop.lng || 72.8294183),
+      specimenCount: Number(stop.specimenCount || 0),
+      sampleCount: Number(stop.specimenCount || 0),
+      status: 'assigned' as const,
+      assignedRiderId: rider.id,
+      assignedRiderName: rider.name,
+      contactPerson: stop.contactPerson || 'Lab Coordinator',
+      phone: stop.phone || '+91 98201 11223',
+      notes: ''
+    }));
 
+    const localTask: PickupTask = formatUnifiedTask(taskId, {
+      id: taskId,
+      clientLabId: client.id,
+      clientLabName: client.name,
+      clientAddress: client.address,
+      clientCoords: [Number(client.lat || 19.1287852), Number(client.lng || 72.8294183)],
+      riderId: rider.id,
+      riderName: rider.name,
+      riderPhone: rider.phone,
+      riderVehicle: rider.vehicleNumber,
+      status: 'assigned',
+      routeId: route?.id || 'custom-route',
+      routeName: route?.name || `${client.name} Collection Loop`,
+      scheduledDate: taskDate,
+      timeSlot: taskTimeSlot,
+      createdAt: new Date().toISOString(),
+      stops: stopsPayload,
+      taskNotes
+    });
+
+    try {
       // Direct unified dispatch to Firestore 'tasks' with status 'assigned'
       const newTask = await CloudSync.dispatchTask({
         client: {
@@ -271,13 +291,20 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       });
 
       // Update local storage record for offline durability
-      StorageService.addTask(newTask);
+      StorageService.addTask(newTask || localTask);
 
-      onDispatched(newTask);
+      onDispatched(newTask || localTask);
       onClose();
-    } catch (err) {
-      console.error("Firestore Write Error:", err);
-      alert('Failed to dispatch task. Please try again.');
+    } catch (err: any) {
+      if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+        console.warn('Firestore quota exceeded; dispatched task locally.');
+        StorageService.addTask(localTask);
+        onDispatched(localTask);
+        onClose();
+      } else {
+        console.error("Firestore Write Error:", err);
+        alert('Failed to dispatch task. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }

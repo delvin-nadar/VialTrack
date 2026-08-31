@@ -181,8 +181,12 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       StorageService.updateClient(updated);
       try {
         await setDoc(doc(db, 'clients', updated.id), JSON.parse(JSON.stringify(updated)), { merge: true });
-      } catch (err) {
-        console.error("Firestore Write Error:", err);
+      } catch (err: any) {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+          console.warn('Firestore quota exceeded; updated client locally.');
+        } else {
+          console.error("Firestore Write Error:", err);
+        }
       }
     } else {
       const [vLat, vLng] = normalizeLatLng(clientForm.lat, clientForm.lng, 19.1287852, 72.8294183);
@@ -207,8 +211,12 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       StorageService.addClient(newClient);
       try {
         await setDoc(doc(db, 'clients', newClient.id), JSON.parse(JSON.stringify(newClient)), { merge: true });
-      } catch (err) {
-        console.error("Firestore Write Error:", err);
+      } catch (err: any) {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+          console.warn('Firestore quota exceeded; client created locally.');
+        } else {
+          console.error("Firestore Write Error:", err);
+        }
       }
       setSelectedClientId(newClient.id);
 

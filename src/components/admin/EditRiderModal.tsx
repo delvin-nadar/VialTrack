@@ -211,8 +211,12 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         }
 
         await setDoc(doc(db, 'riders', updatedRider.id), firestorePayload, { merge: true });
-      } catch (err) {
-        console.error("Firestore Write Error:", err);
+      } catch (err: any) {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+          console.warn('Firestore quota exceeded; updated rider locally.');
+        } else {
+          console.error("Firestore Write Error:", err);
+        }
       }
 
       onSaved();
@@ -275,8 +279,12 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           },
           { merge: true }
         );
-      } catch (err) {
-        console.error("Firestore Write Error:", err);
+      } catch (err: any) {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+          console.warn('Firestore quota exceeded; created rider locally.');
+        } else {
+          console.error("Firestore Write Error:", err);
+        }
       }
 
       onSaved({

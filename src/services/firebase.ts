@@ -255,12 +255,20 @@ export async function seedOperationalAuthAccounts(): Promise<void> {
 // Auto-seed operational accounts at startup
 seedOperationalAuthAccounts().catch(() => {});
 
+// Throttle cache for trip and rider cloud location writes
+const locationWriteThrottleMap = new Map<string, { timestamp: number; lat: number; lng: number }>();
+
 /**
  * Database Auto-Seeder & Live Write Enforcer:
  * Checks if 'clients' and 'riders' collections are empty.
  * If empty, executes real setDoc writes so data immediately appears in Firebase Console.
+ * Cached in sessionStorage so it only checks once per session.
  */
 export async function seedCoreCollectionsIfEmpty(): Promise<{ clientsSeeded: boolean; ridersSeeded: boolean }> {
+  if (typeof window !== 'undefined' && sessionStorage.getItem('smvt_core_seeded_v1')) {
+    return { clientsSeeded: false, ridersSeeded: false };
+  }
+
   let clientsSeeded = false;
   let ridersSeeded = false;
 
@@ -383,8 +391,19 @@ export async function seedCoreCollectionsIfEmpty(): Promise<{ clientsSeeded: boo
       await setDoc(doc(db, 'routes', 'route_lifecare_andheri'), routeDoc, { merge: true });
       console.log('[AutoSeeder] Successfully seeded routes/route_lifecare_andheri to Firestore.');
     }
-  } catch (err) {
-    console.error('Firestore Write Error:', err);
+
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('smvt_core_seeded_v1', 'true');
+    }
+  } catch (err: any) {
+    if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+      console.warn('[AutoSeeder] Firestore quota limit reached; using local seed data.');
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('smvt_core_seeded_v1', 'true');
+      }
+    } else {
+      console.error('Firestore Write Error:', err);
+    }
   }
 
   return { clientsSeeded, ridersSeeded };
@@ -698,6 +717,16 @@ export const CloudSync = {
       const numLng = Number(lng);
       if (isNaN(numLat) || isNaN(numLng)) return;
 
+      const throttleKey = `${riderId || 'rider'}_${tripId || 'notrip'}`;
+      const now = Date.now();
+      const lastWrite = locationWriteThrottleMap.get(throttleKey);
+
+      if (lastWrite && now - lastWrite.timestamp < 12000) {
+        // Less than 12s has elapsed, skip redundant cloud write to conserve quota
+        return;
+      }
+      locationWriteThrottleMap.set(throttleKey, { timestamp: now, lat: numLat, lng: numLng });
+
       // 1. Update trip document riderCoords and updatedAt
       if (tripId) {
         const tripRef = doc(db, 'trips', tripId);
@@ -724,26 +753,13 @@ export const CloudSync = {
           lastUpdated: serverTimestamp(),
           isOnline: true
         }, { merge: true });
-
-        // Ping log
-        const pingId = `ping-${riderId}-${Date.now()}`;
-        setDoc(doc(db, 'location_pings', pingId), {
-          id: pingId,
-          riderId,
-          riderName: extra?.riderName || 'Rider',
-          lat: numLat,
-          lng: numLng,
-          timestamp: new Date().toISOString(),
-          heading: extra?.heading || 0,
-          speed: extra?.speed || 0,
-          battery: extra?.battery || 95,
-          taskId: tripId
-        }).catch((err) => {
-          console.error("Firestore Write Error:", err);
-        });
       }
-    } catch (err) {
-      console.error("Firestore Write Error:", err);
+    } catch (err: any) {
+      if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+        console.warn('[CloudSync] Firestore rate limit or quota exceeded for location update.');
+      } else {
+        console.error("Firestore Write Error:", err);
+      }
     }
   },
 
@@ -838,7 +854,11 @@ export const CloudSync = {
       await setDoc(ref, JSON.parse(JSON.stringify(data)), { merge: true });
       console.log(`[CloudSync] Synced ${collectionName}/${docId} to Firestore.`);
     } catch (err: any) {
-      console.error("Firestore Write Error:", err);
+      if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+        console.warn(`[CloudSync] Firestore quota exceeded while syncing ${collectionName}/${docId}; cached locally.`);
+      } else {
+        console.error("Firestore Write Error:", err);
+      }
     }
   },
 
@@ -850,7 +870,11 @@ export const CloudSync = {
       await deleteDoc(ref);
       console.log(`[CloudSync] Deleted ${collectionName}/${docId} from Firestore.`);
     } catch (err: any) {
-      console.error("Firestore Write Error:", err);
+      if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+        console.warn(`[CloudSync] Firestore quota exceeded while deleting ${collectionName}/${docId}; handled locally.`);
+      } else {
+        console.error("Firestore Write Error:", err);
+      }
     }
   },
 
@@ -868,7 +892,11 @@ export const CloudSync = {
       await batch.commit();
       console.log(`[CloudSync] Batch synced ${items.length} items to ${collectionName}.`);
     } catch (err: any) {
-      console.error("Firestore Write Error:", err);
+      if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+        console.warn(`[CloudSync] Firestore quota exceeded for batch sync to ${collectionName}; cached locally.`);
+      } else {
+        console.error("Firestore Write Error:", err);
+      }
     }
   },
 

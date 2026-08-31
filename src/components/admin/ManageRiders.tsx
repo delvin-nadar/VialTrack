@@ -53,8 +53,12 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
       StorageService.deleteRider(riderId);
       try {
         await deleteDoc(doc(db, 'riders', riderId));
-      } catch (err) {
-        console.error("Firestore Write Error:", err);
+      } catch (err: any) {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
+          console.warn('Firestore quota exceeded; deleted rider locally.');
+        } else {
+          console.error("Firestore Write Error:", err);
+        }
       }
       onRefresh();
     }
