@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserAuth, UserRole, PickupTask, Route, PickupBoy, Client, AttendanceRecord, NotificationLog, LocationPing } from './types';
+import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { UserAuth, PickupTask, Route as LogisticsRoute, PickupBoy, Client, AttendanceRecord, NotificationLog, LocationPing } from './types';
 import { StorageService } from './services/storage';
 import { LocationService } from './services/locationService';
 import { NotificationService } from './services/notificationService';
@@ -46,11 +47,20 @@ import {
   MapPin
 } from 'lucide-react';
 
-type AppRoute = 'landing' | 'admin' | 'client' | 'rider';
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-export default function App() {
-  // App state
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>('landing');
+  // Determine current active section from location path
+  const currentPath = location.pathname.toLowerCase();
+  const currentRoute = currentPath.startsWith('/admin')
+    ? 'admin'
+    : currentPath.startsWith('/client')
+    ? 'client'
+    : currentPath.startsWith('/rider')
+    ? 'rider'
+    : 'landing';
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<UserAuth | null>(() => {
     try {
@@ -83,7 +93,7 @@ export default function App() {
       return [];
     }
   });
-  const [routes, setRoutes] = useState<Route[]>(() => {
+  const [routes, setRoutes] = useState<LogisticsRoute[]>(() => {
     try {
       return StorageService.getRoutes();
     } catch {
@@ -127,43 +137,9 @@ export default function App() {
     }
   }, []);
 
-  // Parse URL/Hash to determine current route
-  const parseRoute = (): AppRoute => {
-    const raw = (window.location.hash + window.location.pathname + window.location.search).toLowerCase();
-    if (raw.includes('admin')) return 'admin';
-    if (raw.includes('client')) return 'client';
-    if (raw.includes('rider')) return 'rider';
-    return 'landing';
-  };
-
-  // Navigate to target portal route
-  const navigateTo = (targetRoute: AppRoute) => {
-    setCurrentRoute(targetRoute);
-    if (targetRoute === 'landing') {
-      window.location.hash = '#/';
-    } else {
-      window.location.hash = `#/${targetRoute}`;
-    }
-  };
-
-  // Initial Boot with graceful StorageService hydration & hash-based routing
+  // Initial boot
   useEffect(() => {
     reloadData();
-    const initialRoute = parseRoute();
-    setCurrentRoute(initialRoute);
-
-    const handleHashOrUrlChange = () => {
-      const updatedRoute = parseRoute();
-      setCurrentRoute(updatedRoute);
-    };
-
-    window.addEventListener('hashchange', handleHashOrUrlChange);
-    window.addEventListener('popstate', handleHashOrUrlChange);
-
-    return () => {
-      window.removeEventListener('hashchange', handleHashOrUrlChange);
-      window.removeEventListener('popstate', handleHashOrUrlChange);
-    };
   }, [reloadData]);
 
   // Real-time Firestore synchronizer
@@ -261,10 +237,10 @@ export default function App() {
     });
 
     // Realtime Firestore Routes sync
-    const unsubCloudRoutes = CloudSync.subscribeToCollection<Route>('routes', (cloudRoutes) => {
+    const unsubCloudRoutes = CloudSync.subscribeToCollection<LogisticsRoute>('routes', (cloudRoutes) => {
       if (cloudRoutes && cloudRoutes.length > 0) {
         setRoutes((prev) => {
-          const routeMap = new Map<string, Route>();
+          const routeMap = new Map<string, LogisticsRoute>();
           prev.forEach((r) => routeMap.set(r.id, r));
           cloudRoutes.forEach((r) => routeMap.set(r.id, r));
           const merged = Array.from(routeMap.values());
@@ -291,7 +267,7 @@ export default function App() {
   const handleLogout = () => {
     StorageService.setCurrentUser(null);
     setCurrentUser(null);
-    navigateTo('landing');
+    navigate('/');
   };
 
   // Toggle GPS Route Simulation
@@ -323,235 +299,240 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-sky-600 selection:text-white">
-      {/* 1. STANDALONE LANDING PAGE (/) */}
-      {currentRoute === 'landing' && (
-        <main className="flex-1 flex flex-col justify-center">
-          <PortalLanding onSelectPortal={(portal) => navigateTo(portal)} />
-        </main>
-      )}
-
-      {/* 2. ADMIN PORTAL (/admin) */}
-      {currentRoute === 'admin' && (
-        <>
-          {/* Admin Login if not authenticated as admin */}
-          {(!currentUser || currentUser.role !== 'admin') && (
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-              <AdminLogin
-                onLoginSuccess={(user) => {
-                  StorageService.setCurrentUser(user);
-                  setCurrentUser(user);
-                  reloadData();
-                }}
-                onBackToLanding={() => navigateTo('landing')}
-              />
+      <Routes>
+        {/* 1. STANDALONE LANDING PAGE (/) */}
+        <Route
+          path="/"
+          element={
+            <main className="flex-1 flex flex-col justify-center">
+              <PortalLanding onSelectPortal={(portal) => navigate(`/${portal}`)} />
             </main>
-          )}
+          }
+        />
 
-          {/* Admin Dashboard & Management views if logged in */}
-          {currentUser && currentUser.role === 'admin' && (
+        {/* 2. ADMIN PORTAL (/admin) */}
+        <Route
+          path="/admin"
+          element={
             <>
-              <AdminHeader
-                user={currentUser}
-                onLogout={handleLogout}
-                unreadNotifsCount={unreadNotifsCount}
-                onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-                isSimulating={isSimulating}
-                onToggleSimulation={handleToggleSimulation}
-              />
+              {(!currentUser || currentUser.role !== 'admin') ? (
+                <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                  <AdminLogin
+                    onLoginSuccess={(user) => {
+                      StorageService.setCurrentUser(user);
+                      setCurrentUser(user);
+                      reloadData();
+                    }}
+                    onBackToLanding={() => navigate('/')}
+                  />
+                </main>
+              ) : (
+                <>
+                  <AdminHeader
+                    user={currentUser}
+                    onLogout={handleLogout}
+                    unreadNotifsCount={unreadNotifsCount}
+                    onOpenNotifications={() => setIsNotifDrawerOpen(true)}
+                    isSimulating={isSimulating}
+                    onToggleSimulation={handleToggleSimulation}
+                  />
 
-              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
-                <div className="space-y-5">
-                  {/* Admin Navigation Tabs Bar */}
-                  <div className="flex items-center gap-1 overflow-x-auto pb-1.5 border-b border-slate-200 text-xs no-scrollbar bg-slate-100/70 p-1 rounded-xl">
-                    {[
-                      { id: 'dashboard', label: 'Fleet & Live Ops', icon: LayoutDashboard },
-                      { id: 'map', label: 'Mumbai Interactive Map', icon: MapPin },
-                      { id: 'clients', label: 'Client Labs & Routes', icon: Building2 },
-                      { id: 'riders', label: 'Pickup Boys', icon: Bike },
-                      { id: 'attendance', label: 'Attendance Logs', icon: UserCheck },
-                      { id: 'history', label: 'Chain of Custody', icon: History },
-                      { id: 'reports', label: 'SLA & Billing', icon: FileText },
-                      { id: 'alerts_config', label: 'Alerts & Rules', icon: Sliders }
-                    ].map((tab) => {
-                      const Icon = tab.icon;
-                      const isActive = adminActiveTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          onClick={() => setAdminActiveTab(tab.id)}
-                          className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer text-xs ${
-                            isActive
-                              ? 'bg-sky-700 text-white shadow-xs font-semibold'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-                          }`}
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                          <span>{tab.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+                    <div className="space-y-5">
+                      {/* Admin Navigation Tabs Bar */}
+                      <div className="flex items-center gap-1 overflow-x-auto pb-1.5 border-b border-slate-200 text-xs no-scrollbar bg-slate-100/70 p-1 rounded-xl">
+                        {[
+                          { id: 'dashboard', label: 'Fleet & Live Ops', icon: LayoutDashboard },
+                          { id: 'map', label: 'Mumbai Interactive Map', icon: MapPin },
+                          { id: 'clients', label: 'Client Labs & Routes', icon: Building2 },
+                          { id: 'riders', label: 'Pickup Boys', icon: Bike },
+                          { id: 'attendance', label: 'Attendance Logs', icon: UserCheck },
+                          { id: 'history', label: 'Chain of Custody', icon: History },
+                          { id: 'reports', label: 'SLA & Billing', icon: FileText },
+                          { id: 'alerts_config', label: 'Alerts & Rules', icon: Sliders }
+                        ].map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = adminActiveTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setAdminActiveTab(tab.id)}
+                              className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer text-xs ${
+                                isActive
+                                  ? 'bg-sky-700 text-white shadow-xs font-semibold'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                              }`}
+                            >
+                              <Icon className="w-3.5 h-3.5" />
+                              <span>{tab.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
 
-                  {/* Render Selected Admin View */}
-                  {adminActiveTab === 'dashboard' && (
-                    <AdminDashboard
+                      {/* Render Selected Admin View */}
+                      {adminActiveTab === 'dashboard' && (
+                        <AdminDashboard
+                          tasks={tasks}
+                          riders={riders}
+                          routes={routes}
+                          clients={clients}
+                          notifications={notifications}
+                          onOpenProof={handleOpenProof}
+                          onRefresh={reloadData}
+                          isSimulating={isSimulating}
+                          onToggleSimulation={handleToggleSimulation}
+                        />
+                      )}
+
+                      {adminActiveTab === 'map' && (
+                        <div className="space-y-4">
+                          <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <MapPin className="w-5 h-5 text-sky-700" />
+                                <span>Mumbai Diagnostic Logistics Map (Center: 19.0760° N, 72.8777° E)</span>
+                              </h2>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Real-time Firestore GeoPoint tracking across BKC, Nerul, Andheri West, Dadar, Powai, and Vashi with area filters and route polylines.
+                              </p>
+                            </div>
+                          </div>
+                          <MumbaiMapDashboard
+                            initialRiders={riders}
+                            initialTasks={tasks}
+                            initialClients={clients}
+                            onOpenProof={handleOpenProof}
+                            onRefreshData={reloadData}
+                            height="650px"
+                            showSidebarByDefault={true}
+                          />
+                        </div>
+                      )}
+
+                      {adminActiveTab === 'clients' && (
+                        <ManageClients clients={clients} routes={routes} onRefresh={reloadData} />
+                      )}
+
+                      {adminActiveTab === 'riders' && (
+                        <ManageRiders riders={riders} routes={routes} onRefresh={reloadData} />
+                      )}
+
+                      {adminActiveTab === 'attendance' && (
+                        <AttendanceView attendance={attendance} riders={riders} onRefresh={reloadData} />
+                      )}
+
+                      {adminActiveTab === 'history' && (
+                        <TaskHistory
+                          tasks={tasks}
+                          clients={clients}
+                          riders={riders}
+                          routes={routes}
+                          onOpenProof={handleOpenProof}
+                        />
+                      )}
+
+                      {adminActiveTab === 'reports' && (
+                        <ReportsView tasks={tasks} riders={riders} clients={clients} />
+                      )}
+
+                      {adminActiveTab === 'alerts_config' && (
+                        <AlertsConfigView onRefresh={reloadData} />
+                      )}
+                    </div>
+                  </main>
+                </>
+              )}
+            </>
+          }
+        />
+
+        {/* 3. CLIENT PORTAL (/client) */}
+        <Route
+          path="/client"
+          element={
+            <>
+              {(!currentUser || currentUser.role !== 'client') ? (
+                <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                  <ClientLogin
+                    onLoginSuccess={(user) => {
+                      StorageService.setCurrentUser(user);
+                      setCurrentUser(user);
+                      reloadData();
+                    }}
+                    onBackToLanding={() => navigate('/')}
+                  />
+                </main>
+              ) : (
+                <>
+                  <ClientHeader
+                    user={currentUser}
+                    onLogout={handleLogout}
+                    unreadNotifsCount={unreadNotifsCount}
+                    onOpenNotifications={() => setIsNotifDrawerOpen(true)}
+                  />
+
+                  <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+                    <ClientDashboard
+                      user={currentUser}
                       tasks={tasks}
-                      riders={riders}
                       routes={routes}
-                      clients={clients}
-                      notifications={notifications}
+                      riders={riders}
                       onOpenProof={handleOpenProof}
                       onRefresh={reloadData}
-                      isSimulating={isSimulating}
-                      onToggleSimulation={handleToggleSimulation}
                     />
-                  )}
+                  </main>
+                </>
+              )}
+            </>
+          }
+        />
 
-                  {adminActiveTab === 'map' && (
-                    <div className="space-y-4">
-                      <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                            <MapPin className="w-5 h-5 text-sky-700" />
-                            <span>Mumbai Diagnostic Logistics Map (Center: 19.0760° N, 72.8777° E)</span>
-                          </h2>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Real-time Firestore GeoPoint tracking across BKC, Nerul, Andheri West, Dadar, Powai, and Vashi with area filters and route polylines.
-                          </p>
-                        </div>
-                      </div>
-                      <MumbaiMapDashboard
-                        initialRiders={riders}
-                        initialTasks={tasks}
-                        initialClients={clients}
-                        onOpenProof={handleOpenProof}
-                        onRefreshData={reloadData}
-                        height="650px"
-                        showSidebarByDefault={true}
-                      />
-                    </div>
-                  )}
+        {/* 4. RIDER PORTAL (/rider) */}
+        <Route
+          path="/rider"
+          element={
+            <>
+              {(!currentUser || currentUser.role !== 'rider') ? (
+                <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                  <RiderLogin
+                    onLoginSuccess={(user) => {
+                      StorageService.setCurrentUser(user);
+                      setCurrentUser(user);
+                      reloadData();
+                    }}
+                    onBackToLanding={() => navigate('/')}
+                  />
+                </main>
+              ) : (
+                <>
+                  <RiderHeader
+                    user={currentUser}
+                    rider={riders.find((r) => r.id === currentUser.riderId) || riders[0]}
+                    onLogout={handleLogout}
+                    unreadNotifsCount={unreadNotifsCount}
+                    onOpenNotifications={() => setIsNotifDrawerOpen(true)}
+                  />
 
-                  {adminActiveTab === 'clients' && (
-                    <ManageClients clients={clients} routes={routes} onRefresh={reloadData} />
-                  )}
-
-                  {adminActiveTab === 'riders' && (
-                    <ManageRiders riders={riders} routes={routes} onRefresh={reloadData} />
-                  )}
-
-                  {adminActiveTab === 'attendance' && (
-                    <AttendanceView attendance={attendance} riders={riders} onRefresh={reloadData} />
-                  )}
-
-                  {adminActiveTab === 'history' && (
-                    <TaskHistory
+                  <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
+                    <RiderDashboard
+                      user={currentUser}
                       tasks={tasks}
-                      clients={clients}
-                      riders={riders}
                       routes={routes}
+                      rider={riders.find((r) => r.id === currentUser.riderId) || riders[0]}
+                      onRefresh={reloadData}
                       onOpenProof={handleOpenProof}
                     />
-                  )}
-
-                  {adminActiveTab === 'reports' && (
-                    <ReportsView tasks={tasks} riders={riders} clients={clients} />
-                  )}
-
-                  {adminActiveTab === 'alerts_config' && (
-                    <AlertsConfigView onRefresh={reloadData} />
-                  )}
-                </div>
-              </main>
+                  </main>
+                </>
+              )}
             </>
-          )}
-        </>
-      )}
+          }
+        />
 
-      {/* 3. CLIENT PORTAL (/client) */}
-      {currentRoute === 'client' && (
-        <>
-          {/* Client Login if not authenticated as client */}
-          {(!currentUser || currentUser.role !== 'client') && (
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-              <ClientLogin
-                onLoginSuccess={(user) => {
-                  StorageService.setCurrentUser(user);
-                  setCurrentUser(user);
-                  reloadData();
-                }}
-                onBackToLanding={() => navigateTo('landing')}
-              />
-            </main>
-          )}
-
-          {/* Client Dashboard if logged in */}
-          {currentUser && currentUser.role === 'client' && (
-            <>
-              <ClientHeader
-                user={currentUser}
-                onLogout={handleLogout}
-                unreadNotifsCount={unreadNotifsCount}
-                onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-              />
-
-              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
-                <ClientDashboard
-                  user={currentUser}
-                  tasks={tasks}
-                  routes={routes}
-                  riders={riders}
-                  onOpenProof={handleOpenProof}
-                  onRefresh={reloadData}
-                />
-              </main>
-            </>
-          )}
-        </>
-      )}
-
-      {/* 4. RIDER PORTAL (/rider) */}
-      {currentRoute === 'rider' && (
-        <>
-          {/* Rider Login if not authenticated as rider */}
-          {(!currentUser || currentUser.role !== 'rider') && (
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-              <RiderLogin
-                onLoginSuccess={(user) => {
-                  StorageService.setCurrentUser(user);
-                  setCurrentUser(user);
-                  reloadData();
-                }}
-                onBackToLanding={() => navigateTo('landing')}
-              />
-            </main>
-          )}
-
-          {/* Rider Dashboard if logged in */}
-          {currentUser && currentUser.role === 'rider' && (
-            <>
-              <RiderHeader
-                user={currentUser}
-                rider={riders.find((r) => r.id === currentUser.riderId) || riders[0]}
-                onLogout={handleLogout}
-                unreadNotifsCount={unreadNotifsCount}
-                onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-              />
-
-              <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
-                <RiderDashboard
-                  user={currentUser}
-                  tasks={tasks}
-                  routes={routes}
-                  rider={riders.find((r) => r.id === currentUser.riderId) || riders[0]}
-                  onRefresh={reloadData}
-                  onOpenProof={handleOpenProof}
-                />
-              </main>
-            </>
-          )}
-        </>
-      )}
+        {/* 5. CATCH-ALL WILDCARD REDIRECT (redirects back cleanly to /) */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
 
       {/* Footer */}
       <Footer role={currentRoute !== 'landing' ? currentRoute : undefined} />
@@ -581,5 +562,13 @@ export default function App() {
         }}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <HashRouter>
+      <AppContent />
+    </HashRouter>
   );
 }
