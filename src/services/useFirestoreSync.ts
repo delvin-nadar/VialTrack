@@ -120,4 +120,24 @@ export function useFirestoreSync<T = DocumentData>(
   return { data, isPolling, error };
 }
 
+export function useTasks(options?: UseFirestoreSyncOptions) {
+  return useFirestoreSync('tasks', options);
+}
+
+export function useClients(options?: UseFirestoreSyncOptions) {
+  return useFirestoreSync('clients', options);
+}
+
+export function useRiders(options?: UseFirestoreSyncOptions) {
+  return useFirestoreSync('riders', options);
+}
+
+export function useRoutes(options?: UseFirestoreSyncOptions) {
+  return useFirestoreSync('routes', options);
+}
+
+export function useAttendance(options?: UseFirestoreSyncOptions) {
+  return useFirestoreSync('attendance', options);
+}
+
 export default useFirestoreSync;

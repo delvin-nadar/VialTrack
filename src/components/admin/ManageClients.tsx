@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { CloudSync, db } from '../../services/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 import { normalizeLatLng } from '../../utils/coordinates';
 import { RouteStopsManager } from './RouteStopsManager';
@@ -361,6 +361,35 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     StorageService.addRoute(newRoute);
     try {
       await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)), { merge: true });
+
+      // Automatically create root task document for active dispatch coverage
+      const taskId = `task_${Date.now()}`;
+      const taskDoc = {
+        id: taskId,
+        taskId: taskId,
+        clientId: selectedClient.id,
+        clientName: selectedClient.name,
+        clientEmail: selectedClient.email || '',
+        routeId: newRoute.id,
+        routeName: newRoute.name,
+        riderId: 'rider_1',
+        riderName: 'Sameer Khan',
+        riderPhone: '+91 98201 22334',
+        status: 'assigned' as const,
+        currentStopIndex: 0,
+        stops: normalizedStops.map((stop, index) => ({
+          id: stop.id,
+          name: stop.name,
+          address: stop.address || '',
+          lat: Number(stop.lat),
+          lng: Number(stop.lng),
+          specimenCount: 0,
+          status: index === 0 ? ('in_progress' as const) : ('pending' as const)
+        })),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      await setDoc(doc(db, 'tasks', taskId), taskDoc);
     } catch (err) {
       console.error("Firestore Write Error:", err);
     }

@@ -278,6 +278,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       // 1. Direct root document write to 'tasks' collection using setDoc
       const rootTaskDoc = {
         id: taskId,
+        taskId: taskId,
         clientId: client.id,
         clientName: client.name,
         clientEmail: client.email || '',

@@ -106,8 +106,8 @@ export const resolvedFirestoreDatabaseId: string =
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
-// Use default database (removes AI shared quota bottleneck)
-export const db = getFirestore(app);
+// Connect explicitly to the active named instance
+export const db = getFirestore(app, "ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829");
 export const auth = getAuth(app);
 
 export { GeoPoint };
@@ -1217,176 +1217,443 @@ export const CloudSync = {
     if (!clientId && !clientName) return () => {};
     if (!onUpdate) return () => {};
 
+    let isCancelled = false;
+    let pollInterval: number | null = null;
+    let unsubSnapshot: Unsubscribe = () => {};
+    const cleanName = (clientName || '').trim().toLowerCase();
+
+    const fetchTasksViaPolling = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'tasks'));
+        if (isCancelled) return;
+        const list: PickupTask[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          const dataName = (data.clientLabName || data.clientName || '').trim().toLowerCase();
+          const isMatchClient =
+            (clientId && (data.clientLabId === clientId || data.clientId === clientId)) ||
+            (cleanName && dataName === cleanName);
+
+          const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
+
+          if (isMatchClient && isMatchingStatus) {
+            const formatted = formatUnifiedTask(docSnap.id, data);
+            list.push(formatted);
+          }
+        });
+        onUpdate!(list);
+      } catch (err: any) {
+        console.warn('[CloudSync] Polling fallback for client tasks notice:', err?.message || err);
+      }
+    };
+
+    const activateFallback = (reason: string) => {
+      console.warn(`[CloudSync] Client tasks listener paused for ${clientId || clientName}, falling back to interval polling (15s):`, reason);
+      fetchTasksViaPolling();
+      if (!pollInterval) {
+        pollInterval = window.setInterval(fetchTasksViaPolling, 15000);
+      }
+    };
+
     try {
-      const cleanName = (clientName || '').trim().toLowerCase();
-      return onSnapshot(
+      unsubSnapshot = onSnapshot(
         collection(db, 'tasks'),
-        (snapshot) => {
-          const list: PickupTask[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            const dataName = (data.clientLabName || data.clientName || '').trim().toLowerCase();
-            const isMatchClient =
-              (clientId && (data.clientLabId === clientId || data.clientId === clientId)) ||
-              (cleanName && dataName === cleanName);
-
-            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
-
-            if (isMatchClient && isMatchingStatus) {
-              const formatted = formatUnifiedTask(docSnap.id, data);
-              list.push(formatted);
+        {
+          next: (snapshot) => {
+            if (isCancelled) return;
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
             }
-          });
-          onUpdate!(list);
-        },
-        (err) => {
-          console.warn(`[CloudSync] Client tasks subscription notice for ${clientId || clientName}:`, err?.message || err);
+            const list: PickupTask[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data() as any;
+              const dataName = (data.clientLabName || data.clientName || '').trim().toLowerCase();
+              const isMatchClient =
+                (clientId && (data.clientLabId === clientId || data.clientId === clientId)) ||
+                (cleanName && dataName === cleanName);
+
+              const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
+
+              if (isMatchClient && isMatchingStatus) {
+                const formatted = formatUnifiedTask(docSnap.id, data);
+                list.push(formatted);
+              }
+            });
+            onUpdate!(list);
+          },
+          error: (err) => {
+            if (isCancelled) return;
+            activateFallback(err?.message || 'Listener error');
+          }
         }
       );
-    } catch (e) {
-      console.warn('[CloudSync] subscribeToClientTasks init exception:', e);
-      return () => {};
+    } catch (e: any) {
+      activateFallback(e?.message || 'Init error');
     }
+
+    return () => {
+      isCancelled = true;
+      unsubSnapshot();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
   },
 
   // Scoped Firestore query subscription: Client Routes (strictly filtered to session.clientId)
   subscribeToClientRoutes(clientId: string, onUpdate: (routes: Route[]) => void): Unsubscribe {
     if (!clientId) return () => {};
+    let isCancelled = false;
+    let pollInterval: number | null = null;
+    let unsubSnapshot: Unsubscribe = () => {};
+
+    const fetchRoutesViaPolling = async () => {
+      try {
+        const q = query(collection(db, 'routes'), where('clientId', '==', clientId));
+        const snapshot = await getDocs(q);
+        if (isCancelled) return;
+        const list: Route[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          if (data.destinationLab) {
+            const coords = parseFirestoreGeoPoint(data.destinationLab.location) || {
+              lat: data.destinationLab.lat,
+              lng: data.destinationLab.lng
+            };
+            data.destinationLab.lat = coords.lat;
+            data.destinationLab.lng = coords.lng;
+          }
+          if (Array.isArray(data.stops)) {
+            data.stops = data.stops.map((s: any) => {
+              const coords = parseFirestoreGeoPoint(s.location) || { lat: s.lat, lng: s.lng };
+              return { ...s, lat: coords.lat, lng: coords.lng };
+            });
+          }
+          if (data.clientId === clientId) {
+            list.push(data as Route);
+          }
+        });
+        onUpdate(list);
+      } catch (err: any) {
+        console.warn('[CloudSync] Polling fallback for client routes error:', err?.message || err);
+      }
+    };
+
+    const activateFallback = (reason: string) => {
+      console.warn(`[CloudSync] Client routes listener paused for ${clientId}, falling back to interval polling (15s):`, reason);
+      fetchRoutesViaPolling();
+      if (!pollInterval) {
+        pollInterval = window.setInterval(fetchRoutesViaPolling, 15000);
+      }
+    };
+
     try {
       const q = query(collection(db, 'routes'), where('clientId', '==', clientId));
-      return onSnapshot(
+      unsubSnapshot = onSnapshot(
         q,
-        (snapshot) => {
-          const list: Route[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            if (data.destinationLab) {
-              const coords = parseFirestoreGeoPoint(data.destinationLab.location) || {
-                lat: data.destinationLab.lat,
-                lng: data.destinationLab.lng
-              };
-              data.destinationLab.lat = coords.lat;
-              data.destinationLab.lng = coords.lng;
+        {
+          next: (snapshot) => {
+            if (isCancelled) return;
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
             }
-            if (Array.isArray(data.stops)) {
-              data.stops = data.stops.map((s: any) => {
-                const coords = parseFirestoreGeoPoint(s.location) || { lat: s.lat, lng: s.lng };
-                return { ...s, lat: coords.lat, lng: coords.lng };
-              });
-            }
-            if (data.clientId === clientId) {
-              list.push(data as Route);
-            }
-          });
-          onUpdate(list);
-        },
-        (err) => {
-          console.warn(`[CloudSync] Client routes subscription notice for ${clientId}:`, err?.message || err);
+            const list: Route[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data() as any;
+              if (data.destinationLab) {
+                const coords = parseFirestoreGeoPoint(data.destinationLab.location) || {
+                  lat: data.destinationLab.lat,
+                  lng: data.destinationLab.lng
+                };
+                data.destinationLab.lat = coords.lat;
+                data.destinationLab.lng = coords.lng;
+              }
+              if (Array.isArray(data.stops)) {
+                data.stops = data.stops.map((s: any) => {
+                  const coords = parseFirestoreGeoPoint(s.location) || { lat: s.lat, lng: s.lng };
+                  return { ...s, lat: coords.lat, lng: coords.lng };
+                });
+              }
+              if (data.clientId === clientId) {
+                list.push(data as Route);
+              }
+            });
+            onUpdate(list);
+          },
+          error: (err) => {
+            if (isCancelled) return;
+            activateFallback(err?.message || 'Listener error');
+          }
         }
       );
-    } catch (e) {
-      console.warn('[CloudSync] subscribeToClientRoutes init exception:', e);
-      return () => {};
+    } catch (e: any) {
+      activateFallback(e?.message || 'Init error');
     }
+
+    return () => {
+      isCancelled = true;
+      unsubSnapshot();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
   },
 
   // Scoped Firestore query subscription: Rider Tasks (strictly filtered to active rider identity)
   subscribeToRiderTasks(riderId: string, riderPhone?: string, onUpdate?: (tasks: PickupTask[]) => void): Unsubscribe {
     if (!riderId || !onUpdate) return () => {};
+    let isCancelled = false;
+    let pollInterval: number | null = null;
+    let unsubSnapshot: Unsubscribe = () => {};
+    const cleanPhone = (riderPhone || '').replace(/\D/g, '');
+
+    const fetchRiderTasksViaPolling = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'tasks'));
+        if (isCancelled) return;
+        const list: PickupTask[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          const tPhone = (data.riderPhone || '').replace(/\D/g, '');
+          const isMatchRider =
+            data.riderId === riderId ||
+            data.assignedRiderId === riderId ||
+            (cleanPhone && tPhone === cleanPhone) ||
+            (riderPhone && data.riderPhone === riderPhone);
+
+          const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
+
+          if (isMatchRider && isMatchingStatus) {
+            const formatted = formatUnifiedTask(docSnap.id, data);
+            list.push(formatted);
+          }
+        });
+        onUpdate(list);
+      } catch (err: any) {
+        console.warn('[CloudSync] Polling fallback for rider tasks error:', err?.message || err);
+      }
+    };
+
+    const activateFallback = (reason: string) => {
+      console.warn(`[CloudSync] Rider tasks listener paused for ${riderId}, falling back to interval polling (15s):`, reason);
+      fetchRiderTasksViaPolling();
+      if (!pollInterval) {
+        pollInterval = window.setInterval(fetchRiderTasksViaPolling, 15000);
+      }
+    };
+
     try {
-      const cleanPhone = (riderPhone || '').replace(/\D/g, '');
-      return onSnapshot(
+      unsubSnapshot = onSnapshot(
         collection(db, 'tasks'),
-        (snapshot) => {
-          const list: PickupTask[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            const tPhone = (data.riderPhone || '').replace(/\D/g, '');
-            const isMatchRider =
-              data.riderId === riderId ||
-              data.assignedRiderId === riderId ||
-              (cleanPhone && tPhone === cleanPhone) ||
-              (riderPhone && data.riderPhone === riderPhone);
-
-            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
-
-            if (isMatchRider && isMatchingStatus) {
-              const formatted = formatUnifiedTask(docSnap.id, data);
-              list.push(formatted);
+        {
+          next: (snapshot) => {
+            if (isCancelled) return;
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
             }
-          });
-          onUpdate(list);
-        },
-        (err) => {
-          console.warn(`[CloudSync] Rider tasks subscription notice for ${riderId}:`, err?.message || err);
+            const list: PickupTask[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data() as any;
+              const tPhone = (data.riderPhone || '').replace(/\D/g, '');
+              const isMatchRider =
+                data.riderId === riderId ||
+                data.assignedRiderId === riderId ||
+                (cleanPhone && tPhone === cleanPhone) ||
+                (riderPhone && data.riderPhone === riderPhone);
+
+              const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
+
+              if (isMatchRider && isMatchingStatus) {
+                const formatted = formatUnifiedTask(docSnap.id, data);
+                list.push(formatted);
+              }
+            });
+            onUpdate(list);
+          },
+          error: (err) => {
+            if (isCancelled) return;
+            activateFallback(err?.message || 'Listener error');
+          }
         }
       );
-    } catch (e) {
-      console.warn('[CloudSync] subscribeToRiderTasks init exception:', e);
-      return () => {};
+    } catch (e: any) {
+      activateFallback(e?.message || 'Init error');
     }
+
+    return () => {
+      isCancelled = true;
+      unsubSnapshot();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
   },
 
   // Scoped Firestore query subscription: Rider Assigned Routes
   subscribeToRiderRoutes(riderId: string, riderPhone?: string, onUpdate?: (routes: Route[]) => void): Unsubscribe {
     if (!riderId || !onUpdate) return () => {};
+    let isCancelled = false;
+    let pollInterval: number | null = null;
+    let unsubSnapshot: Unsubscribe = () => {};
+    const cleanPhone = (riderPhone || '').replace(/\D/g, '');
+
+    const fetchRiderRoutesViaPolling = async () => {
+      try {
+        const q = query(collection(db, 'routes'), where('assignedRiderId', '==', riderId));
+        const snapshot = await getDocs(q);
+        if (isCancelled) return;
+        const list: Route[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          const rPhone = (data.assignedRiderPhone || '').replace(/\D/g, '');
+          if (data.assignedRiderId === riderId || (cleanPhone && rPhone === cleanPhone)) {
+            list.push(data as Route);
+          }
+        });
+        onUpdate(list);
+      } catch (err: any) {
+        console.warn('[CloudSync] Polling fallback for rider routes error:', err?.message || err);
+      }
+    };
+
+    const activateFallback = (reason: string) => {
+      console.warn(`[CloudSync] Rider routes listener paused for ${riderId}, falling back to interval polling (15s):`, reason);
+      fetchRiderRoutesViaPolling();
+      if (!pollInterval) {
+        pollInterval = window.setInterval(fetchRiderRoutesViaPolling, 15000);
+      }
+    };
+
     try {
       const q = query(collection(db, 'routes'), where('assignedRiderId', '==', riderId));
-      const cleanPhone = (riderPhone || '').replace(/\D/g, '');
-      return onSnapshot(
+      unsubSnapshot = onSnapshot(
         q,
-        (snapshot) => {
-          const list: Route[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as any;
-            const rPhone = (data.assignedRiderPhone || '').replace(/\D/g, '');
-            if (data.assignedRiderId === riderId || (cleanPhone && rPhone === cleanPhone)) {
-              list.push(data as Route);
+        {
+          next: (snapshot) => {
+            if (isCancelled) return;
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
             }
-          });
-          onUpdate(list);
-        },
-        (err) => {
-          console.warn(`[CloudSync] Rider routes subscription notice for ${riderId}:`, err?.message || err);
+            const list: Route[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data() as any;
+              const rPhone = (data.assignedRiderPhone || '').replace(/\D/g, '');
+              if (data.assignedRiderId === riderId || (cleanPhone && rPhone === cleanPhone)) {
+                list.push(data as Route);
+              }
+            });
+            onUpdate(list);
+          },
+          error: (err) => {
+            if (isCancelled) return;
+            activateFallback(err?.message || 'Listener error');
+          }
         }
       );
-    } catch (e) {
-      console.warn('[CloudSync] subscribeToRiderRoutes init exception:', e);
-      return () => {};
+    } catch (e: any) {
+      activateFallback(e?.message || 'Init error');
     }
+
+    return () => {
+      isCancelled = true;
+      unsubSnapshot();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
   },
 
   // Scoped Firestore document subscription: Active Rider Document
   subscribeToRiderDocument(riderId: string, onUpdate: (rider: PickupBoy | null) => void): Unsubscribe {
     if (!riderId) return () => {};
+    let isCancelled = false;
+    let pollInterval: number | null = null;
+    let unsubSnapshot: Unsubscribe = () => {};
+
+    const fetchRiderDocViaPolling = async () => {
+      try {
+        const ref = doc(db, 'riders', riderId);
+        const docSnap = await getDoc(ref);
+        if (isCancelled) return;
+        if (docSnap.exists()) {
+          const data = docSnap.data() as any;
+          if (data.currentLocation) {
+            const coords = parseFirestoreGeoPoint(data.currentLocation.location) || {
+              lat: data.currentLocation.lat,
+              lng: data.currentLocation.lng
+            };
+            data.currentLocation.lat = coords.lat;
+            data.currentLocation.lng = coords.lng;
+          }
+          onUpdate(data as PickupBoy);
+        } else {
+          onUpdate(null);
+        }
+      } catch (err: any) {
+        console.warn('[CloudSync] Polling fallback for rider doc error:', err?.message || err);
+      }
+    };
+
+    const activateFallback = (reason: string) => {
+      console.warn(`[CloudSync] Rider doc listener paused for ${riderId}, falling back to interval polling (15s):`, reason);
+      fetchRiderDocViaPolling();
+      if (!pollInterval) {
+        pollInterval = window.setInterval(fetchRiderDocViaPolling, 15000);
+      }
+    };
+
     try {
       const ref = doc(db, 'riders', riderId);
-      return onSnapshot(
+      unsubSnapshot = onSnapshot(
         ref,
-        (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data() as any;
-            if (data.currentLocation) {
-              const coords = parseFirestoreGeoPoint(data.currentLocation.location) || {
-                lat: data.currentLocation.lat,
-                lng: data.currentLocation.lng
-              };
-              data.currentLocation.lat = coords.lat;
-              data.currentLocation.lng = coords.lng;
+        {
+          next: (docSnap) => {
+            if (isCancelled) return;
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
             }
-            onUpdate(data as PickupBoy);
-          } else {
-            onUpdate(null);
+            if (docSnap.exists()) {
+              const data = docSnap.data() as any;
+              if (data.currentLocation) {
+                const coords = parseFirestoreGeoPoint(data.currentLocation.location) || {
+                  lat: data.currentLocation.lat,
+                  lng: data.currentLocation.lng
+                };
+                data.currentLocation.lat = coords.lat;
+                data.currentLocation.lng = coords.lng;
+              }
+              onUpdate(data as PickupBoy);
+            } else {
+              onUpdate(null);
+            }
+          },
+          error: (err) => {
+            if (isCancelled) return;
+            activateFallback(err?.message || 'Listener error');
           }
-        },
-        (err) => {
-          console.warn(`[CloudSync] Rider document subscription notice for ${riderId}:`, err?.message || err);
         }
       );
-    } catch (e) {
-      console.warn('[CloudSync] subscribeToRiderDocument init exception:', e);
-      return () => {};
+    } catch (e: any) {
+      activateFallback(e?.message || 'Init error');
     }
+
+    return () => {
+      isCancelled = true;
+      unsubSnapshot();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
   },
 
   // Real-time snapshot subscription for ALL trips in 'trips' collection (for Admin)
