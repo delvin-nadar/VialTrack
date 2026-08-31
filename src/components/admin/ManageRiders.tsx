@@ -124,12 +124,13 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
       StorageService.addRider(newRider);
 
       // Show credentials modal for sharing with rider
+      const baseUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
       setCreatedCredentialsModal({
         name: newRider.name,
         phone: newRider.phone,
         email: newRider.email,
         pin: '1234',
-        link: `${window.location.origin}/rider/login`
+        link: `${baseUrl}/#/rider`
       });
     }
 
@@ -298,12 +299,13 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => {
+                      const baseUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
                       setCreatedCredentialsModal({
                         name: rider.name,
                         phone: rider.phone,
                         email: rider.email,
                         pin: '1234',
-                        link: `${window.location.origin}/rider/login`
+                        link: `${baseUrl}/#/rider`
                       });
                     }}
                     className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-sky-700 rounded-lg font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"

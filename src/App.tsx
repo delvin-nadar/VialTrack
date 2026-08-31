@@ -134,21 +134,37 @@ export default function App() {
     }
   };
 
-  // Initial Boot with graceful StorageService hydration & default demo auth
+  // Initial Boot with graceful StorageService hydration & hash-based routing
   useEffect(() => {
     reloadData();
 
-    // Check URL path/hash to auto-select portal if given (e.g. /rider, /client, /admin)
-    const path = window.location.pathname.toLowerCase() + window.location.hash.toLowerCase();
-    let initialRole: UserRole = 'admin';
-    if (path.includes('client')) {
-      initialRole = 'client';
-    } else if (path.includes('rider')) {
-      initialRole = 'rider';
-    }
-    
-    // Automatically establish Firebase Auth for the initial role
+    const parseRoleFromUrl = (): UserRole => {
+      const urlStr = (window.location.pathname + window.location.hash + window.location.search).toLowerCase();
+      if (urlStr.includes('client')) return 'client';
+      if (urlStr.includes('rider')) return 'rider';
+      return 'admin';
+    };
+
+    const initialRole = parseRoleFromUrl();
     handleSelectRole(initialRole);
+
+    const handleHashOrUrlChange = () => {
+      const currentRole = parseRoleFromUrl();
+      setActiveRolePortal((prev) => {
+        if (prev !== currentRole) {
+          handleSelectRole(currentRole);
+        }
+        return currentRole;
+      });
+    };
+
+    window.addEventListener('hashchange', handleHashOrUrlChange);
+    window.addEventListener('popstate', handleHashOrUrlChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashOrUrlChange);
+      window.removeEventListener('popstate', handleHashOrUrlChange);
+    };
   }, []);
 
   // Dedicated Firestore real-time listener lifecycle:
@@ -275,6 +291,12 @@ export default function App() {
   const handleSelectRole = async (role: UserRole) => {
     setActiveRolePortal(role);
     setIsLoading(true);
+
+    try {
+      if (window.location.hash !== `#/${role}`) {
+        window.history.replaceState(null, '', `#/${role}`);
+      }
+    } catch {}
 
     try {
       // 1. Authenticate to Firebase Auth for the target account
