@@ -31,7 +31,8 @@ import {
   FileText,
   Inbox,
   LogOut,
-  Edit2
+  Edit2,
+  Lock
 } from 'lucide-react';
 import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
@@ -601,8 +602,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     }
   };
 
-  // Instant Sample / Cam Snap Simulator
-  const handleInstantPhotoSnap = async (photoType: 'photo1' | 'photo2' | 'drop') => {
+  // Digital Specimen / Custody Slip Proof Generator
+  const handleDigitalPhotoGenerate = async (photoType: 'photo1' | 'photo2' | 'drop') => {
     setWatermarking(true);
     const currentStop = activeTask?.stopsProgress[currentStopIndex];
     const generated = generateSampleVialPhoto(
@@ -1173,116 +1174,169 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             </div>
           )}
 
-          {/* Active Loop Stops Stepper */}
+          {/* Active Loop Stops Stepper with Sequential Stop Revelation */}
           <div className="space-y-2.5">
-            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-              Active Round Stops Checklist
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                Active Round Stops Checklist
+              </span>
+              <span className="text-[11px] font-medium text-slate-500">
+                Sequential Verification Protocol
+              </span>
+            </div>
             <div className="space-y-2">
-              {activeTask.stopsProgress.map((stop, idx) => {
-                const isPicked = stop.status === 'picked_up';
-                const isCurrent = currentStopIndex === idx && !isPicked;
-                const cleanPhone = (stop.phone || '').replace(/\D/g, '');
+              {(() => {
+                const firstPendingIdx = activeTask.stopsProgress.findIndex((s) => s.status !== 'picked_up');
 
-                return (
-                  <div
-                    key={stop.stopId}
-                    className={`p-3 sm:p-4 rounded-xl border transition-all ${
-                      isPicked
-                        ? 'bg-emerald-50/50 border-emerald-200'
-                        : isCurrent
-                        ? 'bg-sky-50/60 border-sky-300 ring-1 ring-sky-300'
-                        : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
-                            isPicked
-                              ? 'bg-emerald-700 text-white'
-                              : isCurrent
-                              ? 'bg-sky-700 text-white animate-pulse'
-                              : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {isPicked ? <Check className="w-4 h-4" /> : idx + 1}
+                return activeTask.stopsProgress.map((stop, idx) => {
+                  const isPicked = stop.status === 'picked_up';
+                  const isLocked = !isPicked && firstPendingIdx !== -1 && idx > firstPendingIdx;
+                  const isUnlockedActive = !isPicked && (idx === firstPendingIdx || (firstPendingIdx === -1 && idx === 0));
+                  const isCurrent = (currentStopIndex === idx || isUnlockedActive) && !isPicked && !isLocked;
+                  const cleanPhone = (stop.phone || '').replace(/\D/g, '');
+
+                  return (
+                    <div
+                      key={stop.stopId}
+                      className={`p-3 sm:p-4 rounded-xl border transition-all ${
+                        isPicked
+                          ? 'bg-emerald-50/50 border-emerald-200'
+                          : isUnlockedActive
+                          ? 'bg-sky-50/60 border-sky-300 ring-2 ring-sky-400/40 shadow-xs'
+                          : isLocked
+                          ? 'bg-slate-50/70 border-slate-200 opacity-80'
+                          : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
+                              isPicked
+                                ? 'bg-emerald-700 text-white'
+                                : isUnlockedActive
+                                ? 'bg-sky-700 text-white animate-pulse'
+                                : isLocked
+                                ? 'bg-slate-200 text-slate-500'
+                                : 'bg-slate-200 text-slate-700'
+                            }`}
+                          >
+                            {isPicked ? (
+                              <Check className="w-4 h-4" />
+                            ) : isLocked ? (
+                              <Lock className="w-3.5 h-3.5" />
+                            ) : (
+                              idx + 1
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className={`font-bold text-xs sm:text-sm ${isLocked ? 'text-slate-600' : 'text-slate-900'}`}>
+                                {stop.stopName}
+                              </h4>
+                              {isUnlockedActive && (
+                                <span className="px-2 py-0.2 bg-sky-100 text-sky-800 text-[10px] font-bold rounded-full border border-sky-300 animate-pulse">
+                                  ACTIVE STOP
+                                </span>
+                              )}
+                              {isLocked && (
+                                <span className="px-1.5 py-0.2 bg-slate-100 text-slate-500 text-[9px] font-bold rounded border border-slate-200 flex items-center gap-0.5">
+                                  <Lock className="w-2.5 h-2.5" /> Locked
+                                </span>
+                              )}
+                            </div>
+
+                            {isLocked ? (
+                              <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                <span>🔒 Details locked until Stop {firstPendingIdx + 1} ({activeTask.stopsProgress[firstPendingIdx]?.stopName}) is completed</span>
+                              </p>
+                            ) : (
+                              <>
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{stop.address}</span>
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  Contact: <span className="font-medium text-slate-800">{stop.contactPerson}</span> ({stop.phone})
+                                </p>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{stop.stopName}</h4>
-                          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{stop.address}</span>
-                          </p>
-                          <p className="text-[11px] text-slate-500 mt-1">
-                            Contact: <span className="font-medium text-slate-800">{stop.contactPerson}</span> ({stop.phone})
-                          </p>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isLocked ? (
+                            <span className="px-3 py-1.5 bg-slate-100 text-slate-400 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-slate-200">
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Locked</span>
+                            </span>
+                          ) : (
+                            <>
+                              {stop.phone && (
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
+                                  title="Call contact"
+                                >
+                                  <PhoneCall className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Call</span>
+                                </a>
+                              )}
+
+                              <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
+                                title="Navigate via Maps"
+                              >
+                                <Navigation className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Navigate</span>
+                              </a>
+
+                              {!isPicked && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartRouteOrEnRoute(idx)}
+                                  className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                                  title="Mark En Route to this stop"
+                                >
+                                  <Bike className="w-3.5 h-3.5 text-sky-700" />
+                                  <span className="hidden sm:inline">En Route</span>
+                                </button>
+                              )}
+
+                              {!isPicked ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCurrentStopIndex(idx);
+                                    setVialCount(stop.sampleCount || 0);
+                                    setColdBoxTemp(stop.coldBoxTemp || 4.0);
+                                    setStopPhoto(stop.photoUrl || null);
+                                    setStopPhoto2((stop as any).handoverPhotoUrl || (stop as any).photo2Url || null);
+                                    setIsProcessingStop(true);
+                                  }}
+                                  className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-98"
+                                >
+                                  <Camera className="w-3.5 h-3.5" />
+                                  <span>Capture 2-Photo Proof</span>
+                                </button>
+                              ) : (
+                                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-md border border-emerald-200 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                                  <span>{stop.sampleCount ?? 0} Vials Collected</span>
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {stop.phone && (
-                          <a
-                            href={`tel:${cleanPhone}`}
-                            className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
-                            title="Call contact"
-                          >
-                            <PhoneCall className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Call</span>
-                          </a>
-                        )}
-
-                        <a
-                          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
-                          title="Navigate via Maps"
-                        >
-                          <Navigation className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Navigate</span>
-                        </a>
-
-                        {!isPicked && (
-                          <button
-                            type="button"
-                            onClick={() => handleStartRouteOrEnRoute(idx)}
-                            className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
-                            title="Mark En Route to this stop"
-                          >
-                            <Bike className="w-3.5 h-3.5 text-sky-700" />
-                            <span className="hidden sm:inline">En Route</span>
-                          </button>
-                        )}
-
-                        {!isPicked ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCurrentStopIndex(idx);
-                              setVialCount(stop.sampleCount || 0);
-                              setColdBoxTemp(stop.coldBoxTemp || 4.0);
-                              setStopPhoto(stop.photoUrl || null);
-                              setStopPhoto2((stop as any).handoverPhotoUrl || (stop as any).photo2Url || null);
-                              setIsProcessingStop(true);
-                            }}
-                            className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-98"
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span>Capture 2-Photo Proof</span>
-                          </button>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-md border border-emerald-200 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                            <span>{stop.sampleCount ?? 0} Vials Collected</span>
-                          </span>
-                        )}
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
 
@@ -1505,16 +1559,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       className="py-3 px-2 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
                       <Camera className="w-4 h-4 text-sky-700" />
-                      <span>{watermarking ? 'Processing...' : 'Camera Shot'}</span>
+                      <span>{watermarking ? 'Processing...' : 'Camera Photo'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleInstantPhotoSnap('photo1')}
+                      onClick={() => handleDigitalPhotoGenerate('photo1')}
                       disabled={watermarking}
                       className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
                       <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span>Collection Acknowledgement</span>
+                      <span>Digital Specimen Intake</span>
                     </button>
                   </div>
                 )}
@@ -1525,7 +1579,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800 flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Photo 2: Signed Intake Slip / Custody Form</span>
+                    <span>Photo 2: Signed Custody Form / Intake Slip</span>
                   </span>
                   {stopPhoto2 ? (
                     <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
@@ -1579,16 +1633,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       className="py-3 px-2 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
                       <Camera className="w-4 h-4 text-emerald-700" />
-                      <span>{watermarking ? 'Processing...' : 'Capture Slip'}</span>
+                      <span>{watermarking ? 'Processing...' : 'Capture Form'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleInstantPhotoSnap('photo2')}
+                      onClick={() => handleDigitalPhotoGenerate('photo2')}
                       disabled={watermarking}
                       className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
-                      <Sparkles className="w-4 h-4 text-emerald-600" />
-                      <span>Digital Handover Receipt</span>
+                      <FileText className="w-4 h-4 text-emerald-600" />
+                      <span>Digital Custody Slip</span>
                     </button>
                   </div>
                 )}
@@ -1714,19 +1768,19 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     className="py-4 px-3 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
                   >
                     <Camera className="w-5 h-5 text-emerald-700" />
-                    <span>{watermarking ? 'Processing...' : 'Upload / Snap Slip'}</span>
-                    <span className="text-[10px] text-slate-500">Camera / Signed Slip</span>
+                    <span>{watermarking ? 'Processing...' : 'Capture / Upload Proof'}</span>
+                    <span className="text-[10px] text-slate-500">Camera / Signed Form</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleInstantPhotoSnap('drop')}
+                    onClick={() => handleDigitalPhotoGenerate('drop')}
                     disabled={watermarking}
                     className="py-4 px-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
                   >
-                    <Sparkles className="w-5 h-5 text-emerald-600" />
-                    <span>Digital Handover Receipt</span>
-                    <span className="text-[10px] text-slate-500">Auto-generated receipt</span>
+                    <FileText className="w-5 h-5 text-emerald-600" />
+                    <span>Digital Handover Form</span>
+                    <span className="text-[10px] text-slate-500">Lab Custody Transfer</span>
                   </button>
                 </div>
               )}

@@ -94,20 +94,20 @@ export const resolvedFirebaseConfig = {
     '',
 };
 
-export const resolvedFirestoreDatabaseId: string | undefined =
+export const resolvedFirestoreDatabaseId: string =
   getEnv([
     'VITE_FIREBASE_DATABASE_ID',
     'FIREBASE_DATABASE_ID',
     'VITE_FIREBASE_FIRESTORE_DATABASE_ID',
     'FIREBASE_FIRESTORE_DATABASE_ID',
     'VITE_FIRESTORE_DATABASE_ID'
-  ]) || fallbackConfig.firestoreDatabaseId;
+  ]) || fallbackConfig.firestoreDatabaseId || 'ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829';
 
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
-// Initialize Firestore using the specific provisioned database ID or default
-export const db = resolvedFirestoreDatabaseId ? getFirestore(app, resolvedFirestoreDatabaseId) : getFirestore(app);
+// Explicitly connect to the project database
+export const db = getFirestore(app, "ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829");
 export const auth = getAuth(app);
 
 export { GeoPoint };
