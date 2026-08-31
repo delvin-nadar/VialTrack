@@ -202,7 +202,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         center: MUMBAI_CENTER,
         zoom: DEFAULT_MUMBAI_ZOOM,
         zoomControl: false,
-        attributionControl: false
+        attributionControl: true
       });
 
       L.control.zoom({ position: 'topleft' }).addTo(map);
