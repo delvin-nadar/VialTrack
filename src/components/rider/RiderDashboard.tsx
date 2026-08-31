@@ -29,7 +29,9 @@ import {
   RefreshCw,
   Image as ImageIcon,
   FileText,
-  Inbox
+  Inbox,
+  LogOut,
+  Edit2
 } from 'lucide-react';
 import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
@@ -161,9 +163,47 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [showLiveMap, setShowLiveMap] = useState<boolean>(true);
 
+  // Vehicle Type & Number state with persistence to Firestore
+  const [selectedVehicleType, setSelectedVehicleType] = useState<string>(
+    (session as any)?.vehicleType || activeRider.vehicleType || 'Motorcycle / Bike'
+  );
+  const [selectedVehicleNumber, setSelectedVehicleNumber] = useState<string>(
+    (session as any)?.vehicleNo || (session as any)?.vehicleNumber || activeRider.vehicleNumber || 'MH02TN0897'
+  );
+  const [showVehicleDutyModal, setShowVehicleDutyModal] = useState<boolean>(false);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState<boolean>(false);
+
   const fileInputRef1 = useRef<HTMLInputElement>(null);
   const fileInputRef2 = useRef<HTMLInputElement>(null);
   const dropFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Back button & Browser exit interceptor when ON DUTY
+  useEffect(() => {
+    if (!isCheckedIn) return;
+
+    // Push initial history state to trap popstate events
+    window.history.pushState({ vialTrackOnDuty: true }, '', window.location.href);
+
+    const handlePopState = () => {
+      // Re-push history entry immediately so the browser doesn't navigate away
+      window.history.pushState({ vialTrackOnDuty: true }, '', window.location.href);
+      setShowExitConfirmModal(true);
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isCheckedIn]);
 
   // Online / Offline monitor
   useEffect(() => {
@@ -331,7 +371,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     const riderId = session?.riderId || (session as any)?.id || 'MrSatish';
     const riderName = session?.name || activeRider.name || 'Mr. Satish';
-    const vehicleNo = (session as any)?.vehicleNo || (session as any)?.vehicleNumber || activeRider.vehicleNumber || 'MH02TN0897';
+    const vehicleNo = selectedVehicleNumber || (session as any)?.vehicleNo || activeRider.vehicleNumber || 'MH02TN0897';
+    const vehicleType = selectedVehicleType || activeRider.vehicleType || 'Motorcycle / Bike';
 
     console.log('[GPS Telemetry] Initializing watchPosition for rider:', riderId);
 
@@ -345,6 +386,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               name: riderName,
               vehicleNo: vehicleNo,
               vehicleNumber: vehicleNo,
+              vehicleType: vehicleType,
               lat: position.coords.latitude,
               lng: position.coords.longitude,
               currentLocation: {
@@ -360,7 +402,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               batteryLevel: 88,
               coldBoxTemp: 4.0,
               isOnline: true,
-              status: 'active',
+              status: isCheckedIn ? 'active' : 'off_duty',
+              isCheckedIn: isCheckedIn,
               lastUpdated: serverTimestamp()
             },
             { merge: true }
@@ -384,7 +427,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [session, activeRider.name, activeRider.vehicleNumber]);
+  }, [session, activeRider.name, selectedVehicleNumber, selectedVehicleType, isCheckedIn]);
 
   // Start real GPS broadcasting strictly for active rider ID
   useEffect(() => {
@@ -398,16 +441,89 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
   }, [isCheckedIn, sessionRiderId, activeRider.name, activeTask?.id]);
 
-  // Handle Attendance Toggle
+  // Handle Attendance Toggle & Confirmation
   const handleToggleAttendance = () => {
-    const nextChecked = !isCheckedIn;
-    setIsCheckedIn(nextChecked);
+    if (!isCheckedIn) {
+      // Opening duty: open vehicle selection & punch-in setup modal
+      setShowVehicleDutyModal(true);
+    } else {
+      // Currently On Duty: confirm before exiting / ending shift
+      setShowExitConfirmModal(true);
+    }
+  };
+
+  const handleConfirmExit = async () => {
+    setShowExitConfirmModal(false);
+    setIsCheckedIn(false);
+    LocationService.stop();
+
+    try {
+      await setDoc(
+        doc(db, 'riders', sessionRiderId),
+        {
+          id: sessionRiderId,
+          isCheckedIn: false,
+          status: 'off_duty',
+          isOnline: false,
+          lastUpdated: serverTimestamp()
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('Firestore update off_duty error:', e);
+    }
+
     StorageService.updateRider({
       ...activeRider,
-      isCheckedIn: nextChecked
+      isCheckedIn: false
     });
 
-    if (nextChecked) {
+    onRefresh();
+    navigate('/');
+  };
+
+  const handleSaveVehicleAndDuty = async (newType: string, newPlate: string, startShift: boolean) => {
+    const cleanPlate = (newPlate || selectedVehicleNumber || 'MH02TN0897').toUpperCase().trim();
+    const cleanType = newType || selectedVehicleType || 'Motorcycle / Bike';
+
+    setSelectedVehicleType(cleanType);
+    setSelectedVehicleNumber(cleanPlate);
+
+    const nextChecked = startShift ? true : isCheckedIn;
+    setIsCheckedIn(nextChecked);
+
+    const updatedRider: PickupBoy = {
+      ...activeRider,
+      vehicleType: cleanType,
+      vehicleNumber: cleanPlate,
+      plateNumber: cleanPlate,
+      isCheckedIn: nextChecked
+    };
+
+    StorageService.updateRider(updatedRider);
+
+    try {
+      await setDoc(
+        doc(db, 'riders', sessionRiderId),
+        {
+          id: sessionRiderId,
+          name: activeRider.name,
+          phone: activeRider.phone,
+          vehicleNo: cleanPlate,
+          vehicleNumber: cleanPlate,
+          vehicleType: cleanType,
+          isCheckedIn: nextChecked,
+          status: nextChecked ? 'active' : 'off_duty',
+          isOnline: nextChecked,
+          lastUpdated: serverTimestamp()
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn('[RiderDashboard] Firestore sync vehicle error:', err);
+    }
+
+    if (startShift) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           StorageService.addAttendanceRecord({
@@ -443,6 +559,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         }
       );
     }
+
+    setShowVehicleDutyModal(false);
+    onRefresh();
   };
 
   // Start Route
@@ -834,15 +953,23 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <div className="flex items-center gap-2">
               <h2 className="font-bold text-slate-900 text-base sm:text-lg">{activeRider.name}</h2>
               <span className="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                {activeRider.vehicleNumber}
+                {selectedVehicleNumber}
               </span>
             </div>
-            <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-              <Bike className="w-3.5 h-3.5 text-sky-700" />
-              <span>{activeRider.vehicleType}</span>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowVehicleDutyModal(true)}
+                className="text-xs text-slate-700 hover:text-sky-800 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer transition-colors"
+                title="Change Vehicle Type / Number"
+              >
+                <Bike className="w-3.5 h-3.5 text-sky-700" />
+                <span className="font-semibold">{selectedVehicleType}</span>
+                <Edit2 className="w-3 h-3 text-slate-400" />
+              </button>
               <span className="text-slate-300">•</span>
-              <span className="font-medium text-slate-700">{activeRider.shiftTimings || '08:00 AM - 04:00 PM'}</span>
-            </p>
+              <span className="text-xs font-medium text-slate-600">{activeRider.shiftTimings || '08:00 AM - 04:00 PM'}</span>
+            </div>
           </div>
         </div>
 
@@ -1587,6 +1714,152 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all active:scale-95 cursor-pointer"
               >
                 DISPATCH DELAY ALERT (+20 MINS)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vehicle Type Selection & Duty Start Modal */}
+      {showVehicleDutyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-sky-50 text-sky-700 rounded-lg">
+                  <Bike className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {isCheckedIn ? 'Update Vehicle Profile' : 'Start Shift & Select Vehicle'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {isCheckedIn ? 'Change your assigned 2-wheeler' : 'Select vehicle type to begin live tracking'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowVehicleDutyModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Vehicle Type Selection */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Select Vehicle Type *
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { type: 'Motorcycle / Bike', desc: 'Hero Splendor, Bajaj Pulsar, Honda Shine (Cold-Box Mounted)' },
+                  { type: 'Scooter / Scooty', desc: 'Honda Activa, Suzuki Access, TVS Jupiter (Front/Rear Carrier)' },
+                  { type: 'Electric EV 2-Wheeler', desc: 'Ola S1, Ather 450, TVS iQube, Bajaj Chetak (Zero Emission)' }
+                ].map((item) => {
+                  const isSelected = selectedVehicleType === item.type;
+                  return (
+                    <button
+                      key={item.type}
+                      type="button"
+                      onClick={() => setSelectedVehicleType(item.type)}
+                      className={`p-3 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-sky-600 bg-sky-50/70 ring-1 ring-sky-600 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                          <Bike className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className={`text-xs font-bold block ${isSelected ? 'text-sky-950' : 'text-slate-800'}`}>
+                            {item.type}
+                          </span>
+                          <span className="text-[10px] text-slate-500 mt-0.5 block">{item.desc}</span>
+                        </div>
+                      </div>
+                      {isSelected ? (
+                        <CheckCircle2 className="w-5 h-5 text-sky-700 shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Vehicle Registration Plate */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Vehicle Plate Number
+              </label>
+              <input
+                type="text"
+                value={selectedVehicleNumber}
+                onChange={(e) => setSelectedVehicleNumber(e.target.value.toUpperCase())}
+                placeholder="MH02TN0897"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono font-bold text-sm tracking-wider uppercase focus:outline-hidden focus:border-sky-600 focus:bg-white"
+              />
+            </div>
+
+            <div className="pt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowVehicleDutyModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveVehicleAndDuty(selectedVehicleType, selectedVehicleNumber, !isCheckedIn)}
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>{isCheckedIn ? 'SAVE VEHICLE' : 'CONFIRM & PUNCH IN'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Back Button / Exit Shift Confirmation Modal */}
+      {showExitConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="p-2.5 bg-amber-50 text-amber-700 rounded-full shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">You are currently On Duty</h3>
+                <p className="text-xs text-slate-500">Live GPS tracking and collection rounds are active</p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Are you sure you want to end your shift and exit the rider portal? Your live GPS beacon will be paused and your status will be set to Off Duty.
+            </p>
+
+            <div className="pt-2 flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowExitConfirmModal(false)}
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>STAY ON DUTY</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExit}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200 hover:border-red-200 font-bold text-xs sm:text-sm rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>END SHIFT & EXIT</span>
               </button>
             </div>
           </div>

@@ -31,6 +31,8 @@ import { StorageService } from '../../services/storage';
 import { isRiderLocationStale } from '../../services/locationService';
 import { compressImageToBase64 } from '../../services/imageWatermark';
 import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
+import { db } from '../../services/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface ManageRidersProps {
   riders: PickupBoy[];
@@ -94,7 +96,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     password: '',
     plateNumber: '',
     vehicleNumber: '',
-    vehicleType: 'Hero Splendor Plus (Cold-Box Mounted)',
+    vehicleType: 'Motorcycle / Bike',
     shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
     assignedRouteIds: [],
     status: 'active',
@@ -126,7 +128,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     );
   }, [riders, searchTerm]);
 
-  const handleSaveRider = (e: React.FormEvent) => {
+  const handleSaveRider = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -146,7 +148,8 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     }
 
     const effectivePassword = form.password || (editingRider?.password ? editingRider.password : generateStrongPassword(9));
-    const effectivePlate = form.plateNumber || form.vehicleNumber || 'MH-02-XX-9999';
+    const effectivePlate = form.plateNumber || form.vehicleNumber || 'MH02TN0897';
+    const effectiveVehicleType = form.vehicleType || 'Motorcycle / Bike';
 
     if (editingRider) {
       const updated: PickupBoy = {
@@ -158,7 +161,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
         role: 'rider',
         plateNumber: effectivePlate,
         vehicleNumber: effectivePlate,
-        vehicleType: form.vehicleType || 'Hero Splendor / Motorcycle',
+        vehicleType: effectiveVehicleType,
         shiftTimings: form.shiftTimings,
         assignedRouteIds: form.assignedRouteIds,
         status: form.status,
@@ -167,6 +170,24 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
         failedAttempts: editingRider.failedAttempts ?? 0
       };
       StorageService.updateRider(updated);
+      try {
+        await setDoc(
+          doc(db, 'riders', updated.id),
+          {
+            id: updated.id,
+            name: updated.name,
+            phone: updated.phone,
+            vehicleNo: effectivePlate,
+            vehicleNumber: effectivePlate,
+            vehicleType: effectiveVehicleType,
+            status: updated.status,
+            lastUpdated: serverTimestamp()
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.warn('Firestore update rider error:', err);
+      }
       setEditingRider(null);
     } else {
       const riderEmail = form.email.trim() || `${form.name.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`;
@@ -179,7 +200,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
         role: 'rider',
         plateNumber: effectivePlate,
         vehicleNumber: effectivePlate,
-        vehicleType: form.vehicleType || 'Hero Splendor / Motorcycle',
+        vehicleType: effectiveVehicleType,
         shiftTimings: form.shiftTimings,
         photoUrl: form.photoUrl,
         assignedRouteIds: form.assignedRouteIds,
@@ -198,6 +219,26 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
         isCheckedIn: true
       };
       StorageService.addRider(newRider);
+      try {
+        await setDoc(
+          doc(db, 'riders', newRider.id),
+          {
+            id: newRider.id,
+            name: newRider.name,
+            phone: newRider.phone,
+            vehicleNo: effectivePlate,
+            vehicleNumber: effectivePlate,
+            vehicleType: effectiveVehicleType,
+            battery: 95,
+            isOnline: true,
+            status: 'active',
+            lastUpdated: serverTimestamp()
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.warn('Firestore add rider error:', err);
+      }
 
       // Show formatted credentials modal with copy action
       setCreatedCredentialsModal({
@@ -599,16 +640,19 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                    Vehicle Type
+                  <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px] flex items-center gap-1">
+                    <Bike className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Vehicle Type</span>
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Hero Splendor / Motorcycle"
+                  <select
                     value={form.vehicleType}
                     onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
-                  />
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:outline-hidden focus:border-sky-600"
+                  >
+                    <option value="Motorcycle / Bike">Motorcycle / Bike</option>
+                    <option value="Scooter / Scooty">Scooter / Scooty</option>
+                    <option value="Electric EV 2-Wheeler">Electric EV 2-Wheeler</option>
+                  </select>
                 </div>
               </div>
 
