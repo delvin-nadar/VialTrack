@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Bell, ShieldAlert, Sliders, MessageSquare, Send, CheckCircle2, AlertTriangle, Thermometer, Database, Sparkles, MapPin } from 'lucide-react';
+import { Bell, ShieldAlert, Sliders, MessageSquare, Send, CheckCircle2, AlertTriangle, Thermometer, MapPin } from 'lucide-react';
 import { NotificationService } from '../../services/notificationService';
-import { seedMumbaiFirestoreData } from '../../services/mumbaiSeed';
 
 interface AlertsConfigViewProps {
   onRefresh: () => void;
@@ -16,38 +15,6 @@ export const AlertsConfigView: React.FC<AlertsConfigViewProps> = ({ onRefresh })
   const [enableInApp, setEnableInApp] = useState(true);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [testSent, setTestSent] = useState(false);
-
-  // Seeding state
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedResult, setSeedResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  const handleSeedData = async () => {
-    setIsSeeding(true);
-    setSeedResult(null);
-    try {
-      const res = await seedMumbaiFirestoreData();
-      if (res.success) {
-        setSeedResult({
-          success: true,
-          message: `Successfully populated Firestore with ${res.count} Mumbai records (BKC, Nerul, Andheri, Dadar, Powai, Vashi)!`
-        });
-        onRefresh();
-      } else {
-        setSeedResult({
-          success: false,
-          message: `Seeding error: ${res.error}`
-        });
-      }
-    } catch (e: any) {
-      setSeedResult({
-        success: false,
-        message: `Failed: ${e?.message || e}`
-      });
-    } finally {
-      setIsSeeding(false);
-      setTimeout(() => setSeedResult(null), 6000);
-    }
-  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,46 +46,6 @@ export const AlertsConfigView: React.FC<AlertsConfigViewProps> = ({ onRefresh })
         <p className="text-xs text-slate-500 mt-0.5">
           Configure automated SLA monitoring, grace periods, cold-chain temperature thresholds, and notification channels.
         </p>
-      </div>
-
-      {/* Developer & Admin Database Tools Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-xl p-4 sm:p-5 border border-slate-800 shadow-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-sky-400" />
-              <h3 className="text-sm sm:text-base font-bold text-white">
-                Admin & Dev Data Seeder (Mumbai Landmark Collections)
-              </h3>
-            </div>
-            <p className="text-xs text-slate-300">
-              Populates Firestore <code className="text-sky-300 font-mono">riders</code>, <code className="text-sky-300 font-mono">clients</code>, <code className="text-sky-300 font-mono">tasks</code>, and <code className="text-sky-300 font-mono">attendance</code> collections with realistic Mumbai GeoPoints (BKC, Nerul, Andheri West, Dadar, Powai, Vashi).
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSeedData}
-            disabled={isSeeding}
-            className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 cursor-pointer disabled:opacity-50"
-          >
-            <Sparkles className={`w-3.5 h-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
-            <span>{isSeeding ? 'Seeding Database...' : 'Seed Sample Mumbai Data'}</span>
-          </button>
-        </div>
-
-        {seedResult && (
-          <div
-            className={`mt-3 p-2.5 rounded-lg text-xs font-bold flex items-center gap-2 ${
-              seedResult.success
-                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700'
-                : 'bg-rose-950/80 text-rose-300 border border-rose-700'
-            }`}
-          >
-            {seedResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
-            <span>{seedResult.message}</span>
-          </div>
-        )}
       </div>
 
       <form onSubmit={handleSave} className="space-y-5">

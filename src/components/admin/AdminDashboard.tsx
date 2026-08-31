@@ -26,7 +26,6 @@ import {
   Send
 } from 'lucide-react';
 import { LocationService } from '../../services/locationService';
-import { seedMumbaiFirestoreData } from '../../services/mumbaiSeed';
 import { StorageService } from '../../services/storage';
 
 interface AdminDashboardProps {
@@ -54,8 +53,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_transit' | 'delayed' | 'delivered'>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(tasks[1]?.id || tasks[0]?.id || null);
-  const [isSeeding, setIsSeeding] = useState<boolean>(false);
-  const [seedNotice, setSeedNotice] = useState<string | null>(null);
+  const [dispatchNotice, setDispatchNotice] = useState<string | null>(null);
 
   // Dispatch Task Modal State
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
@@ -65,25 +63,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [taskTimeSlot, setTaskTimeSlot] = useState<string>('14:00');
   const [taskDate, setTaskDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [taskNotes, setTaskNotes] = useState<string>('');
-
-  const handleSeedMumbai = async () => {
-    setIsSeeding(true);
-    setSeedNotice(null);
-    try {
-      const res = await seedMumbaiFirestoreData();
-      if (res.success) {
-        setSeedNotice(`Synced Firestore with ${res.count} active Mumbai records!`);
-        onRefresh();
-      } else {
-        setSeedNotice(`Sync notice: ${res.error}`);
-      }
-    } catch (e: any) {
-      setSeedNotice(`Failed: ${e?.message || e}`);
-    } finally {
-      setIsSeeding(false);
-      setTimeout(() => setSeedNotice(null), 4000);
-    }
-  };
 
   // Available routes for selected client
   const clientRoutes = useMemo(() => {
@@ -172,8 +151,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsDispatchModalOpen(false);
     setSelectedTaskId(newTask.id);
     onRefresh();
-    setSeedNotice(`Dispatched new pickup round #${newTask.id} to ${rider.name}!`);
-    setTimeout(() => setSeedNotice(null), 4000);
+    setDispatchNotice(`Dispatched new pickup round #${newTask.id} to ${rider.name}!`);
+    setTimeout(() => setDispatchNotice(null), 4000);
   };
 
   const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
@@ -350,16 +329,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Map controls */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleSeedMumbai}
-                  disabled={isSeeding}
-                  className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-sky-400 text-xs font-semibold rounded-lg transition-colors border border-slate-700 flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  title="Synchronize Mumbai hospitals, routes, and collection records into Firestore"
-                >
-                  <Database className={`w-3.5 h-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{isSeeding ? 'Syncing...' : 'Sync Firestore'}</span>
-                  <span className="sm:hidden">Sync</span>
-                </button>
-                <button
                   onClick={handleStepSim}
                   className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
                   title="Move rider to next waypoint"
@@ -380,10 +349,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {seedNotice && (
+            {dispatchNotice && (
               <div className="mb-3 p-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>{seedNotice}</span>
+                <span>{dispatchNotice}</span>
               </div>
             )}
 

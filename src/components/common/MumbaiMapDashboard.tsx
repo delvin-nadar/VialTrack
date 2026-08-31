@@ -9,8 +9,7 @@ import {
 } from '../../types';
 import { CloudSync, parseFirestoreGeoPoint } from '../../services/firebase';
 import {
-  MUMBAI_LANDMARKS,
-  seedMumbaiFirestoreData
+  MUMBAI_LANDMARKS
 } from '../../services/mumbaiSeed';
 import {
   MapPin,
@@ -82,8 +81,6 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
   const [sidebarTab, setSidebarTab] = useState<'riders' | 'tasks' | 'landmarks'>('riders');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSeeding, setIsSeeding] = useState<boolean>(false);
-  const [seedSuccessMessage, setSeedSuccessMessage] = useState<string | null>(null);
 
   // Layer toggles
   const [showRidersLayer, setShowRidersLayer] = useState<boolean>(true);
@@ -282,28 +279,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
     }
   };
 
-  // 6. Handle "Seed Sample Mumbai Data" Action
-  const handleSeedMumbaiData = async () => {
-    setIsSeeding(true);
-    setSeedSuccessMessage(null);
-    try {
-      const result = await seedMumbaiFirestoreData();
-      if (result.success) {
-        setSeedSuccessMessage(`Successfully seeded ${result.count} Mumbai records to Firestore!`);
-        if (onRefreshData) onRefreshData();
-        handleResetToMumbai();
-      } else {
-        setSeedSuccessMessage(`Error seeding data: ${result.error}`);
-      }
-    } catch (e: any) {
-      setSeedSuccessMessage(`Seeding failed: ${e?.message || e}`);
-    } finally {
-      setIsSeeding(false);
-      setTimeout(() => setSeedSuccessMessage(null), 5000);
-    }
-  };
-
-  // 7. Render Markers, Polylines, and Popups on Map
+  // 6. Render Markers, Polylines, and Popups on Map
   useEffect(() => {
     const map = mapInstanceRef.current;
     const markersLayer = markersLayerRef.current;
@@ -687,14 +663,6 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
           </button>
         </div>
 
-        {/* Seed Confirmation Banner */}
-        {seedSuccessMessage && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[500] bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg border border-emerald-400 flex items-center gap-2 animate-fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-            <span>{seedSuccessMessage}</span>
-          </div>
-        )}
-
         {/* Map Stage */}
         <div ref={mapContainerRef} className="flex-1 w-full z-0" />
 
@@ -753,19 +721,6 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               }`}
             >
               GPS Trail
-            </button>
-          </div>
-
-          {/* Quick Seed Button on Map Bar */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSeedMumbaiData}
-              disabled={isSeeding}
-              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
-              title="Sync Firestore operational dataset with Mumbai routes, hospitals and labs"
-            >
-              <Database className={`w-3.5 h-3.5 text-sky-400 ${isSeeding ? 'animate-spin' : ''}`} />
-              <span>{isSeeding ? 'Syncing Firestore...' : 'Sync Mumbai Ops Data'}</span>
             </button>
           </div>
         </div>
@@ -1049,21 +1004,6 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Sidebar Footer Seeding Panel */}
-          <div className="p-3 bg-white border-t border-slate-200">
-            <button
-              onClick={handleSeedMumbaiData}
-              disabled={isSeeding}
-              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <Database className={`w-3.5 h-3.5 text-sky-400 ${isSeeding ? 'animate-spin' : ''}`} />
-              <span>{isSeeding ? 'Writing to Firestore...' : 'Seed Sample Mumbai Data'}</span>
-            </button>
-            <p className="text-[10px] text-slate-400 text-center mt-1.5">
-              Seeds BKC, Nerul, Andheri, Dadar, Powai, & Vashi collections
-            </p>
           </div>
         </div>
       )}

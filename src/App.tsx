@@ -172,10 +172,6 @@ export default function App() {
       setNotifications(NotificationService.getNotifications());
     });
 
-    if (!currentUser) {
-      return () => unsubNotifs();
-    }
-
     // Realtime Firestore Task sync
     const unsubCloudTasks = CloudSync.subscribeToCollection<PickupTask>('tasks', (cloudTasks) => {
       if (cloudTasks && cloudTasks.length > 0) {
@@ -289,7 +285,7 @@ export default function App() {
       unsubCloudClients();
       unsubCloudRoutes();
     };
-  }, [currentUser]);
+  }, []);
 
   // Logout
   const handleLogout = () => {
