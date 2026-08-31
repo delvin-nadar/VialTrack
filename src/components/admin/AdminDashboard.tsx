@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { LocationService } from '../../services/locationService';
 import { StorageService } from '../../services/storage';
-import { CloudSync, db } from '../../services/firebase';
+import { CloudSync, db, formatUnifiedTask } from '../../services/firebase';
 import { collection, onSnapshot, query, orderBy, limit, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 interface AdminDashboardProps {
@@ -68,32 +68,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedNewRiderId, setSelectedNewRiderId] = useState<string>('');
   const [isReassigning, setIsReassigning] = useState(false);
 
-  // 1. Direct Firestore tasks collection listener
+  // 1. Direct Firestore tasks and trips collection listeners
   useEffect(() => {
     try {
+      const unsubTrips = CloudSync.subscribeToTrips((cloudTrips) => {
+        if (cloudTrips && cloudTrips.length > 0) {
+          const formatted = cloudTrips.map((t) => formatUnifiedTask(t.id, t));
+          setFirestoreTasks((prev) => {
+            const map = new Map<string, PickupTask>();
+            prev.forEach((item) => map.set(item.id, item));
+            formatted.forEach((item) => map.set(item.id, item));
+            return Array.from(map.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+          });
+        }
+      });
+
       const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'), limit(50));
-      const unsub = onSnapshot(
+      const unsubTasks = onSnapshot(
         q,
         (snapshot) => {
           if (!snapshot.empty) {
             const fetched = snapshot.docs.map((docSnap) => {
               const data = docSnap.data();
-              return {
-                id: docSnap.id,
-                ...data,
-                stopsProgress: data.stopsProgress || data.stops || []
-              } as PickupTask;
+              return formatUnifiedTask(docSnap.id, data);
             });
-            setFirestoreTasks(fetched);
-          } else {
-            setFirestoreTasks([]);
+            setFirestoreTasks((prev) => {
+              const map = new Map<string, PickupTask>();
+              prev.forEach((item) => map.set(item.id, item));
+              fetched.forEach((item) => map.set(item.id, item));
+              return Array.from(map.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+            });
           }
         },
         (err) => {
           console.warn('[AdminDashboard] Firestore tasks listener error:', err);
         }
       );
-      return () => unsub();
+      return () => {
+        unsubTrips();
+        unsubTasks();
+      };
     } catch (e) {
       console.warn('[AdminDashboard] Setup tasks listener failed:', e);
     }

@@ -131,9 +131,39 @@
         "taskId": { "type": "string", "maxLength": 128 }
       },
       "required": ["id", "riderId", "timestamp", "lat", "lng"]
+    },
+    "Trip": {
+      "title": "Trip",
+      "description": "Unified real-time active sample collection trip between client, rider, and admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "clientEmail": { "type": "string", "maxLength": 128 },
+        "clientCoords": { "type": "array" },
+        "riderId": { "type": "string", "maxLength": 128 },
+        "riderName": { "type": "string", "maxLength": 128 },
+        "riderPhone": { "type": "string", "maxLength": 32 },
+        "riderCoords": { "type": "array" },
+        "stops": { "type": "array" },
+        "currentStopIndex": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["assigned", "in_transit", "completed"]
+        },
+        "chillerTemp": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "clientId", "clientName", "riderId", "riderName", "status", "stops"]
     }
   },
   "firestore": {
+    "/trips/{tripId}": {
+      "schema": { "$ref": "#/entities/Trip" },
+      "description": "Centralized active sample collection trips"
+    },
     "/tasks/{taskId}": {
       "schema": { "$ref": "#/entities/Task" },
       "description": "Collection of all pickup and delivery tasks"

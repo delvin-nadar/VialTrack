@@ -276,7 +276,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       onDispatched(newTask);
       onClose();
     } catch (err) {
-      console.error('Dispatch error:', err);
+      console.error("Firestore Write Error:", err);
       alert('Failed to dispatch task. Please try again.');
     } finally {
       setIsSubmitting(false);

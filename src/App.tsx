@@ -4,7 +4,7 @@ import { UserAuth, PickupTask, Route as LogisticsRoute, PickupBoy, Client, Atten
 import { StorageService } from './services/storage';
 import { LocationService } from './services/locationService';
 import { NotificationService } from './services/notificationService';
-import { CloudSync, auth, signOut, onAuthStateChanged } from './services/firebase';
+import { CloudSync, auth, signOut, onAuthStateChanged, seedCoreCollectionsIfEmpty } from './services/firebase';
 
 // Portals & Components
 import { PortalLanding } from './components/common/PortalLanding';
@@ -150,6 +150,9 @@ function AppContent() {
       console.warn('Failed to clear mock cache from localStorage:', e);
     }
     reloadData();
+    seedCoreCollectionsIfEmpty().catch((err) => {
+      console.error("Firestore Write Error:", err);
+    });
   }, [reloadData]);
 
   // Real-time Firestore synchronizer

@@ -29,7 +29,7 @@ import {
   Inbox
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
-import { CloudSync } from '../../services/firebase';
+import { CloudSync, formatUnifiedTask } from '../../services/firebase';
 import { NotificationService } from '../../services/notificationService';
 import { compressImageToBase64 } from '../../services/imageWatermark';
 
@@ -75,22 +75,43 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const [liveClientRoutes, setLiveClientRoutes] = useState<Route[]>([]);
 
   useEffect(() => {
-    if (!activeClientId) return;
-    const unsubTasks = CloudSync.subscribeToClientTasks(activeClientId, (fetchedTasks) => {
-      if (fetchedTasks) {
-        setLiveClientTasks(fetchedTasks);
+    if (!activeClientId && !user.email) return;
+
+    const unsubTrips = CloudSync.subscribeToClientTrips(activeClientId, user.email, (cloudTrips) => {
+      if (cloudTrips && cloudTrips.length > 0) {
+        const formatted = cloudTrips.map((t) => formatUnifiedTask(t.id, t));
+        setLiveClientTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          prev.forEach((item) => map.set(item.id, item));
+          formatted.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        });
       }
     });
+
+    const unsubTasks = CloudSync.subscribeToClientTasks(activeClientId, user.name, (fetchedTasks) => {
+      if (fetchedTasks) {
+        setLiveClientTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          prev.forEach((item) => map.set(item.id, item));
+          fetchedTasks.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        });
+      }
+    });
+
     const unsubRoutes = CloudSync.subscribeToClientRoutes(activeClientId, (fetchedRoutes) => {
       if (fetchedRoutes) {
         setLiveClientRoutes(fetchedRoutes);
       }
     });
+
     return () => {
+      unsubTrips();
       unsubTasks();
       unsubRoutes();
     };
-  }, [activeClientId]);
+  }, [activeClientId, user.email, user.name]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'delivered' | 'in_transit' | 'upcoming'>('all');
@@ -109,13 +130,24 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
   const prescriptionFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Scope tasks strictly to activeClientId (no cross-tenant leakage)
+  // Scope tasks strictly to activeClientId or clientEmail / clientName
   const clientTasks = useMemo(() => {
     const taskMap = new Map<string, PickupTask>();
-    tasks.filter((t) => t.clientId === activeClientId).forEach((t) => taskMap.set(t.id, t));
-    liveClientTasks.filter((t) => t.clientId === activeClientId).forEach((t) => taskMap.set(t.id, t));
+    const cleanUserEmail = (user.email || '').trim().toLowerCase();
+    const cleanUserName = (user.name || '').trim().toLowerCase();
+
+    const isMatch = (t: any) => {
+      if (!t) return false;
+      if (activeClientId && (t.clientId === activeClientId || t.clientLabId === activeClientId)) return true;
+      if (cleanUserEmail && (t.clientEmail || '').trim().toLowerCase() === cleanUserEmail) return true;
+      if (cleanUserName && (t.clientName || '').trim().toLowerCase() === cleanUserName) return true;
+      return false;
+    };
+
+    tasks.filter(isMatch).forEach((t) => taskMap.set(t.id, t));
+    liveClientTasks.filter(isMatch).forEach((t) => taskMap.set(t.id, t));
     return Array.from(taskMap.values());
-  }, [tasks, liveClientTasks, activeClientId]);
+  }, [tasks, liveClientTasks, activeClientId, user.email, user.name]);
 
   // Scope routes strictly to activeClientId
   const clientRoutes = useMemo(() => {

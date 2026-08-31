@@ -144,6 +144,10 @@ export interface PickupBoy {
   batteryLevel?: number;
   isOnline: boolean;
   isCheckedIn: boolean;
+  activeTripId?: string;
+  dutyStatus?: 'available' | 'on_trip' | 'off_duty' | string;
+  currentTaskId?: string;
+  activeTaskId?: string;
   lastPingTime?: string;
   lastUpdated?: any;
   heading?: number;
@@ -151,6 +155,53 @@ export interface PickupBoy {
   failedAttempts?: number;
   lockoutUntil?: string;
   lastLoginAt?: string;
+}
+
+export interface TripStop {
+  stopIndex: number;
+  name: string;
+  address: string;
+  coords: [number, number]; // [lat, lng]
+  specimenCount: number;
+  status: 'pending' | 'in_progress' | 'completed' | string;
+  id?: string;
+  stopId?: string;
+  contactPerson?: string;
+  phone?: string;
+  notes?: string;
+  arrivedAt?: string;
+  completedAt?: string;
+  pickedUpAt?: string;
+  photoUrl?: string;
+  coldBoxTemp?: number;
+  sampleCount?: number;
+}
+
+export interface Trip {
+  id: string; // e.g. "trip_<timestamp>"
+  clientId: string; // e.g. "client-1788210054008"
+  clientName: string; // "Lifecare Diagnostics"
+  clientEmail?: string; // "jayesh.joshi@lifecarediagnostics.com"
+  clientCoords: [number, number]; // [lat, lng]
+  riderId: string;
+  riderName: string;
+  riderPhone: string;
+  riderCoords: [number, number]; // [lat, lng]
+  stops: TripStop[];
+  currentStopIndex: number; // 0-indexed
+  status: 'assigned' | 'in_transit' | 'completed' | string;
+  chillerTemp: number; // 4.2
+  createdAt?: any;
+  updatedAt?: any;
+  // Compatibility & metadata helpers
+  routeId?: string;
+  routeName?: string;
+  date?: string;
+  timeSlot?: string;
+  riderVehicle?: string;
+  isDelayed?: boolean;
+  delayMinutes?: number;
+  issueFlags?: any[];
 }
 
 export type TaskStatus =

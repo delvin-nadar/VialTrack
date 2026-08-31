@@ -38,7 +38,7 @@ import { StorageService } from '../../services/storage';
 import { LocationService, GpsStatusEvent } from '../../services/locationService';
 import { NotificationService } from '../../services/notificationService';
 import { LiveMap } from '../common/LiveMap';
-import { CloudSync, db } from '../../services/firebase';
+import { CloudSync, db, formatUnifiedTask } from '../../services/firebase';
 import { doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { DailyRoundsSchedule, ScheduleStopItem } from './DailyRoundsSchedule';
 
@@ -120,9 +120,26 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   useEffect(() => {
     if (!sessionRiderId) return;
 
+    const unsubTrips = CloudSync.subscribeToRiderTrips(sessionRiderId, sessionPhone, (cloudTrips) => {
+      if (cloudTrips && cloudTrips.length > 0) {
+        const formatted = cloudTrips.map((t) => formatUnifiedTask(t.id, t));
+        setLiveTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          prev.forEach((item) => map.set(item.id, item));
+          formatted.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        });
+      }
+    });
+
     const unsubTasks = CloudSync.subscribeToRiderTasks(sessionRiderId, sessionPhone, (cloudTasks) => {
       if (cloudTasks) {
-        setLiveTasks(cloudTasks);
+        setLiveTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          prev.forEach((item) => map.set(item.id, item));
+          cloudTasks.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        });
       }
     });
 
@@ -148,6 +165,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     });
 
     return () => {
+      unsubTrips();
       unsubTasks();
       unsubRoutes();
       unsubRiderDoc();
@@ -390,6 +408,21 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const watchId = navigator.geolocation.watchPosition(
       async (position) => {
         try {
+          const tripId = activeTaskId || activeTask?.id || '';
+          await CloudSync.updateTripRiderLocation(
+            tripId,
+            riderId,
+            position.coords.latitude,
+            position.coords.longitude,
+            {
+              heading: position.coords.heading || 0,
+              speed: position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0,
+              battery: 88,
+              riderName,
+              riderPhone: activeRider.phone
+            }
+          );
+
           await setDoc(
             doc(db, 'riders', riderId),
             {
@@ -438,7 +471,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [session, activeRider.name, selectedVehicleNumber, selectedVehicleType, isCheckedIn]);
+  }, [session, activeRider.name, selectedVehicleNumber, selectedVehicleType, isCheckedIn, activeTaskId, activeTask?.id]);
 
   // Start real GPS broadcasting strictly for active rider ID
   useEffect(() => {
@@ -584,6 +617,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
     StorageService.updateTask(updated);
     setActiveTaskId(task.id);
+    CloudSync.startTripRoute(task.id, sessionRiderId);
     onRefresh();
 
     NotificationService.sendAlert({
@@ -824,6 +858,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
 
     StorageService.updateTask(updatedTask);
+    CloudSync.completeTripStop(
+      activeTask.id,
+      currentStopIndex,
+      activeTask.stops || activeTask.stopsProgress,
+      {
+        sampleCount: vialCount,
+        photoUrl: finalSamplePhoto,
+        notes: vialCount === 0 ? '0 samples collected' : `${vialCount} specimen vials collected`
+      }
+    );
     setIsProcessingStop(false);
     setStopPhoto(null);
     setStopPhoto2(null);
@@ -867,6 +911,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
 
     StorageService.updateTask(updatedTask);
+    CloudSync.completeTripFinalHandover(activeTask.id, sessionRiderId, {
+      receiverName,
+      totalVials,
+      coldBoxTemp,
+      dropPhotoUrl: finalLabPhoto
+    });
     setIsProcessingDrop(false);
     setStopPhoto(null);
     setStopPhoto2(null);

@@ -26,6 +26,8 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
+import { CloudSync, db } from '../../services/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 import { normalizeLatLng } from '../../utils/coordinates';
 import { RouteStopsManager } from './RouteStopsManager';
@@ -135,7 +137,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   };
 
   // Handle Save Client
-  const handleSaveClient = (e: React.FormEvent) => {
+  const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -177,6 +179,11 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         failedAttempts: selectedClient.failedAttempts ?? 0
       };
       StorageService.updateClient(updated);
+      try {
+        await setDoc(doc(db, 'clients', updated.id), JSON.parse(JSON.stringify(updated)), { merge: true });
+      } catch (err) {
+        console.error("Firestore Write Error:", err);
+      }
     } else {
       const [vLat, vLng] = normalizeLatLng(clientForm.lat, clientForm.lng, 19.1287852, 72.8294183);
       const newClient: Client = {
@@ -198,6 +205,11 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 450
       };
       StorageService.addClient(newClient);
+      try {
+        await setDoc(doc(db, 'clients', newClient.id), JSON.parse(JSON.stringify(newClient)), { merge: true });
+      } catch (err) {
+        console.error("Firestore Write Error:", err);
+      }
       setSelectedClientId(newClient.id);
 
       setCreatedCredentialsModal({
@@ -214,9 +226,14 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   };
 
   // Handle Delete Client
-  const handleDeleteClient = (clientId: string, clientName: string) => {
+  const handleDeleteClient = async (clientId: string, clientName: string) => {
     if (window.confirm(`Are you sure you want to remove ${clientName}? This will also remove associated routes.`)) {
       StorageService.deleteClient(clientId);
+      try {
+        await deleteDoc(doc(db, 'clients', clientId));
+      } catch (err) {
+        console.error("Firestore Write Error:", err);
+      }
       const remaining = clients.filter((c) => c.id !== clientId);
       if (remaining.length > 0) {
         setSelectedClientId(remaining[0].id);
@@ -228,9 +245,14 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   };
 
   // Handle Delete Route
-  const handleDeleteRoute = (routeId: string, routeName: string) => {
+  const handleDeleteRoute = async (routeId: string, routeName: string) => {
     if (window.confirm(`Are you sure you want to delete route "${routeName}"?`)) {
       StorageService.deleteRoute(routeId);
+      try {
+        await deleteDoc(doc(db, 'routes', routeId));
+      } catch (err) {
+        console.error("Firestore Write Error:", err);
+      }
       onRefresh();
     }
   };
@@ -288,7 +310,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   };
 
   // Save new Route
-  const handleSaveRoute = (e: React.FormEvent) => {
+  const handleSaveRoute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClient || !routeForm.name) return;
 
@@ -329,6 +351,11 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     };
 
     StorageService.addRoute(newRoute);
+    try {
+      await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)), { merge: true });
+    } catch (err) {
+      console.error("Firestore Write Error:", err);
+    }
     setIsAddingRoute(false);
     onRefresh();
   };

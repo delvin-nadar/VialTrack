@@ -212,7 +212,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
         await setDoc(doc(db, 'riders', updatedRider.id), firestorePayload, { merge: true });
       } catch (err) {
-        console.warn('Firestore update rider error:', err);
+        console.error("Firestore Write Error:", err);
       }
 
       onSaved();
@@ -276,7 +276,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           { merge: true }
         );
       } catch (err) {
-        console.warn('Firestore add rider error:', err);
+        console.error("Firestore Write Error:", err);
       }
 
       onSaved({

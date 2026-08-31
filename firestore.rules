@@ -24,6 +24,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Trips collection: Unified real-time sample collection lifecycle
+    match /trips/{tripId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Tasks collection: Diagnostic sample pickups & deliveries
     match /tasks/{taskId} {
       allow read: if true;

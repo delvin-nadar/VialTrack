@@ -3,7 +3,9 @@ import {
   getFirestore,
   doc,
   setDoc,
+  addDoc,
   getDoc,
+  getDocs,
   deleteDoc,
   collection,
   query,
@@ -253,33 +255,188 @@ export async function seedOperationalAuthAccounts(): Promise<void> {
 // Auto-seed operational accounts at startup
 seedOperationalAuthAccounts().catch(() => {});
 
+/**
+ * Database Auto-Seeder & Live Write Enforcer:
+ * Checks if 'clients' and 'riders' collections are empty.
+ * If empty, executes real setDoc writes so data immediately appears in Firebase Console.
+ */
+export async function seedCoreCollectionsIfEmpty(): Promise<{ clientsSeeded: boolean; ridersSeeded: boolean }> {
+  let clientsSeeded = false;
+  let ridersSeeded = false;
+
+  try {
+    // 1. Check clients collection
+    const clientsSnap = await getDocs(collection(db, 'clients'));
+    if (clientsSnap.empty) {
+      console.log('[AutoSeeder] clients collection is empty. Seeding clients/client_lifecare to Firestore...');
+      const lifecareDoc = {
+        id: 'client_lifecare',
+        name: 'Lifecare Diagnostics',
+        email: 'jayesh.joshi@lifecarediagnostics.com',
+        address: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
+        lat: 19.1287852,
+        lng: 72.8294183,
+        ratePerRound: 130,
+        billingRatePerPickup: 130,
+        isActive: true,
+        active: true,
+        role: 'client',
+        contactPerson: 'Dr. Jayesh Joshi',
+        phone: '+91 98200 98200',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'clients', 'client_lifecare'), lifecareDoc, { merge: true });
+      clientsSeeded = true;
+      console.log('[AutoSeeder] Successfully seeded clients/client_lifecare to Firestore.');
+    }
+
+    // 2. Check riders collection
+    const ridersSnap = await getDocs(collection(db, 'riders'));
+    if (ridersSnap.empty) {
+      console.log('[AutoSeeder] riders collection is empty. Seeding riders/rider_asif to Firestore...');
+      const asifDoc = {
+        id: 'rider_asif',
+        name: 'Asif',
+        phone: '8268826200',
+        password: 'Asif@6200',
+        vehicle: 'MH01AV8888',
+        vehicleNo: 'MH01AV8888',
+        vehicleNumber: 'MH01AV8888',
+        lat: 19.1287,
+        lng: 72.8294,
+        isOnline: true,
+        dutyStatus: 'available',
+        role: 'rider',
+        status: 'active',
+        assignedRouteIds: ['route_lifecare_andheri'],
+        batteryLevel: 95,
+        battery: 95,
+        shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
+        currentLocation: {
+          lat: 19.1287,
+          lng: 72.8294,
+          timestamp: new Date().toISOString()
+        },
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'riders', 'rider_asif'), asifDoc, { merge: true });
+      ridersSeeded = true;
+      console.log('[AutoSeeder] Successfully seeded riders/rider_asif to Firestore.');
+    }
+
+    // 3. Ensure a collection route exists for Lifecare if routes collection is empty
+    const routesSnap = await getDocs(collection(db, 'routes'));
+    if (routesSnap.empty) {
+      console.log('[AutoSeeder] routes collection is empty. Seeding routes/route_lifecare_andheri to Firestore...');
+      const routeDoc = {
+        id: 'route_lifecare_andheri',
+        clientId: 'client_lifecare',
+        name: 'Lifecare Andheri West Specimen Collection Loop',
+        description: 'Andheri West & Lokhandwala Clinics to Lifecare Central Hub',
+        destinationName: 'Lifecare Diagnostics',
+        destinationAddress: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
+        destinationLat: 19.1287852,
+        destinationLng: 72.8294183,
+        destinationContact: 'Dr. Jayesh Joshi',
+        destinationPhone: '+91 98200 98200',
+        destinationLab: {
+          name: 'Lifecare Diagnostics',
+          address: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
+          lat: 19.1287852,
+          lng: 72.8294183
+        },
+        stops: [
+          {
+            id: 'stop_1_lokhandwala',
+            name: 'Lokhandwala Collection Centre',
+            address: '4th Cross Road, Lokhandwala Complex, Andheri West',
+            lat: 19.1415,
+            lng: 72.8285,
+            contactPerson: 'Dr. Sneha Desai',
+            phone: '+91 98201 55667',
+            order: 1
+          },
+          {
+            id: 'stop_2_dn_nagar',
+            name: 'DN Nagar Metro Diagnostic Hub',
+            address: 'Link Road, Near DN Nagar Metro, Andheri West',
+            lat: 19.1305,
+            lng: 72.8335,
+            contactPerson: 'Sister Anjali Rao',
+            phone: '+91 98202 77889',
+            order: 2
+          },
+          {
+            id: 'stop_3_versova',
+            name: 'Versova Pathology Point',
+            address: 'Yari Road, Versova, Mumbai',
+            lat: 19.1360,
+            lng: 72.8150,
+            contactPerson: 'Karan Varma',
+            phone: '+91 98203 99001',
+            order: 3
+          }
+        ],
+        timeSlots: ['09:00', '12:00', '15:00', '18:00']
+      };
+      await setDoc(doc(db, 'routes', 'route_lifecare_andheri'), routeDoc, { merge: true });
+      console.log('[AutoSeeder] Successfully seeded routes/route_lifecare_andheri to Firestore.');
+    }
+  } catch (err) {
+    console.error('Firestore Write Error:', err);
+  }
+
+  return { clientsSeeded, ridersSeeded };
+}
+
+// Auto-seed core collections at startup
+seedCoreCollectionsIfEmpty().catch((err) => {
+  console.error('Firestore Write Error:', err);
+});
+
 export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
 
-// Helper to normalize and unify tasks across Admin, Rider, and Client schemas
+// Helper to normalize and unify tasks and trips across Admin, Rider, and Client schemas
 export function formatUnifiedTask(id: string, data: any): PickupTask {
   const clientLabId = data.clientLabId || data.clientId || '';
   const clientLabName = data.clientLabName || data.clientName || 'Diagnostic Facility';
-  const clientLocation = data.clientLabLocation || {
-    lat: data.destination?.lat || data.deliveryLocation?.lat || 19.1287852,
-    lng: data.destination?.lng || data.deliveryLocation?.lng || 72.8294183
-  };
+
+  const clientLat = Array.isArray(data.clientCoords) && data.clientCoords.length === 2
+    ? Number(data.clientCoords[0])
+    : Number(data.clientLabLocation?.lat || data.destination?.lat || data.deliveryLocation?.lat || 19.1287852);
+
+  const clientLng = Array.isArray(data.clientCoords) && data.clientCoords.length === 2
+    ? Number(data.clientCoords[1])
+    : Number(data.clientLabLocation?.lng || data.destination?.lng || data.deliveryLocation?.lng || 72.8294183);
+
+  const clientLocation = { lat: clientLat, lng: clientLng };
 
   const rawStops = Array.isArray(data.stops) && data.stops.length > 0
     ? data.stops
     : (Array.isArray(data.stopsProgress) ? data.stopsProgress : []);
 
-  const unifiedStops = rawStops.map((s: any, idx: number) => ({
-    stopName: s.stopName || s.name || `Collection Stop ${idx + 1}`,
-    address: s.address || 'Diagnostic Collection Point',
-    lat: Number(s.lat || 19.1287852),
-    lng: Number(s.lng || 72.8294183),
-    specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
-    sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
-    status: s.status || 'pending',
-    id: s.id || s.stopId || `stop-${idx + 1}`,
-    contactPerson: s.contactPerson || 'Hospital OPD Desk',
-    phone: s.phone || '+91 98201 11223'
-  }));
+  const unifiedStops = rawStops.map((s: any, idx: number) => {
+    const sLat = Array.isArray(s.coords) && s.coords.length === 2
+      ? Number(s.coords[0])
+      : Number(s.lat || 19.1287852);
+    const sLng = Array.isArray(s.coords) && s.coords.length === 2
+      ? Number(s.coords[1])
+      : Number(s.lng || 72.8294183);
+
+    return {
+      stopName: s.stopName || s.name || `Collection Stop ${idx + 1}`,
+      address: s.address || 'Diagnostic Collection Point',
+      lat: sLat,
+      lng: sLng,
+      specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+      sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+      status: s.status || 'pending',
+      id: s.id || s.stopId || `stop-${idx + 1}`,
+      contactPerson: s.contactPerson || 'Hospital OPD Desk',
+      phone: s.phone || '+91 98201 11223'
+    };
+  });
 
   const stopsProgress: any[] = unifiedStops.map((s: any, idx: number) => ({
     stopId: s.id || `stop-${idx + 1}`,
@@ -289,7 +446,9 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     lng: s.lng,
     contactPerson: s.contactPerson || 'Hospital OPD Desk',
     phone: s.phone || '+91 98201 11223',
-    status: s.status === 'picked_up' || s.status === 'arrived' || s.status === 'no_sample' ? s.status : 'pending',
+    status: s.status === 'picked_up' || s.status === 'completed' || s.status === 'arrived' || s.status === 'no_sample'
+      ? (s.status === 'completed' ? 'picked_up' : s.status)
+      : (s.status === 'in_progress' ? 'arrived' : 'pending'),
     sampleCount: s.specimenCount,
     notes: s.notes || ''
   }));
@@ -300,10 +459,7 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     id: id || data.id,
     clientLabId,
     clientLabName,
-    clientLabLocation: {
-      lat: Number(clientLocation.lat || 19.1287852),
-      lng: Number(clientLocation.lng || 72.8294183)
-    },
+    clientLabLocation: clientLocation,
     riderId: data.riderId || data.assignedRiderId || '',
     riderName: data.riderName || data.assignedRiderName || '',
     riderPhone: data.riderPhone || data.assignedRiderPhone || '',
@@ -325,9 +481,9 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     stopsProgress,
     destination: data.destination || {
       name: clientLabName,
-      address: data.deliveryLocation?.address || '',
-      lat: Number(clientLocation.lat || 19.1287852),
-      lng: Number(clientLocation.lng || 72.8294183),
+      address: data.deliveryLocation?.address || data.clientAddress || '',
+      lat: clientLat,
+      lng: clientLng,
       notes: data.taskNotes || data.destination?.notes || 'Specimen cold-chain transport'
     },
     isDelayed: Boolean(data.isDelayed),
@@ -341,10 +497,145 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
 
 // Realtime Firestore synchronization helpers
 export const CloudSync = {
-  // Dispatch a standardized task with unified schema directly to Firestore collection 'tasks'
+  // Unified trip dispatch creating trip document in Firestore collection 'trips'
+  async dispatchTrip(payload: {
+    client: Client | { id: string; name: string; email?: string; lat?: number; lng?: number; address?: string };
+    rider: PickupBoy | { id: string; name: string; phone: string; lat?: number; lng?: number; vehicleNumber?: string; currentLocation?: any };
+    stops: Array<{ id?: string; stopId?: string; name?: string; stopName?: string; address?: string; lat?: number; lng?: number; specimenCount?: number; sampleCount?: number; status?: string; contactPerson?: string; phone?: string; notes?: string }>;
+    route?: Partial<Route>;
+    timeSlot?: string;
+    scheduledDate?: string;
+    taskNotes?: string;
+    customTripId?: string;
+  }): Promise<any> {
+    const timestamp = Date.now();
+    const tripId = payload.customTripId || `trip_${timestamp}`;
+    const todayStr = payload.scheduledDate || new Date().toISOString().split('T')[0];
+
+    const clientLat = Number(payload.client.lat || (payload.client as any).location?.lat || 19.1287852);
+    const clientLng = Number(payload.client.lng || (payload.client as any).location?.lng || 72.8294183);
+
+    const riderLat = Number(
+      payload.rider.lat ||
+      (payload.rider as any).currentLocation?.lat ||
+      19.1287
+    );
+    const riderLng = Number(
+      payload.rider.lng ||
+      (payload.rider as any).currentLocation?.lng ||
+      72.8294
+    );
+
+    // 1. Format unified trip stops schema
+    const tripStops = payload.stops.map((s: any, idx: number) => ({
+      stopIndex: idx + 1,
+      name: s.name || s.stopName || `Stop ${idx + 1}`,
+      address: s.address || 'Diagnostic Collection Point, Mumbai',
+      coords: [Number(s.lat || 19.1287852), Number(s.lng || 72.8294183)] as [number, number],
+      specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+      status: 'pending' as 'pending' | 'in_progress' | 'completed',
+      id: s.id || s.stopId || `stop-${idx + 1}`,
+      stopId: s.stopId || s.id || `stop-${idx + 1}`,
+      contactPerson: s.contactPerson || 'Lab Coordinator',
+      phone: s.phone || '+91 98201 11223',
+      notes: s.notes || ''
+    }));
+
+    // Exact Unified Trip document model
+    const tripDocPayload = {
+      id: tripId,
+      clientId: payload.client.id,
+      clientName: payload.client.name,
+      clientEmail: (payload.client as any).email || 'jayesh.joshi@lifecarediagnostics.com',
+      clientCoords: [clientLat, clientLng] as [number, number],
+      riderId: payload.rider.id,
+      riderName: payload.rider.name,
+      riderPhone: payload.rider.phone,
+      riderCoords: [riderLat, riderLng] as [number, number],
+      stops: tripStops,
+      currentStopIndex: 0,
+      status: 'assigned' as 'assigned' | 'in_transit' | 'completed',
+      chillerTemp: 4.2,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      // Additional metadata for compatibility
+      routeId: payload.route?.id || `route-${payload.client.id}`,
+      routeName: payload.route?.name || `${payload.client.name} Collection Loop`,
+      timeSlot: payload.timeSlot || '09:00',
+      date: todayStr,
+      riderVehicle: payload.rider.vehicleNumber || 'MH02TN0897',
+      isDelayed: false,
+      delayMinutes: 0,
+      issueFlags: []
+    };
+
+    try {
+      // Write to 'trips' collection
+      await setDoc(doc(db, 'trips', tripId), tripDocPayload);
+      console.log(`[CloudSync] Dispatched trip document ${tripId} to trips collection.`);
+
+      // Also mirror to 'tasks' collection for backward compatibility
+      const legacyTaskPayload = {
+        ...tripDocPayload,
+        clientLabId: payload.client.id,
+        clientLabName: payload.client.name,
+        clientLabLocation: { lat: clientLat, lng: clientLng },
+        assignedRiderId: payload.rider.id,
+        assignedRiderName: payload.rider.name,
+        assignedRiderPhone: payload.rider.phone,
+        stopsProgress: tripStops.map((s) => ({
+          stopId: s.id,
+          stopName: s.name,
+          address: s.address,
+          lat: s.coords[0],
+          lng: s.coords[1],
+          contactPerson: s.contactPerson,
+          phone: s.phone,
+          status: 'pending',
+          sampleCount: s.specimenCount,
+          specimenCount: s.specimenCount,
+          notes: s.notes
+        })),
+        destination: {
+          name: payload.route?.destinationLab?.name || payload.client.name,
+          address: payload.route?.destinationLab?.address || (payload.client as any).address || '',
+          lat: clientLat,
+          lng: clientLng,
+          notes: payload.taskNotes || 'Specimen cold-chain transport'
+        }
+      };
+      await setDoc(doc(db, 'tasks', tripId), legacyTaskPayload);
+
+      // Update riders/${riderId} setting activeTripId = tripId and dutyStatus = "on_trip"
+      const riderDocRef = doc(db, 'riders', payload.rider.id);
+      await setDoc(
+        riderDocRef,
+        {
+          id: payload.rider.id,
+          activeTripId: tripId,
+          dutyStatus: 'on_trip',
+          currentTaskId: tripId,
+          activeTaskId: tripId,
+          activeRouteId: payload.route?.id || `route-${payload.client.id}`,
+          lastDispatchedAt: serverTimestamp(),
+          lastUpdated: serverTimestamp(),
+          status: 'active',
+          isOnline: true
+        },
+        { merge: true }
+      );
+      console.log(`[CloudSync] Updated riders/${payload.rider.id} activeTripId=${tripId}, dutyStatus="on_trip"`);
+    } catch (err) {
+      console.error("Firestore Write Error:", err);
+    }
+
+    return tripDocPayload;
+  },
+
+  // Standardized dispatchTask wrapper returning formatted PickupTask
   async dispatchTask(payload: {
-    client: Client | { id: string; name: string; lat?: number; lng?: number; address?: string };
-    rider: PickupBoy | { id: string; name: string; phone: string; vehicleNumber?: string };
+    client: Client | { id: string; name: string; email?: string; lat?: number; lng?: number; address?: string };
+    rider: PickupBoy | { id: string; name: string; phone: string; vehicleNumber?: string; lat?: number; lng?: number };
     stops: Array<{ id?: string; stopId?: string; name?: string; stopName?: string; address?: string; lat?: number; lng?: number; specimenCount?: number; sampleCount?: number; status?: string; assignedRiderId?: string; assignedRiderName?: string; contactPerson?: string; phone?: string; notes?: string }>;
     route?: Partial<Route>;
     timeSlot?: string;
@@ -352,95 +643,191 @@ export const CloudSync = {
     taskNotes?: string;
     customTaskId?: string;
   }): Promise<PickupTask> {
-    const todayStr = payload.scheduledDate || new Date().toISOString().split('T')[0];
-    const taskId = payload.customTaskId || `task-${todayStr.replace(/-/g, '')}-${(payload.timeSlot || '0900').replace(':', '')}-${Date.now().toString().slice(-4)}`;
-
-    const stopsFormatted = payload.stops.map((s: any, idx: number) => ({
-      id: s.id || s.stopId || `stop-${idx + 1}`,
-      stopId: s.stopId || s.id || `stop-${idx + 1}`,
-      stopName: s.name || s.stopName || `Stop ${idx + 1}`,
-      name: s.name || s.stopName || `Stop ${idx + 1}`,
-      address: s.address || 'Diagnostic Collection Point, Mumbai',
-      lat: Number(s.lat || 19.1287852),
-      lng: Number(s.lng || 72.8294183),
-      specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
-      sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
-      status: 'assigned',
-      assignedRiderId: payload.rider.id,
-      assignedRiderName: payload.rider.name,
-      contactPerson: s.contactPerson || 'Lab Coordinator',
-      phone: s.phone || '+91 98201 11223',
-      notes: s.notes || ''
-    }));
-
-    const clientLocation = {
-      lat: Number(payload.client.lat || (payload.client as any).location?.lat || 19.1287852),
-      lng: Number(payload.client.lng || (payload.client as any).location?.lng || 72.8294183)
-    };
-
-    const firestorePayload = {
-      clientLabId: payload.client.id,
-      clientLabName: payload.client.name,
-      clientLabLocation: clientLocation,
-      riderId: payload.rider.id,
-      riderName: payload.rider.name,
-      riderPhone: payload.rider.phone,
-      assignedRiderId: payload.rider.id,
-      assignedRiderName: payload.rider.name,
-      stops: stopsFormatted,
-      status: 'assigned',
-      createdAt: serverTimestamp(),
-      scheduledDate: todayStr,
-      // Compatibility fields for existing dashboards
-      id: taskId,
-      clientId: payload.client.id,
-      clientName: payload.client.name,
-      routeId: payload.route?.id || `route-${payload.client.id}`,
-      routeName: payload.route?.name || `${payload.client.name} Collection Loop`,
-      timeSlot: payload.timeSlot || '09:00',
-      date: todayStr,
-      riderVehicle: payload.rider.vehicleNumber || 'MH02TN0897',
-      currentStopIndex: 0,
-      stopsProgress: stopsFormatted,
-      destination: {
-        name: payload.route?.destinationLab?.name || payload.client.name,
-        address: payload.route?.destinationLab?.address || payload.client.address || '',
-        lat: Number(payload.route?.destinationLab?.lat || clientLocation.lat),
-        lng: Number(payload.route?.destinationLab?.lng || clientLocation.lng),
-        notes: payload.taskNotes || 'Specimen cold-chain transport'
-      },
-      isDelayed: false,
-      delayMinutes: 0,
-      issueFlags: []
-    };
-
-    try {
-      await setDoc(doc(db, 'tasks', taskId), firestorePayload);
-      console.log(`[CloudSync] Dispatched task ${taskId} directly to Firestore tasks collection.`);
-
-      // Update the rider's active task reference in Firestore so all stops reflect instantly on the rider app
-      const riderDocRef = doc(db, 'riders', payload.rider.id);
-      await setDoc(riderDocRef, {
-        id: payload.rider.id,
-        currentTaskId: taskId,
-        activeTaskId: taskId,
-        activeRouteId: payload.route?.id || `route-${payload.client.id}`,
-        lastDispatchedAt: serverTimestamp(),
-        lastUpdated: serverTimestamp(),
-        status: 'active',
-        isOnline: true
-      }, { merge: true });
-      console.log(`[CloudSync] Updated rider ${payload.rider.id} active task reference to ${taskId}`);
-    } catch (e) {
-      console.warn('[CloudSync] Error saving dispatched task to Firestore:', e);
-    }
-
-    const localTask = formatUnifiedTask(taskId, {
-      ...firestorePayload,
-      createdAt: new Date().toISOString()
+    const tripPayload = await this.dispatchTrip({
+      ...payload,
+      customTripId: payload.customTaskId
     });
 
-    return localTask;
+    return formatUnifiedTask(tripPayload.id, {
+      ...tripPayload,
+      createdAt: new Date().toISOString()
+    });
+  },
+
+  // Real-time trip lifecycle updates
+  async startTripRoute(tripId: string, riderId?: string) {
+    try {
+      const tripRef = doc(db, 'trips', tripId);
+      const updateData: any = {
+        status: 'in_transit',
+        startedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      await setDoc(tripRef, updateData, { merge: true });
+
+      // Also mirror to legacy tasks
+      await setDoc(doc(db, 'tasks', tripId), {
+        status: 'in_transit',
+        startedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      if (riderId) {
+        await setDoc(doc(db, 'riders', riderId), {
+          dutyStatus: 'on_trip',
+          activeTripId: tripId,
+          status: 'active',
+          lastUpdated: serverTimestamp()
+        }, { merge: true });
+      }
+      console.log(`[CloudSync] Started trip route for ${tripId}`);
+    } catch (err) {
+      console.error("Firestore Write Error:", err);
+    }
+  },
+
+  async updateTripRiderLocation(
+    tripId: string,
+    riderId: string,
+    lat: number,
+    lng: number,
+    extra?: { heading?: number; speed?: number; battery?: number; riderName?: string; riderPhone?: string }
+  ) {
+    try {
+      const numLat = Number(lat);
+      const numLng = Number(lng);
+      if (isNaN(numLat) || isNaN(numLng)) return;
+
+      // 1. Update trip document riderCoords and updatedAt
+      if (tripId) {
+        const tripRef = doc(db, 'trips', tripId);
+        await setDoc(tripRef, {
+          riderCoords: [numLat, numLng],
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      // 2. Update rider document location
+      if (riderId) {
+        const riderRef = doc(db, 'riders', riderId);
+        await setDoc(riderRef, {
+          lat: numLat,
+          lng: numLng,
+          currentLocation: {
+            lat: numLat,
+            lng: numLng,
+            timestamp: new Date().toISOString(),
+            heading: extra?.heading || 0,
+            speed: extra?.speed || 0
+          },
+          lastPingTime: new Date().toISOString(),
+          lastUpdated: serverTimestamp(),
+          isOnline: true
+        }, { merge: true });
+
+        // Ping log
+        const pingId = `ping-${riderId}-${Date.now()}`;
+        setDoc(doc(db, 'location_pings', pingId), {
+          id: pingId,
+          riderId,
+          riderName: extra?.riderName || 'Rider',
+          lat: numLat,
+          lng: numLng,
+          timestamp: new Date().toISOString(),
+          heading: extra?.heading || 0,
+          speed: extra?.speed || 0,
+          battery: extra?.battery || 95,
+          taskId: tripId
+        }).catch((err) => {
+          console.error("Firestore Write Error:", err);
+        });
+      }
+    } catch (err) {
+      console.error("Firestore Write Error:", err);
+    }
+  },
+
+  async completeTripStop(tripId: string, stopIndex: number, currentStops: any[], extra?: any) {
+    try {
+      const updatedStops = currentStops.map((s, idx) => {
+        if (idx === stopIndex) {
+          return {
+            ...s,
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+            specimenCount: extra?.sampleCount !== undefined ? Number(extra.sampleCount) : Number(s.specimenCount || 0),
+            photoUrl: extra?.photoUrl || s.photoUrl || '',
+            notes: extra?.notes || s.notes || ''
+          };
+        }
+        if (idx === stopIndex + 1 && s.status === 'pending') {
+          return { ...s, status: 'in_progress' };
+        }
+        return s;
+      });
+
+      const nextStopIndex = stopIndex + 1 < currentStops.length ? stopIndex + 1 : currentStops.length;
+
+      const tripRef = doc(db, 'trips', tripId);
+      await setDoc(tripRef, {
+        stops: updatedStops,
+        currentStopIndex: nextStopIndex,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Mirror to tasks
+      await setDoc(doc(db, 'tasks', tripId), {
+        currentStopIndex: nextStopIndex,
+        stopsProgress: updatedStops.map(s => ({
+          stopId: s.id || s.stopId,
+          stopName: s.name,
+          address: s.address,
+          lat: s.coords?.[0] || s.lat,
+          lng: s.coords?.[1] || s.lng,
+          status: s.status === 'completed' ? 'picked_up' : s.status,
+          sampleCount: s.specimenCount,
+          notes: s.notes
+        })),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      console.log(`[CloudSync] Completed stop ${stopIndex + 1} for trip ${tripId}`);
+    } catch (err) {
+      console.error("Firestore Write Error:", err);
+    }
+  },
+
+  async completeTripFinalHandover(tripId: string, riderId: string, dropData?: any) {
+    try {
+      const tripRef = doc(db, 'trips', tripId);
+      await setDoc(tripRef, {
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        finalDrop: dropData || null
+      }, { merge: true });
+
+      // Mirror to tasks
+      await setDoc(doc(db, 'tasks', tripId), {
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      if (riderId) {
+        await setDoc(doc(db, 'riders', riderId), {
+          dutyStatus: 'available',
+          activeTripId: '',
+          currentTaskId: '',
+          activeTaskId: '',
+          lastUpdated: serverTimestamp()
+        }, { merge: true });
+      }
+
+      console.log(`[CloudSync] Successfully completed final delivery handover for trip ${tripId}`);
+    } catch (err) {
+      console.error("Firestore Write Error:", err);
+    }
   },
 
   // Sync a single document to Firestore
@@ -451,11 +838,7 @@ export const CloudSync = {
       await setDoc(ref, JSON.parse(JSON.stringify(data)), { merge: true });
       console.log(`[CloudSync] Synced ${collectionName}/${docId} to Firestore.`);
     } catch (err: any) {
-      if (err?.code === 'permission-denied') {
-        console.info(`[CloudSync] Firestore ${collectionName}/${docId} write check: ${err.message}`);
-      } else {
-        console.warn(`[CloudSync] Sync notice for ${collectionName}/${docId}:`, err?.message || err);
-      }
+      console.error("Firestore Write Error:", err);
     }
   },
 
@@ -467,11 +850,7 @@ export const CloudSync = {
       await deleteDoc(ref);
       console.log(`[CloudSync] Deleted ${collectionName}/${docId} from Firestore.`);
     } catch (err: any) {
-      if (err?.code === 'permission-denied') {
-        console.info(`[CloudSync] Firestore ${collectionName}/${docId} delete check: ${err.message}`);
-      } else {
-        console.warn(`[CloudSync] Delete notice for ${collectionName}/${docId}:`, err?.message || err);
-      }
+      console.error("Firestore Write Error:", err);
     }
   },
 
@@ -489,11 +868,7 @@ export const CloudSync = {
       await batch.commit();
       console.log(`[CloudSync] Batch synced ${items.length} items to ${collectionName}.`);
     } catch (err: any) {
-      if (err?.code === 'permission-denied') {
-        console.info(`[CloudSync] Firestore batch sync for ${collectionName}: ${err.message}`);
-      } else {
-        console.warn(`[CloudSync] Batch sync notice for ${collectionName}:`, err?.message || err);
-      }
+      console.error("Firestore Write Error:", err);
     }
   },
 
@@ -945,6 +1320,125 @@ export const CloudSync = {
       );
     } catch (e) {
       console.warn('[CloudSync] subscribeToRiderDocument init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Real-time snapshot subscription for ALL trips in 'trips' collection (for Admin)
+  subscribeToTrips(onUpdate: (trips: any[]) => void): Unsubscribe {
+    try {
+      return onSnapshot(
+        collection(db, 'trips'),
+        (snapshot) => {
+          const list: any[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            list.push({
+              id: docSnap.id,
+              ...data
+            });
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          console.warn('[CloudSync] Trips collection subscription notice:', err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToTrips init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Scoped real-time subscription for Rider Trips ('trips' collection)
+  subscribeToRiderTrips(riderId: string, riderPhone?: string, onUpdate?: (trips: any[]) => void): Unsubscribe {
+    if (!riderId || !onUpdate) return () => {};
+    try {
+      const cleanPhone = (riderPhone || '').replace(/\D/g, '');
+      return onSnapshot(
+        collection(db, 'trips'),
+        (snapshot) => {
+          const list: any[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            const tPhone = (data.riderPhone || '').replace(/\D/g, '');
+            const isMatchRider =
+              data.riderId === riderId ||
+              data.assignedRiderId === riderId ||
+              (cleanPhone && tPhone === cleanPhone) ||
+              (riderPhone && data.riderPhone === riderPhone);
+
+            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'completed'].includes(data.status);
+
+            if (isMatchRider && isMatchingStatus) {
+              list.push({
+                id: docSnap.id,
+                ...data
+              });
+            }
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          console.warn(`[CloudSync] Rider trips subscription notice for ${riderId}:`, err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToRiderTrips init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Scoped real-time subscription for Client Trips ('trips' collection)
+  subscribeToClientTrips(
+    clientId: string,
+    clientEmailOrCb?: string | ((trips: any[]) => void),
+    maybeCb?: (trips: any[]) => void
+  ): Unsubscribe {
+    let clientEmail: string | undefined;
+    let onUpdate: ((trips: any[]) => void) | undefined;
+
+    if (typeof clientEmailOrCb === 'function') {
+      onUpdate = clientEmailOrCb;
+      clientEmail = undefined;
+    } else {
+      clientEmail = clientEmailOrCb;
+      onUpdate = maybeCb;
+    }
+
+    if (!clientId && !clientEmail) return () => {};
+    if (!onUpdate) return () => {};
+
+    try {
+      const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      return onSnapshot(
+        collection(db, 'trips'),
+        (snapshot) => {
+          const list: any[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            const docEmail = (data.clientEmail || '').trim().toLowerCase();
+            const isMatchClient =
+              (clientId && (data.clientId === clientId || data.clientLabId === clientId)) ||
+              (cleanEmail && docEmail === cleanEmail);
+
+            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'completed'].includes(data.status);
+
+            if (isMatchClient && isMatchingStatus) {
+              list.push({
+                id: docSnap.id,
+                ...data
+              });
+            }
+          });
+          onUpdate!(list);
+        },
+        (err) => {
+          console.warn(`[CloudSync] Client trips subscription notice for ${clientId || clientEmail}:`, err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToClientTrips init exception:', e);
       return () => {};
     }
   }

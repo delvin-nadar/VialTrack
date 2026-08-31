@@ -23,6 +23,8 @@ import {
   Car
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
+import { db } from '../../services/firebase';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import { formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 import { EditRiderModal } from './EditRiderModal';
@@ -46,9 +48,14 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     portalUrl: string;
   } | null>(null);
 
-  const handleDeleteRider = (riderId: string, riderName: string) => {
+  const handleDeleteRider = async (riderId: string, riderName: string) => {
     if (window.confirm(`Are you sure you want to remove rider "${riderName}" from the fleet?`)) {
       StorageService.deleteRider(riderId);
+      try {
+        await deleteDoc(doc(db, 'riders', riderId));
+      } catch (err) {
+        console.error("Firestore Write Error:", err);
+      }
       onRefresh();
     }
   };
