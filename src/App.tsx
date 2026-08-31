@@ -22,6 +22,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminLogin } from './components/auth/AdminLogin';
 import { ClientLogin } from './components/auth/ClientLogin';
 import { RiderLogin } from './components/auth/RiderLogin';
+import { ForcePasswordModal } from './components/auth/ForcePasswordModal';
 
 // Admin Views
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -275,6 +276,19 @@ function AppContent() {
 
     return () => unsubAuth();
   }, []);
+
+  // Handle Force Password Setup
+  const handlePasswordChanged = (newPassword: string) => {
+    if (currentUser) {
+      const updatedUser: UserAuth = {
+        ...currentUser,
+        mustChangePassword: false
+      };
+      StorageService.setCurrentUser(updatedUser);
+      setCurrentUser(updatedUser);
+      reloadData();
+    }
+  };
 
   // Logout with Firebase signOut
   const handleLogout = async () => {
@@ -554,6 +568,14 @@ function AppContent() {
 
       {/* Footer */}
       <Footer role={currentRoute !== 'landing' ? currentRoute : undefined} />
+
+      {/* Force Password Change Modal for First-Time / Temporary Login */}
+      {currentUser && currentUser.mustChangePassword && (
+        <ForcePasswordModal
+          user={currentUser}
+          onPasswordChanged={handlePasswordChanged}
+        />
+      )}
 
       {/* Chain of Custody Proof Modal */}
       <ProofModal

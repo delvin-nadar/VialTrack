@@ -1,7 +1,28 @@
 import React, { useState } from 'react';
 import { Client, Route, RouteStop } from '../../types';
-import { Building2, Plus, Edit2, Trash2, MapPin, Clock, Phone, Mail, Check, X, ChevronDown, ChevronUp, Save, ShieldCheck, Search } from 'lucide-react';
+import {
+  Building2,
+  Plus,
+  Edit2,
+  Trash2,
+  MapPin,
+  Clock,
+  Phone,
+  Mail,
+  Check,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Save,
+  ShieldCheck,
+  Search,
+  KeyRound,
+  RefreshCw,
+  Copy,
+  AlertCircle
+} from 'lucide-react';
 import { StorageService } from '../../services/storage';
+import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 
 interface ManageClientsProps {
   clients: Client[];
@@ -15,13 +36,22 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [isAddingRoute, setIsAddingRoute] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [createdCredentialsModal, setCreatedCredentialsModal] = useState<{
+    name: string;
+    loginId: string;
+    password: string;
+    portalUrl: string;
+  } | null>(null);
 
   // Client form state
-  const [clientForm, setClientForm] = useState<Partial<Client>>({
+  const [clientForm, setClientForm] = useState<Partial<Client> & { password?: string }>({
     name: '',
     contactPerson: '',
     phone: '',
     email: '',
+    password: '',
     address: '',
     lat: 19.1860,
     lng: 72.8485,
@@ -78,41 +108,95 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   const selectedClient = clients.find((c) => c.id === selectedClientId) || filteredClients[0] || clients[0];
   const clientRoutes = routes.filter((r) => r.clientId === selectedClient?.id);
 
+  const handleGeneratePassword = () => {
+    const strong = generateStrongPassword(9);
+    setClientForm((prev) => ({ ...prev, password: strong }));
+    setFormError(null);
+  };
+
+  const handleCopyClientCredentials = async (loginId: string, tempPassword: string) => {
+    const text = formatCredentialsMessage({
+      portalUrl: 'https://delvin-nadar.github.io/VialTrack/#/client',
+      loginId,
+      tempPassword
+    });
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2500);
+    }
+  };
+
   // Handle Save Client
   const handleSaveClient = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientForm.name || !clientForm.email) return;
+    setFormError(null);
+
+    if (!clientForm.name?.trim()) {
+      setFormError('Diagnostic Lab / Clinic Name is required.');
+      return;
+    }
+    if (!clientForm.phone?.trim() && !clientForm.email?.trim()) {
+      setFormError('Phone number or Email (Login ID) is required.');
+      return;
+    }
+
+    if (clientForm.password && clientForm.password.length < 8) {
+      setFormError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    const effectivePassword = clientForm.password || (selectedClient?.password ? selectedClient.password : generateStrongPassword(9));
+    const effectivePhone = clientForm.phone?.trim() || '+91 98200 00000';
+    const effectiveEmail = clientForm.email?.trim() || `lab.${clientForm.name.toLowerCase().replace(/\s+/g, '')}@vialtrack.in`;
 
     if (isEditingClient && selectedClient) {
       const updated: Client = {
         ...selectedClient,
-        name: clientForm.name || selectedClient.name,
-        contactPerson: clientForm.contactPerson || selectedClient.contactPerson,
-        phone: clientForm.phone || selectedClient.phone,
-        email: clientForm.email || selectedClient.email,
-        address: clientForm.address || selectedClient.address,
+        name: clientForm.name.trim(),
+        contactPerson: clientForm.contactPerson?.trim() || selectedClient.contactPerson,
+        phone: effectivePhone,
+        email: effectiveEmail,
+        password: effectivePassword,
+        role: 'client',
+        status: clientForm.active ? 'active' : 'inactive',
+        address: clientForm.address?.trim() || selectedClient.address,
         lat: Number(clientForm.lat) || selectedClient.lat,
         lng: Number(clientForm.lng) || selectedClient.lng,
         billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 450,
-        active: clientForm.active ?? true
+        active: clientForm.active ?? true,
+        mustChangePassword: selectedClient.mustChangePassword ?? false,
+        failedAttempts: selectedClient.failedAttempts ?? 0
       };
       StorageService.updateClient(updated);
     } else {
       const newClient: Client = {
         id: `client-${Date.now()}`,
-        name: clientForm.name,
-        contactPerson: clientForm.contactPerson || 'Laboratory Ops Lead',
-        phone: clientForm.phone || '+91 98200 00000',
-        email: clientForm.email,
-        address: clientForm.address || 'Mumbai, Maharashtra',
+        name: clientForm.name.trim(),
+        contactPerson: clientForm.contactPerson?.trim() || 'Laboratory Ops Lead',
+        phone: effectivePhone,
+        email: effectiveEmail,
+        password: effectivePassword,
+        role: 'client',
+        status: 'active',
+        address: clientForm.address?.trim() || 'Mumbai, Maharashtra',
         lat: Number(clientForm.lat) || 19.1860,
         lng: Number(clientForm.lng) || 72.8485,
         active: true,
+        mustChangePassword: true,
+        failedAttempts: 0,
         createdAt: new Date().toISOString(),
         billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 450
       };
       StorageService.addClient(newClient);
       setSelectedClientId(newClient.id);
+
+      setCreatedCredentialsModal({
+        name: newClient.name,
+        loginId: newClient.phone || newClient.email,
+        password: effectivePassword,
+        portalUrl: 'https://delvin-nadar.github.io/VialTrack/#/client'
+      });
     }
 
     setIsAddingClient(false);
@@ -336,10 +420,24 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
+                    type="button"
+                    onClick={() => handleCopyClientCredentials(selectedClient.phone || selectedClient.email, selectedClient.password || 'SecondMedicOps@2026')}
+                    className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold rounded-lg transition-colors border border-sky-200 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title="Copy formatted credentials text to clipboard"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copySuccess ? 'Copied!' : 'Copy Credentials'}</span>
+                  </button>
+
+                  <button
                     onClick={() => {
-                      setClientForm(selectedClient);
+                      setClientForm({
+                        ...selectedClient,
+                        password: selectedClient.password || ''
+                      });
                       setIsEditingClient(true);
                       setIsAddingClient(false);
+                      setFormError(null);
                     }}
                     className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
                   >
@@ -538,6 +636,13 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
               </button>
             </div>
 
+            {formError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSaveClient} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
@@ -568,7 +673,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                 </div>
                 <div>
                   <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                    Contact Phone
+                    Contact Phone / Login ID *
                   </label>
                   <input
                     type="text"
@@ -593,8 +698,48 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
                 />
                 <span className="text-[11px] text-slate-400 mt-0.5 block">
-                  The client will use this email address to log in to their dashboard.
+                  The client will use this email or phone number to log in to their dashboard.
                 </span>
+              </div>
+
+              {/* Password / Access Key Field */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-700 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Password / Access Key {isAddingClient && '*'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    className="text-[11px] text-sky-700 hover:text-sky-800 font-bold flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-sky-200"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Generate Strong Password
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder={isEditingClient ? 'Leave blank to keep existing password' : 'Min 8 chars alphanumeric + symbols'}
+                    value={clientForm.password || ''}
+                    onChange={(e) => setClientForm({ ...clientForm, password: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-hidden focus:border-sky-600"
+                  />
+                  {clientForm.password && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyClientCredentials(clientForm.phone || clientForm.email || '', clientForm.password || '')}
+                      className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold text-xs shrink-0 flex items-center gap-1 cursor-pointer"
+                      title="Copy credentials text"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Must be at least 8 characters. On first login, clients will be prompted to set their permanent password.
+                </p>
               </div>
 
               <div>
@@ -683,6 +828,58 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Credentials Created Notification Modal */}
+      {createdCredentialsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                <span>Client Account Created</span>
+              </h3>
+              <button
+                onClick={() => setCreatedCredentialsModal(null)}
+                className="p-1 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Diagnostic Client <strong className="text-slate-900">{createdCredentialsModal.name}</strong> has been registered. Share these credentials with the client admin:
+            </p>
+
+            <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 font-mono text-xs text-slate-800 space-y-1.5 whitespace-pre-wrap select-all">
+              {formatCredentialsMessage({
+                portalUrl: createdCredentialsModal.portalUrl,
+                loginId: createdCredentialsModal.loginId,
+                tempPassword: createdCredentialsModal.password
+              })}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleCopyClientCredentials(createdCredentialsModal.loginId, createdCredentialsModal.password);
+                }}
+                className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer"
+              >
+                <Copy className="w-4 h-4" />
+                <span>{copySuccess ? 'Copied to Clipboard!' : 'Copy Credentials Message'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreatedCredentialsModal(null)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

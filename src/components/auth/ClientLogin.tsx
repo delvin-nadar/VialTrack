@@ -19,10 +19,10 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
     e.preventDefault();
     setError(null);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanInput = email.trim();
 
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setError('Please enter a valid laboratory / hospital contact email.');
+    if (!cleanInput) {
+      setError('Please enter a valid laboratory / hospital contact email or phone.');
       return;
     }
 
@@ -34,30 +34,97 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
     setLoading(true);
 
     try {
-      // 1. Strict Firebase Authentication verification exclusively
-      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const clients = StorageService.getClients();
+      const cleanPhone = cleanInput.replace(/\D/g, '');
+      const lowerIdent = cleanInput.toLowerCase();
 
-      if (!userCredential || !userCredential.user) {
-        throw new Error('No user credential returned');
+      // Dynamic Client Lookup by email or phone
+      const matchedClient = clients.find((c) => {
+        const cPhone = c.phone.replace(/\D/g, '');
+        return (
+          c.email?.toLowerCase() === lowerIdent ||
+          (cleanPhone.length >= 6 && cPhone.includes(cleanPhone)) ||
+          c.id.toLowerCase() === lowerIdent
+        );
+      });
+
+      // Status check
+      if (matchedClient && matchedClient.status === 'inactive') {
+        setError('Account inactive or suspended. Contact SecondMedic Dispatch.');
+        setLoading(false);
+        return;
       }
 
-      const fbUser = userCredential.user;
-      const clients = StorageService.getClients();
-      const matchedClient = clients.find((c) => c.email?.toLowerCase() === cleanEmail) || clients[0];
+      // Lockout check
+      if (matchedClient && matchedClient.lockoutUntil) {
+        const lockoutTime = new Date(matchedClient.lockoutUntil).getTime();
+        const now = Date.now();
+        if (lockoutTime > now) {
+          const remainingSecs = Math.ceil((lockoutTime - now) / 1000);
+          const minutes = Math.floor(remainingSecs / 60);
+          const seconds = remainingSecs % 60;
+          setError(
+            `Account temporarily locked due to 5 failed attempts. Please retry in ${
+              minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+            }.`
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
+      let isAuthenticated = false;
+      const emailToAuth = matchedClient?.email || (cleanInput.includes('@') ? cleanInput : `${cleanPhone || 'client'}@vialtrack.in`);
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, emailToAuth, password);
+        if (userCredential && userCredential.user) {
+          isAuthenticated = true;
+        }
+      } catch (fbErr: any) {
+        if (matchedClient?.password && matchedClient.password === password) {
+          isAuthenticated = true;
+        }
+      }
+
+      if (!isAuthenticated) {
+        if (matchedClient) {
+          const { attempts, isLocked } = StorageService.recordClientFailedAttempt(matchedClient.id);
+          if (isLocked) {
+            setError('Account temporarily locked due to 5 failed attempts. Please retry in 3 minutes.');
+          } else {
+            const remaining = 5 - attempts;
+            setError(
+              remaining > 0
+                ? `Invalid email or password. Please try again. (${remaining} attempts remaining before temporary lockout)`
+                : 'Invalid email or password. Please try again.'
+            );
+          }
+        } else {
+          setError('Invalid email or password. Please try again.');
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Successful login -> Reset failed attempts
+      if (matchedClient) {
+        StorageService.resetClientFailedAttempts(matchedClient.id);
+      }
 
       const user: UserAuth = {
-        id: fbUser.uid || `user-${matchedClient?.id || 'client-apex'}`,
-        email: cleanEmail,
-        name: fbUser.displayName || `${matchedClient?.name || 'Metropolis Healthcare'} (Lab Ops)`,
+        id: `user-${matchedClient?.id || 'client-apex'}`,
+        email: emailToAuth,
+        name: matchedClient?.name || 'Metropolis Healthcare (Lab Ops)',
         role: 'client',
         clientId: matchedClient?.id || 'client-bkc-metropolis',
-        phone: matchedClient?.phone || '+91 98200 11223'
+        phone: matchedClient?.phone || '+91 98200 11223',
+        mustChangePassword: matchedClient?.mustChangePassword ?? false
       };
 
       onLoginSuccess(user);
     } catch (authError: any) {
-      console.warn('[ClientLogin] Firebase authentication failed:', authError?.code || authError?.message);
-      // Keep user on login screen, do not update auth state, show red banner
+      console.warn('[ClientLogin] Authentication failed:', authError?.code || authError?.message);
       setError('Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
@@ -93,7 +160,7 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-start gap-2">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-start gap-2 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -102,22 +169,22 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3.5">
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Laboratory / Hospital Email
+              Laboratory / Hospital Email or Phone
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="off"
-                placeholder="ops@yourlab.com"
+                placeholder="ops@yourlab.com or +91 98200 11223"
                 className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all font-mono"
               />
             </div>
             <span className="text-[11px] text-slate-500 mt-0.5 block">
-              Enter the email registered with SecondMedic Ops
+              Enter the credentials registered with SecondMedic Ops
             </span>
           </div>
 
@@ -151,7 +218,7 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-1.5 py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full mt-1.5 py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
           >
             {loading ? 'Authenticating...' : 'Sign in to Lab Dashboard'}
             <ArrowRight className="w-4 h-4" />

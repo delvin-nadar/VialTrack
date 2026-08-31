@@ -21,10 +21,15 @@ import {
   Trash2,
   Camera,
   UploadCloud,
-  Check
+  Check,
+  KeyRound,
+  RefreshCw,
+  Clock,
+  Car
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { compressImageToBase64 } from '../../services/imageWatermark';
+import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 
 interface ManageRidersProps {
   riders: PickupBoy[];
@@ -36,12 +41,14 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddingRider, setIsAddingRider] = useState(false);
   const [editingRider, setEditingRider] = useState<PickupBoy | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [createdCredentialsModal, setCreatedCredentialsModal] = useState<{
     name: string;
     phone: string;
     email: string;
-    pin: string;
-    link: string;
+    password: string;
+    portalUrl: string;
   } | null>(null);
 
   // Photo input ref
@@ -71,8 +78,11 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     name: string;
     phone: string;
     email: string;
+    password: string;
+    plateNumber: string;
     vehicleNumber: string;
     vehicleType: string;
+    shiftTimings: string;
     assignedRouteIds: string[];
     status: RiderStatus;
     photoUrl: string;
@@ -80,12 +90,21 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     name: '',
     phone: '',
     email: '',
+    password: '',
+    plateNumber: '',
     vehicleNumber: '',
     vehicleType: 'Hero Splendor Plus (Cold-Box Mounted)',
+    shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
     assignedRouteIds: [],
     status: 'active',
     photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80'
   });
+
+  const handleGeneratePassword = () => {
+    const strong = generateStrongPassword(9);
+    setForm((prev) => ({ ...prev, password: strong }));
+    setFormError(null);
+  };
 
   const handleDeleteRider = (riderId: string, riderName: string) => {
     if (window.confirm(`Are you sure you want to remove rider "${riderName}" from the fleet?`)) {
@@ -108,34 +127,64 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
 
   const handleSaveRider = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone) return;
+    setFormError(null);
+
+    if (!form.name.trim()) {
+      setFormError('Rider Full Name is required.');
+      return;
+    }
+    if (!form.phone.trim()) {
+      setFormError('Phone number (Primary Login ID) is required.');
+      return;
+    }
+
+    // Minimum 8 characters validation rule
+    if (form.password && form.password.length < 8) {
+      setFormError('Password / Access Key must be at least 8 characters long.');
+      return;
+    }
+
+    const effectivePassword = form.password || (editingRider?.password ? editingRider.password : generateStrongPassword(9));
+    const effectivePlate = form.plateNumber || form.vehicleNumber || 'MH-02-XX-9999';
 
     if (editingRider) {
       const updated: PickupBoy = {
         ...editingRider,
-        name: form.name,
-        phone: form.phone,
-        email: form.email || `${form.name.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`,
-        vehicleNumber: form.vehicleNumber || 'MH-02-AB-1234',
-        vehicleType: form.vehicleType,
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim() || `${form.name.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`,
+        password: effectivePassword,
+        role: 'rider',
+        plateNumber: effectivePlate,
+        vehicleNumber: effectivePlate,
+        vehicleType: form.vehicleType || 'Hero Splendor / Motorcycle',
+        shiftTimings: form.shiftTimings,
         assignedRouteIds: form.assignedRouteIds,
         status: form.status,
-        photoUrl: form.photoUrl
+        photoUrl: form.photoUrl,
+        mustChangePassword: editingRider.mustChangePassword ?? false,
+        failedAttempts: editingRider.failedAttempts ?? 0
       };
       StorageService.updateRider(updated);
       setEditingRider(null);
     } else {
-      const riderEmail = form.email || `${form.name.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`;
+      const riderEmail = form.email.trim() || `${form.name.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`;
       const newRider: PickupBoy = {
         id: `rider-${Date.now()}`,
-        name: form.name,
-        phone: form.phone,
+        name: form.name.trim(),
+        phone: form.phone.trim(),
         email: riderEmail,
-        vehicleNumber: form.vehicleNumber || 'MH-02-XX-9999',
-        vehicleType: form.vehicleType,
+        password: effectivePassword,
+        role: 'rider',
+        plateNumber: effectivePlate,
+        vehicleNumber: effectivePlate,
+        vehicleType: form.vehicleType || 'Hero Splendor / Motorcycle',
+        shiftTimings: form.shiftTimings,
         photoUrl: form.photoUrl,
         assignedRouteIds: form.assignedRouteIds,
         status: 'active',
+        mustChangePassword: true,
+        failedAttempts: 0,
         joiningDate: new Date().toISOString().split('T')[0],
         currentLocation: {
           lat: 19.2082,
@@ -149,14 +198,13 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
       };
       StorageService.addRider(newRider);
 
-      // Show credentials modal for sharing with rider
-      const baseUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
+      // Show formatted credentials modal with copy action
       setCreatedCredentialsModal({
         name: newRider.name,
         phone: newRider.phone,
         email: newRider.email,
-        pin: '1234',
-        link: `${baseUrl}/#/rider`
+        password: effectivePassword,
+        portalUrl: 'https://delvin-nadar.github.io/VialTrack/#/rider'
       });
     }
 
@@ -178,11 +226,25 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyFormattedCredentials = async (loginId: string, tempPassword: string) => {
+    const text = formatCredentialsMessage({
+      portalUrl: 'https://delvin-nadar.github.io/VialTrack/#/rider',
+      loginId,
+      tempPassword
+    });
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2500);
+    }
+  };
+
+  const handleCopyCredentialsInModal = async () => {
     if (createdCredentialsModal) {
-      const text = `Hello ${createdCredentialsModal.name},\nHere are your SecondMedic VialTrack Rider Portal login credentials:\n\n📱 Portal Link: ${createdCredentialsModal.link}\n🔑 Login ID: ${createdCredentialsModal.phone} or ${createdCredentialsModal.email}\n🔒 Security PIN: ${createdCredentialsModal.pin}\n\nPlease install the app on your Android device and check in before your first collection round.`;
-      navigator.clipboard.writeText(text);
-      alert('Credentials copied to clipboard! You can send this to the rider via WhatsApp or SMS.');
+      await handleCopyFormattedCredentials(
+        createdCredentialsModal.phone || createdCredentialsModal.email,
+        createdCredentialsModal.password
+      );
     }
   };
 
@@ -206,8 +268,11 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
               name: '',
               phone: '',
               email: '',
+              password: '',
+              plateNumber: '',
               vehicleNumber: '',
               vehicleType: 'Hero Splendor Plus (Cold-Box Mounted)',
+              shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
               assignedRouteIds: routes[0] ? [routes[0].id] : [],
               status: 'active',
               photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80'
@@ -324,36 +389,34 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-1.5">
                   <button
-                    onClick={() => {
-                      const baseUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
-                      setCreatedCredentialsModal({
-                        name: rider.name,
-                        phone: rider.phone,
-                        email: rider.email,
-                        pin: '1234',
-                        link: `${baseUrl}/#/rider`
-                      });
-                    }}
-                    className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-sky-700 rounded-lg font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
+                    type="button"
+                    onClick={() => handleCopyFormattedCredentials(rider.phone || rider.email, rider.password || 'SecondMedicOps@2026')}
+                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-lg font-bold flex items-center gap-1.5 transition-colors border border-sky-200 cursor-pointer"
+                    title="Copy formatted credentials text to clipboard"
                   >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>Share</span>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copySuccess ? 'Copied!' : 'Copy Credentials'}</span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => {
                       setForm({
                         name: rider.name,
                         phone: rider.phone,
                         email: rider.email,
-                        vehicleNumber: rider.vehicleNumber,
-                        vehicleType: rider.vehicleType,
-                        assignedRouteIds: rider.assignedRouteIds,
+                        password: rider.password || '',
+                        plateNumber: rider.plateNumber || rider.vehicleNumber || '',
+                        vehicleNumber: rider.vehicleNumber || '',
+                        vehicleType: rider.vehicleType || 'Hero Splendor Plus (Cold-Box Mounted)',
+                        shiftTimings: rider.shiftTimings || '08:00 AM - 04:00 PM (Morning Slot)',
+                        assignedRouteIds: rider.assignedRouteIds || [],
                         status: rider.status,
                         photoUrl: rider.photoUrl
                       });
                       setEditingRider(rider);
                       setIsAddingRider(true);
+                      setFormError(null);
                     }}
                     className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
                   >
@@ -363,6 +426,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => handleDeleteRider(rider.id, rider.name)}
                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
                   title="Remove Rider from Fleet"
@@ -378,22 +442,31 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
       {/* Add / Edit Rider Modal */}
       {isAddingRider && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <Bike className="w-5 h-5 text-sky-700" />
-                <span>{editingRider ? 'Edit Pickup Boy' : 'Register New Pickup Boy (Rider)'}</span>
+                <span>{editingRider ? 'Edit Pickup Boy (Rider)' : 'Register New Pickup Boy (Rider)'}</span>
               </h3>
               <button
+                type="button"
                 onClick={() => {
                   setIsAddingRider(false);
                   setEditingRider(null);
+                  setFormError(null);
                 }}
                 className="p-1 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {formError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{formError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSaveRider} className="space-y-3.5 text-xs">
               {/* Rider Photo Avatar */}
@@ -441,10 +514,10 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                    Phone (Primary Login ID) *
+                    Phone Number (Primary Login ID) *
                   </label>
                   <input
                     type="text"
@@ -469,17 +542,46 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Password / Access Key with Generator */}
+              <div className="p-3 bg-sky-50/50 border border-sky-200 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sky-950 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Password / Access Key {editingRider ? '(Leave blank to keep existing)' : '*'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    className="text-[11px] font-bold text-sky-700 hover:text-sky-900 flex items-center gap-1 bg-white border border-sky-300 px-2 py-0.5 rounded shadow-2xs cursor-pointer hover:bg-sky-50 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Generate Strong Password</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder={editingRider ? '•••••••• (unchanged)' : 'e.g. Vk8#9xQ2 (Min 8 alphanumeric + symbols)'}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-sky-300 rounded-lg text-slate-900 font-mono font-medium focus:outline-hidden focus:border-sky-600"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Must be at least 8 characters. On first login, riders will be prompted to set their permanent password.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                    Vehicle Registration Number *
+                  <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px] flex items-center gap-1">
+                    <Car className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Vehicle Plate Number *</span>
                   </label>
                   <input
                     type="text"
                     required
                     placeholder="MH-02-DN-4921"
-                    value={form.vehicleNumber}
-                    onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value })}
+                    value={form.plateNumber || form.vehicleNumber}
+                    onChange={(e) => setForm({ ...form, plateNumber: e.target.value, vehicleNumber: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono uppercase focus:outline-hidden focus:border-sky-600"
                   />
                 </div>
@@ -489,7 +591,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                   </label>
                   <input
                     type="text"
-                    placeholder="Hero Splendor / Chiller Rack"
+                    placeholder="Hero Splendor / Motorcycle"
                     value={form.vehicleType}
                     onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
@@ -497,12 +599,30 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 </div>
               </div>
 
+              {/* Shift Timings */}
+              <div>
+                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px] flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Shift Timings *</span>
+                </label>
+                <select
+                  value={form.shiftTimings}
+                  onChange={(e) => setForm({ ...form, shiftTimings: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:outline-hidden focus:border-sky-600"
+                >
+                  <option value="08:00 AM - 04:00 PM (Morning Slot)">08:00 AM - 04:00 PM (Morning Slot)</option>
+                  <option value="01:00 PM - 09:00 PM (Evening Slot)">01:00 PM - 09:00 PM (Evening Slot)</option>
+                  <option value="09:00 PM - 05:00 AM (Night Emergency)">09:00 PM - 05:00 AM (Night Emergency)</option>
+                  <option value="07:00 AM - 07:00 PM (Full Day 12H)">07:00 AM - 07:00 PM (Full Day 12H)</option>
+                </select>
+              </div>
+
               {/* Assign Routes */}
               <div>
                 <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1.5 text-[11px]">
                   Assign Collection Routes ({form.assignedRouteIds.length} Selected)
                 </label>
-                <div className="space-y-1 max-h-36 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="space-y-1 max-h-32 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
                   {routes.map((r) => {
                     const isChecked = form.assignedRouteIds.includes(r.id);
                     return (
@@ -531,7 +651,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
               {/* Status */}
               <div>
                 <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                  Rider Operational Status
+                  Rider Operational Status (Default: Active)
                 </label>
                 <select
                   value={form.status}
@@ -550,6 +670,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                   onClick={() => {
                     setIsAddingRider(false);
                     setEditingRider(null);
+                    setFormError(null);
                   }}
                   className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors cursor-pointer"
                 >
@@ -577,7 +698,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 text-base">Rider Credentials Generated</h3>
-                <p className="text-xs text-slate-500">Hand these to the rider for mobile PWA login</p>
+                <p className="text-xs text-slate-500">Provide these credentials for mobile PWA login</p>
               </div>
             </div>
 
@@ -587,30 +708,32 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 <span className="font-bold text-slate-900 text-sm">{createdCredentialsModal.name}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] font-semibold uppercase">Rider Portal Direct URL:</span>
-                <code className="text-sky-700 font-mono font-semibold break-all">{createdCredentialsModal.link}</code>
+                <span className="text-slate-400 block text-[10px] font-semibold uppercase">Portal URL:</span>
+                <code className="text-sky-700 font-mono font-semibold break-all">{createdCredentialsModal.portalUrl}</code>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200">
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Phone / Login ID:</span>
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Login ID (Phone):</span>
                   <span className="font-mono text-slate-800 font-bold">{createdCredentialsModal.phone}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Default Security PIN:</span>
-                  <span className="font-mono text-emerald-700 font-bold">{createdCredentialsModal.pin}</span>
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Temporary Password:</span>
+                  <span className="font-mono text-emerald-700 font-bold">{createdCredentialsModal.password}</span>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 pt-2">
               <button
-                onClick={handleCopyLink}
+                type="button"
+                onClick={handleCopyCredentialsInModal}
                 className="flex-1 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
               >
                 <Copy className="w-4 h-4" />
-                <span>Copy WhatsApp Message</span>
+                <span>{copySuccess ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
               </button>
               <button
+                type="button"
                 onClick={() => setCreatedCredentialsModal(null)}
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
               >

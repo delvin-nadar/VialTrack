@@ -87,14 +87,14 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
             )}
           </button>
 
-          {/* Exit / Logout */}
+          {/* Exit / Logout / End Shift */}
           <button
             onClick={onLogout}
-            className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-600 transition-colors text-xs flex items-center gap-1 cursor-pointer font-semibold"
-            title="Exit Rider App"
+            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-600 transition-colors text-xs flex items-center gap-1.5 cursor-pointer font-semibold"
+            title="Logout / End Shift"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline text-xs">Exit</span>
+            <span className="inline text-xs">Logout / End Shift</span>
           </button>
         </div>
       </div>

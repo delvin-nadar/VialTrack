@@ -9,6 +9,7 @@ export interface UserAuth {
   riderId?: string;  // If role === 'rider'
   phone?: string;
   avatar?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface RouteStop {
@@ -51,6 +52,9 @@ export interface Client {
   contactPerson: string;
   phone: string;
   email: string;
+  password?: string;
+  role?: 'client';
+  status?: 'active' | 'inactive';
   address: string;
   active: boolean;
   createdAt: string;
@@ -59,6 +63,10 @@ export interface Client {
   lat?: number;
   lng?: number;
   location?: any;
+  mustChangePassword?: boolean;
+  failedAttempts?: number;
+  lockoutUntil?: string;
+  lastLoginAt?: string;
 }
 
 export type RiderStatus = 'active' | 'on_leave' | 'inactive';
@@ -68,9 +76,13 @@ export interface PickupBoy {
   name: string;
   phone: string;
   email: string;
+  password?: string;
+  role?: 'rider';
   photoUrl: string;
   vehicleNumber: string;
+  plateNumber?: string;
   vehicleType: string; // e.g., 'Hero Splendor / Motorcycle'
+  shiftTimings?: string; // e.g. '08:00 AM - 04:00 PM'
   assignedRouteIds: string[];
   status: RiderStatus;
   joiningDate: string;
@@ -88,6 +100,10 @@ export interface PickupBoy {
   isOnline: boolean;
   isCheckedIn: boolean;
   lastPingTime?: string;
+  mustChangePassword?: boolean;
+  failedAttempts?: number;
+  lockoutUntil?: string;
+  lastLoginAt?: string;
 }
 
 export type TaskStatus =

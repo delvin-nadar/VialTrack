@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, Bike, ArrowLeft } from 'lucide-react';
+import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, Bike, ArrowLeft, ShieldAlert, Clock } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { auth, signInWithEmailAndPassword } from '../../services/firebase';
 
@@ -19,7 +19,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
     e.preventDefault();
     setError(null);
 
-    const cleanIdentifier = identifier.trim().toLowerCase();
+    const cleanIdentifier = identifier.trim();
 
     if (!cleanIdentifier) {
       setError('Please enter your rider phone number or email.');
@@ -36,41 +36,101 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
     try {
       const riders = StorageService.getRiders();
       const cleanPhone = cleanIdentifier.replace(/\D/g, '');
-      const matchedRider = riders.find(
-        (r) =>
-          r.email.toLowerCase() === cleanIdentifier ||
-          (cleanPhone.length >= 6 && r.phone.replace(/\D/g, '').includes(cleanPhone)) ||
-          r.id.toLowerCase() === cleanIdentifier
-      );
+      const lowerIdent = cleanIdentifier.toLowerCase();
 
-      // Determine corresponding Firebase account email
-      const emailToAuth = cleanIdentifier.includes('@')
-        ? cleanIdentifier
-        : (matchedRider?.email || `${cleanIdentifier}@secondmedic.com`);
+      // 1. Dynamic Rider Lookup by phone or email
+      const matchedRider = riders.find((r) => {
+        const rCleanPhone = r.phone.replace(/\D/g, '');
+        return (
+          r.email.toLowerCase() === lowerIdent ||
+          (cleanPhone.length >= 6 && rCleanPhone.includes(cleanPhone)) ||
+          r.id.toLowerCase() === lowerIdent ||
+          r.phone.toLowerCase() === lowerIdent
+        );
+      });
 
-      // 1. Strict Firebase Authentication verification exclusively
-      const userCredential = await signInWithEmailAndPassword(auth, emailToAuth, pin);
-
-      if (!userCredential || !userCredential.user) {
-        throw new Error('No user credential returned');
+      if (!matchedRider) {
+        setError('Invalid phone number or password. Please try again.');
+        setLoading(false);
+        return;
       }
 
-      const fbUser = userCredential.user;
+      // 2. Account Status Verification: check if inactive or suspended
+      if (matchedRider.status === 'inactive' || (matchedRider.status as string) === 'suspended') {
+        setError('Account inactive or suspended. Contact SecondMedic Dispatch.');
+        setLoading(false);
+        return;
+      }
+
+      // 3. Rate Limiting / Lockout Check (5 consecutive failed attempts = 3-minute lockout)
+      if (matchedRider.lockoutUntil) {
+        const lockoutTime = new Date(matchedRider.lockoutUntil).getTime();
+        const now = Date.now();
+        if (lockoutTime > now) {
+          const remainingSecs = Math.ceil((lockoutTime - now) / 1000);
+          const minutes = Math.floor(remainingSecs / 60);
+          const seconds = remainingSecs % 60;
+          setError(
+            `Account temporarily locked due to 5 failed attempts. Please retry in ${
+              minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+            }.`
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 4. Authenticate via Firebase Authentication or strict password verification
+      let isAuthenticated = false;
+      const emailToAuth = matchedRider.email || `${cleanPhone || 'rider'}@vialtrack.in`;
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, emailToAuth, pin);
+        if (userCredential && userCredential.user) {
+          isAuthenticated = true;
+        }
+      } catch (fbErr: any) {
+        // Check if password matches the rider document password (for newly created or modified riders)
+        if (matchedRider.password && matchedRider.password === pin) {
+          isAuthenticated = true;
+        }
+      }
+
+      if (!isAuthenticated) {
+        // Record failed attempt & evaluate rate limit
+        const { attempts, isLocked, lockoutUntil } = StorageService.recordRiderFailedAttempt(matchedRider.id);
+        if (isLocked) {
+          setError('Account temporarily locked due to 5 failed attempts. Please retry in 3 minutes.');
+        } else {
+          const remaining = 5 - attempts;
+          setError(
+            remaining > 0
+              ? `Invalid phone number or password. Please try again. (${remaining} attempts remaining before temporary lockout)`
+              : 'Invalid phone number or password. Please try again.'
+          );
+        }
+        setLoading(false);
+        return;
+      }
+
+      // 5. Authentication Successful -> Reset failed attempts
+      StorageService.resetRiderFailedAttempts(matchedRider.id);
+
       const user: UserAuth = {
-        id: fbUser.uid || `user-${matchedRider?.id || 'rider-rahul'}`,
-        email: emailToAuth,
-        name: fbUser.displayName || matchedRider?.name || 'Rahul Sharma (Courier)',
+        id: `user-${matchedRider.id}`,
+        email: matchedRider.email,
+        name: matchedRider.name,
         role: 'rider',
-        riderId: matchedRider?.id || 'rider-rahul',
-        phone: matchedRider?.phone || '+91 98765 43210',
-        avatar: matchedRider?.photoUrl
+        riderId: matchedRider.id,
+        phone: matchedRider.phone,
+        avatar: matchedRider.photoUrl,
+        mustChangePassword: matchedRider.mustChangePassword ?? false
       };
 
       onLoginSuccess(user);
-    } catch (authError: any) {
-      console.warn('[RiderLogin] Firebase authentication failed:', authError?.code || authError?.message);
-      // Keep user on login screen, do not update auth state, show red banner
-      setError('Invalid email or password. Please try again.');
+    } catch (err: any) {
+      console.warn('[RiderLogin] Login exception:', err);
+      setError('Invalid phone number or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -106,7 +166,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-start gap-2">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-start gap-2 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -157,7 +217,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-1.5 py-2.5 px-4 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            className="w-full mt-1.5 py-2.5 px-4 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
           >
             {loading ? 'Starting Duty...' : 'Login & Open My Schedule'}
             <ArrowRight className="w-4 h-4" />

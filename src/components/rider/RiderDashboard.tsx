@@ -107,8 +107,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
   }, []);
 
-  // Filter tasks assigned to this rider
-  const riderTasks = tasks.filter((t) => t.riderId === activeRider.id);
+  // Strict Data Scoping: filter tasks, routes, and collection points for logged-in rider
+  const loggedInRiderId = user.riderId || activeRider.id;
+  const riderTasks = tasks.filter((t) => t.riderId === loggedInRiderId || (activeRider && t.riderId === activeRider.id));
   const todayStr = new Date().toISOString().split('T')[0];
   const todayTasks = riderTasks.filter((t) => t.date === todayStr);
 
@@ -116,7 +117,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const activeTask =
     todayTasks.find((t) => t.id === activeTaskId) ||
     todayTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) ||
-    todayTasks[0];
+    todayTasks[0] ||
+    riderTasks[0];
 
   const activeRoute = routes.find((r) => r.id === activeTask?.routeId) || routes[0];
 

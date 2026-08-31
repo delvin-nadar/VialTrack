@@ -91,10 +91,15 @@ export function ensureInitialized(): void {
       contactPerson: 'Dr. Anita Desai (Ops Director)',
       phone: '+91 98200 11223',
       email: 'ops@apexdiagnostics.in',
+      password: 'SecondMedicOps@2026',
+      role: 'client',
+      status: 'active',
       address: 'Plot 42, S.V. Road, Malad West, Mumbai, MH 400064',
       active: true,
       createdAt: '2026-01-15T09:00:00Z',
-      billingRatePerPickup: 450
+      billingRatePerPickup: 450,
+      mustChangePassword: false,
+      failedAttempts: 0
     },
     {
       id: 'client-metropolis',
@@ -102,10 +107,15 @@ export function ensureInitialized(): void {
       contactPerson: 'Mr. Arvind Joshi',
       phone: '+91 98200 44556',
       email: 'collections@apexpathlabs.in',
+      password: 'SecondMedicOps@2026',
+      role: 'client',
+      status: 'active',
       address: 'Infinity Tower, Link Road, Andheri West, Mumbai, MH 400053',
       active: true,
       createdAt: '2026-02-01T10:00:00Z',
-      billingRatePerPickup: 500
+      billingRatePerPickup: 500,
+      mustChangePassword: false,
+      failedAttempts: 0
     }
   ];
 
@@ -160,9 +170,13 @@ export function ensureInitialized(): void {
       name: 'Rahul Sharma',
       phone: '+91 98765 43210',
       email: 'rahul.sharma@vialtrack.in',
+      password: 'SecondMedicOps@2026',
+      role: 'rider',
       photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
       vehicleNumber: 'MH-02-DN-4921',
+      plateNumber: 'MH-02-DN-4921',
       vehicleType: 'Hero Splendor Plus (Cold-box Mounted)',
+      shiftTimings: '08:00 AM - 04:00 PM',
       assignedRouteIds: ['route-apex-western-1'],
       status: 'active',
       joiningDate: '2025-11-10',
@@ -176,16 +190,22 @@ export function ensureInitialized(): void {
       batteryLevel: 88,
       isOnline: true,
       isCheckedIn: true,
-      lastPingTime: new Date().toISOString()
+      lastPingTime: new Date().toISOString(),
+      mustChangePassword: false,
+      failedAttempts: 0
     },
     {
       id: 'rider-amit',
       name: 'Amit Verma',
       phone: '+91 98765 88990',
       email: 'amit.verma@vialtrack.in',
+      password: 'SecondMedicOps@2026',
+      role: 'rider',
       photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop&crop=faces&q=80',
       vehicleNumber: 'MH-04-EK-9022',
+      plateNumber: 'MH-04-EK-9022',
       vehicleType: 'Honda Activa 6G (Chiller Rack)',
+      shiftTimings: '01:00 PM - 09:00 PM',
       assignedRouteIds: [],
       status: 'active',
       joiningDate: '2026-01-05',
@@ -199,7 +219,9 @@ export function ensureInitialized(): void {
       batteryLevel: 94,
       isOnline: true,
       isCheckedIn: true,
-      lastPingTime: new Date().toISOString()
+      lastPingTime: new Date().toISOString(),
+      mustChangePassword: false,
+      failedAttempts: 0
     }
   ];
 
@@ -671,6 +693,85 @@ export const StorageService = {
     const riders = this.getRiders().map((r) => (r.id === rider.id ? rider : r));
     this.saveRiders(riders);
     CloudSync.syncDocument('riders', rider.id, rider);
+  },
+  updateRiderPassword(riderId: string, newPassword: string): void {
+    const rider = this.getRiderById(riderId);
+    if (rider) {
+      const updated: PickupBoy = {
+        ...rider,
+        password: newPassword,
+        mustChangePassword: false,
+        failedAttempts: 0
+      };
+      this.updateRider(updated);
+    }
+  },
+  recordRiderFailedAttempt(riderId: string): { attempts: number; isLocked: boolean; lockoutUntil?: string } {
+    const rider = this.getRiderById(riderId);
+    if (rider) {
+      const attempts = (rider.failedAttempts || 0) + 1;
+      const isLocked = attempts >= 5;
+      const lockoutUntil = isLocked ? new Date(Date.now() + 3 * 60 * 1000).toISOString() : rider.lockoutUntil;
+      const updated: PickupBoy = {
+        ...rider,
+        failedAttempts: attempts,
+        lockoutUntil
+      };
+      this.updateRider(updated);
+      return { attempts, isLocked, lockoutUntil };
+    }
+    return { attempts: 1, isLocked: false };
+  },
+  resetRiderFailedAttempts(riderId: string): void {
+    const rider = this.getRiderById(riderId);
+    if (rider && (rider.failedAttempts || rider.lockoutUntil)) {
+      const updated: PickupBoy = {
+        ...rider,
+        failedAttempts: 0,
+        lockoutUntil: undefined
+      };
+      this.updateRider(updated);
+    }
+  },
+  updateClientPassword(clientId: string, newPassword: string): void {
+    const client = this.getClientById(clientId);
+    if (client) {
+      const updated: Client = {
+        ...client,
+        password: newPassword,
+        mustChangePassword: false,
+        failedAttempts: 0,
+        lockoutUntil: undefined
+      };
+      this.updateClient(updated);
+    }
+  },
+  recordClientFailedAttempt(clientId: string): { attempts: number; isLocked: boolean; lockoutUntil?: string } {
+    const client = this.getClientById(clientId);
+    if (client) {
+      const attempts = (client.failedAttempts || 0) + 1;
+      const isLocked = attempts >= 5;
+      const lockoutUntil = isLocked ? new Date(Date.now() + 3 * 60 * 1000).toISOString() : client.lockoutUntil;
+      const updated: Client = {
+        ...client,
+        failedAttempts: attempts,
+        lockoutUntil
+      };
+      this.updateClient(updated);
+      return { attempts, isLocked, lockoutUntil };
+    }
+    return { attempts: 1, isLocked: false };
+  },
+  resetClientFailedAttempts(clientId: string): void {
+    const client = this.getClientById(clientId);
+    if (client && (client.failedAttempts || client.lockoutUntil)) {
+      const updated: Client = {
+        ...client,
+        failedAttempts: 0,
+        lockoutUntil: undefined
+      };
+      this.updateClient(updated);
+    }
   },
   deleteRider(id: string): void {
     const riders = this.getRiders().filter((r) => r.id !== id);
