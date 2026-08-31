@@ -36,7 +36,8 @@ import { StorageService } from '../../services/storage';
 import { LocationService, GpsStatusEvent } from '../../services/locationService';
 import { NotificationService } from '../../services/notificationService';
 import { LiveMap } from '../common/LiveMap';
-import { CloudSync } from '../../services/firebase';
+import { CloudSync, db } from '../../services/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { DailyRoundsSchedule, ScheduleStopItem } from './DailyRoundsSchedule';
 
 interface RiderDashboardProps {
@@ -86,22 +87,20 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     }
   }, [navigate]);
 
-  const fallbackRider: PickupBoy = {
-    id: session?.riderId || user?.riderId || 'rider-rahul',
-    name: session?.name || user?.name || 'Rahul Sharma',
-    email: session?.email || user?.email || 'rahul.sharma@vialtrack.in',
-    phone: session?.phone || user?.phone || '+91 98765 43210',
+  const activeRider: PickupBoy = rider || {
+    id: session?.riderId || user?.riderId || '',
+    name: session?.name || user?.name || 'Rider',
+    email: session?.email || user?.email || '',
+    phone: session?.phone || user?.phone || '',
     photoUrl: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
-    vehicleNumber: 'MH-02-DN-4921',
-    vehicleType: 'Hero Splendor Plus',
-    assignedRouteIds: ['route-apex-western-1', 'route-abc-diagnostic-1'],
+    vehicleNumber: 'MH-02',
+    vehicleType: 'Cold-box Mounted Two-Wheeler',
+    assignedRouteIds: [],
     status: 'active',
-    joiningDate: '2025-11-10',
+    joiningDate: '2026-01-01',
     isOnline: true,
     isCheckedIn: true
   };
-
-  const activeRider: PickupBoy = rider || fallbackRider;
 
   // Active identity keys strictly for this rider
   const sessionRiderId = session?.riderId || user?.riderId || activeRider.id;
@@ -325,6 +324,67 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     });
     return () => unsub();
   }, []);
+
+  // Realtime Live GPS Telemetry Writer to Firestore
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) return;
+
+    const riderId = session?.riderId || (session as any)?.id || 'MrSatish';
+    const riderName = session?.name || activeRider.name || 'Mr. Satish';
+    const vehicleNo = (session as any)?.vehicleNo || (session as any)?.vehicleNumber || activeRider.vehicleNumber || 'MH02TN0897';
+
+    console.log('[GPS Telemetry] Initializing watchPosition for rider:', riderId);
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        try {
+          await setDoc(
+            doc(db, 'riders', riderId),
+            {
+              id: riderId,
+              name: riderName,
+              vehicleNo: vehicleNo,
+              vehicleNumber: vehicleNo,
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              currentLocation: {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                timestamp: new Date().toISOString(),
+                heading: position.coords.heading || 0,
+                speed: position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0,
+                accuracy: position.coords.accuracy || 5
+              },
+              heading: position.coords.heading || 0,
+              battery: 88,
+              batteryLevel: 88,
+              coldBoxTemp: 4.0,
+              isOnline: true,
+              status: 'active',
+              lastUpdated: serverTimestamp()
+            },
+            { merge: true }
+          );
+
+          console.log('GPS broadcasted successfully to Firestore:', position.coords.latitude, position.coords.longitude);
+        } catch (err) {
+          console.warn('[GPS Telemetry] Error broadcasting to Firestore:', err);
+        }
+      },
+      (error) => {
+        console.warn('[GPS Telemetry] Geolocation watch error:', error.code, error.message);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [session, activeRider.name, activeRider.vehicleNumber]);
 
   // Start real GPS broadcasting strictly for active rider ID
   useEffect(() => {

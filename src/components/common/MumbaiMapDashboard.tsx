@@ -8,7 +8,8 @@ import {
   LocationPing,
   AttendanceRecord
 } from '../../types';
-import { CloudSync, parseFirestoreGeoPoint } from '../../services/firebase';
+import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import {
   MUMBAI_LANDMARKS
@@ -106,17 +107,54 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
     let mounted = true;
     console.log('[MumbaiMapDashboard] Initializing real-time Firestore listeners...');
 
-    const unsubRiders = CloudSync.subscribeToRiders((riders) => {
-      if (!mounted) return;
-      if (riders && riders.length > 0) {
-        setCloudRiders(riders);
+    const unsubRiders = onSnapshot(
+      collection(db, 'riders'),
+      (snapshot) => {
+        if (!mounted) return;
+        const activeFleet = snapshot.docs
+          .map((d) => {
+            const data = d.data();
+            const lat = data.lat ?? data.currentLocation?.lat;
+            const lng = data.lng ?? data.currentLocation?.lng;
+            return {
+              id: d.id,
+              ...data,
+              lat,
+              lng,
+              name: data.name || 'Courier',
+              vehicleNumber: data.vehicleNumber || data.vehicleNo || 'MH-02-BIKE',
+              isOnline: data.isOnline !== false,
+              currentLocation: {
+                lat,
+                lng,
+                timestamp: data.currentLocation?.timestamp || new Date().toISOString(),
+                heading: data.heading || 0,
+                speed: data.currentLocation?.speed || 0,
+                accuracy: 5
+              }
+            } as any;
+          })
+          .filter((r) => r.lat && r.lng && r.isOnline);
+
+        setCloudRiders(activeFleet);
         setIsFirestoreConnected(true);
+
+        // When activeFleet updates, fit bounds if single rider
+        if (mapInstanceRef.current && activeFleet.length === 1) {
+          const singleRider = activeFleet[0];
+          mapInstanceRef.current.setView([singleRider.lat, singleRider.lng], Math.max(mapInstanceRef.current.getZoom(), 14), {
+            animate: true
+          });
+        }
+      },
+      (error) => {
+        console.warn('[MumbaiMapDashboard] onSnapshot error for riders:', error);
       }
-    });
+    );
 
     const unsubTasks = CloudSync.subscribeToTasks((tasks) => {
       if (!mounted) return;
-      if (tasks && tasks.length > 0) {
+      if (tasks) {
         setCloudTasks(tasks);
         setIsFirestoreConnected(true);
       }
@@ -124,7 +162,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
     const unsubClients = CloudSync.subscribeToClients((clients) => {
       if (!mounted) return;
-      if (clients && clients.length > 0) {
+      if (clients) {
         setCloudClients(clients);
         setIsFirestoreConnected(true);
       }
@@ -132,7 +170,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
     const unsubLocations = CloudSync.subscribeToLocations((pings) => {
       if (!mounted) return;
-      if (pings && pings.length > 0) {
+      if (pings) {
         setCloudPings(pings);
         setIsFirestoreConnected(true);
       }
@@ -297,12 +335,10 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
     // A. RENDER RIDERS
     if (showRidersLayer) {
       filteredRiders.forEach((r) => {
-        if (!r.currentLocation) return;
-        const coords = parseFirestoreGeoPoint(r.currentLocation.location) || {
-          lat: r.currentLocation.lat,
-          lng: r.currentLocation.lng
-        };
-        if (typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
+        const lat = (r as any).lat ?? r.currentLocation?.lat;
+        const lng = (r as any).lng ?? r.currentLocation?.lng;
+        if (typeof lat !== 'number' || typeof lng !== 'number') return;
+        const coords = { lat, lng };
 
         const isSelected = selectedRiderId === r.id;
         const isStale = isRiderLocationStale(r, 10);

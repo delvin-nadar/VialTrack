@@ -163,8 +163,25 @@ function AppContent() {
     }
   }, []);
 
-  // Initial boot
+  // Initial boot and clear cached mock fleet arrays
   useEffect(() => {
+    try {
+      const mockKeysToRemove = [
+        'vialtrack_mock_fleet',
+        'vialtrack_demo_tasks',
+        'vialtrack_mock_riders',
+        'vialtrack_mock_tasks',
+        'vialtrack_demo_rounds',
+        'vialtrack_initial_feed',
+        'smvt_mock_fleet',
+        'smvt_demo_tasks'
+      ];
+      mockKeysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+      });
+    } catch (e) {
+      console.warn('Failed to clear mock cache from localStorage:', e);
+    }
     reloadData();
   }, [reloadData]);
 
@@ -174,51 +191,33 @@ function AppContent() {
       setNotifications(NotificationService.getNotifications());
     });
 
-    // Realtime Firestore Task sync
+    // Realtime Firestore Task sync (Pure Firestore data, no mock fallback)
     const unsubCloudTasks = CloudSync.subscribeToCollection<PickupTask>('tasks', (cloudTasks) => {
-      if (cloudTasks && cloudTasks.length > 0) {
-        setTasks((prev) => {
-          const taskMap = new Map<string, PickupTask>();
-          prev.forEach((t) => taskMap.set(t.id, t));
-          cloudTasks.forEach((t) => taskMap.set(t.id, t));
-          const merged = Array.from(taskMap.values());
-          try {
-            localStorage.setItem('smvt_tasks', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
+      if (cloudTasks !== null && cloudTasks !== undefined) {
+        setTasks(cloudTasks);
+        try {
+          localStorage.setItem('smvt_tasks', JSON.stringify(cloudTasks));
+        } catch {}
       }
     });
 
     // Realtime Firestore Attendance sync
     const unsubCloudAttendance = CloudSync.subscribeToCollection<AttendanceRecord>('attendance', (cloudAttendance) => {
-      if (cloudAttendance && cloudAttendance.length > 0) {
-        setAttendance((prev) => {
-          const attMap = new Map<string, AttendanceRecord>();
-          prev.forEach((a) => attMap.set(a.id, a));
-          cloudAttendance.forEach((a) => attMap.set(a.id, a));
-          const merged = Array.from(attMap.values());
-          try {
-            localStorage.setItem('smvt_attendance', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
+      if (cloudAttendance !== null && cloudAttendance !== undefined) {
+        setAttendance(cloudAttendance);
+        try {
+          localStorage.setItem('smvt_attendance', JSON.stringify(cloudAttendance));
+        } catch {}
       }
     });
 
     // Realtime Firestore Riders sync
     const unsubCloudRiders = CloudSync.subscribeToCollection<PickupBoy>('riders', (cloudRiders) => {
-      if (cloudRiders && cloudRiders.length > 0) {
-        setRiders((prev) => {
-          const riderMap = new Map<string, PickupBoy>();
-          prev.forEach((r) => riderMap.set(r.id, r));
-          cloudRiders.forEach((r) => riderMap.set(r.id, r));
-          const merged = Array.from(riderMap.values());
-          try {
-            localStorage.setItem('smvt_riders', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
+      if (cloudRiders !== null && cloudRiders !== undefined) {
+        setRiders(cloudRiders);
+        try {
+          localStorage.setItem('smvt_riders', JSON.stringify(cloudRiders));
+        } catch {}
       }
     });
 
@@ -248,33 +247,21 @@ function AppContent() {
 
     // Realtime Firestore Clients sync
     const unsubCloudClients = CloudSync.subscribeToCollection<Client>('clients', (cloudClients) => {
-      if (cloudClients && cloudClients.length > 0) {
-        setClients((prev) => {
-          const clientMap = new Map<string, Client>();
-          prev.forEach((c) => clientMap.set(c.id, c));
-          cloudClients.forEach((c) => clientMap.set(c.id, c));
-          const merged = Array.from(clientMap.values());
-          try {
-            localStorage.setItem('smvt_clients', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
+      if (cloudClients !== null && cloudClients !== undefined) {
+        setClients(cloudClients);
+        try {
+          localStorage.setItem('smvt_clients', JSON.stringify(cloudClients));
+        } catch {}
       }
     });
 
     // Realtime Firestore Routes sync
     const unsubCloudRoutes = CloudSync.subscribeToCollection<LogisticsRoute>('routes', (cloudRoutes) => {
-      if (cloudRoutes && cloudRoutes.length > 0) {
-        setRoutes((prev) => {
-          const routeMap = new Map<string, LogisticsRoute>();
-          prev.forEach((r) => routeMap.set(r.id, r));
-          cloudRoutes.forEach((r) => routeMap.set(r.id, r));
-          const merged = Array.from(routeMap.values());
-          try {
-            localStorage.setItem('smvt_routes', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
+      if (cloudRoutes !== null && cloudRoutes !== undefined) {
+        setRoutes(cloudRoutes);
+        try {
+          localStorage.setItem('smvt_routes', JSON.stringify(cloudRoutes));
+        } catch {}
       }
     });
 

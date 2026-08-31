@@ -1,6 +1,7 @@
 import { LocationPing, PickupBoy, PickupTask } from '../types';
 import { StorageService } from './storage';
-import { CloudSync } from './firebase';
+import { CloudSync, db } from './firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Distance calculation (Haversine formula in km)
 export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -138,7 +139,7 @@ class LocationTrackerService {
 
     try {
       this.watchId = navigator.geolocation.watchPosition(
-        (pos) => {
+        async (pos) => {
           this.isPermissionDenied = false;
           this.lastErrorCode = null;
           this.lastErrorMessage = null;
@@ -149,19 +150,8 @@ class LocationTrackerService {
           const currentSpeed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
           const now = Date.now();
 
-          let movedMeters = 0;
-          if (this.lastSentCoords) {
-            movedMeters = calculateDistanceMeters(
-              this.lastSentCoords.lat,
-              this.lastSentCoords.lng,
-              currentLat,
-              currentLng
-            );
-          }
-
-          const timeElapsedMs = now - this.lastSentTimestamp;
-          // Write to Firestore immediately on first ping or every 8s or on 15m delta
-          const shouldWrite = !this.lastSentCoords || timeElapsedMs >= 8000 || movedMeters >= 15;
+          this.lastSentTimestamp = now;
+          this.lastSentCoords = { lat: currentLat, lng: currentLng };
 
           const ping: LocationPing = {
             id: `ping-${Date.now()}`,
@@ -172,17 +162,45 @@ class LocationTrackerService {
             lng: currentLng,
             speed: currentSpeed,
             heading: currentHeading,
-            battery: 90,
+            battery: 88,
             taskId
           };
 
-          if (shouldWrite) {
-            this.lastSentTimestamp = now;
-            this.lastSentCoords = { lat: currentLat, lng: currentLng };
-            this.recordPing(ping);
-          } else {
-            // Local memory broadcast
-            this.notify(ping);
+          this.recordPing(ping);
+
+          // Direct setDoc write to Firestore collection 'riders' with merge: true
+          try {
+            await setDoc(
+              doc(db, 'riders', riderId),
+              {
+                id: riderId,
+                name: riderName || 'Mr. Satish',
+                vehicleNo: 'MH02TN0897',
+                vehicleNumber: 'MH02TN0897',
+                lat: currentLat,
+                lng: currentLng,
+                currentLocation: {
+                  lat: currentLat,
+                  lng: currentLng,
+                  timestamp: new Date().toISOString(),
+                  heading: currentHeading,
+                  speed: currentSpeed,
+                  accuracy: pos.coords.accuracy || 5
+                },
+                heading: currentHeading,
+                battery: 88,
+                batteryLevel: 88,
+                coldBoxTemp: 4.0,
+                isOnline: true,
+                status: 'active',
+                lastUpdated: serverTimestamp()
+              },
+              { merge: true }
+            );
+
+            console.log('GPS broadcasted successfully to Firestore:', pos.coords.latitude, pos.coords.longitude);
+          } catch (fireErr) {
+            console.warn('[LocationService] Firestore direct write error:', fireErr);
           }
 
           this.notifyStatus();
@@ -205,7 +223,7 @@ class LocationTrackerService {
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 3000,
+          maximumAge: 0,
           timeout: 10000
         }
       );

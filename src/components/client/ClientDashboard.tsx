@@ -128,8 +128,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const todayClientTasks = clientTasks.filter((t) => t.date === todayStr);
 
   // Active in-transit task to show live tracking on map
-  const activeLiveTask = todayClientTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) || todayClientTasks[0];
-  const activeLiveRoute = clientRoutes.find((r) => r.id === activeLiveTask?.routeId) || clientRoutes[0];
+  const activeLiveTask = todayClientTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) || todayClientTasks[0] || null;
+  const activeLiveRoute = clientRoutes.find((r) => r.id === activeLiveTask?.routeId) || clientRoutes[0] || null;
   
   // Specific runner assigned strictly to this client route/task (never render all 7 fleet riders)
   const activeLiveRider: PickupBoy | null = useMemo(() => {
@@ -137,24 +137,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     if (!targetRiderId) return null;
     const found = riders.find((r) => r.id === targetRiderId);
     if (found) return found;
-    if (activeLiveTask?.riderName) {
-      const fallbackBoy: PickupBoy = {
-        id: targetRiderId,
-        name: activeLiveTask.riderName,
-        phone: activeLiveTask.riderPhone || '+91 98765 43210',
-        email: `${targetRiderId}@secondmedic.in`,
-        photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
-        vehicleNumber: activeLiveTask.riderVehicle || 'MH-02-DN-4921',
-        vehicleType: 'Cold-box Mounted Two-Wheeler',
-        assignedRouteIds: [activeLiveRoute?.id || ''],
-        status: 'active' as const,
-        joiningDate: '2025-01-01',
-        batteryLevel: 90,
-        isOnline: true,
-        isCheckedIn: true
-      };
-      return fallbackBoy;
-    }
     return null;
   }, [riders, activeLiveTask, activeLiveRoute]);
 
@@ -456,12 +438,17 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           </h3>
 
           <div className="space-y-2.5">
-            {todayClientTasks.map((task) => {
-              return (
-                <div
-                  key={task.id}
-                  className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2"
-                >
+            {todayClientTasks.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                No active pickup tasks scheduled
+              </div>
+            ) : (
+              todayClientTasks.map((task) => {
+                return (
+                  <div
+                    key={task.id}
+                    className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2"
+                  >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900 shadow-xs">
@@ -512,8 +499,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                   </div>
                 </div>
               );
-            })}
-          </div>
+            })
+          )}
+        </div>
         </div>
       </div>
 

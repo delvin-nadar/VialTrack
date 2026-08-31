@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { RouteStop, DestinationLab, PickupBoy, LocationPing, PickupTask } from '../../types';
-import { CloudSync, parseFirestoreGeoPoint } from '../../services/firebase';
+import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import {
   MapPin,
@@ -43,76 +44,6 @@ export interface LiveMapProps {
 // Default Mumbai City Center coordinates and zoom level as required
 export const MUMBAI_CENTER: [number, number] = [19.0760, 72.8777];
 export const DEFAULT_MUMBAI_ZOOM = 12;
-
-// Standard Mumbai Default Hospital/Lab Stops fallback
-const DEFAULT_MUMBAI_STOPS: RouteStop[] = [
-  {
-    id: 'stop-apex',
-    name: 'Apex Diagnostic Center',
-    address: 'Swami Vivekananda Rd, Near Station, Andheri West, Mumbai 400058',
-    lat: 19.1363,
-    lng: 72.8277,
-    contactPerson: 'Dr. Sunita Rao',
-    phone: '+91 98200 33445',
-    order: 1,
-    avgPickupDurationMinutes: 15
-  },
-  {
-    id: 'stop-oscar',
-    name: 'Oscar Hospital & Pathology',
-    address: 'Link Road, Chincholi Bunder, Malad West, Mumbai 400064',
-    lat: 19.1860,
-    lng: 72.8485,
-    contactPerson: 'Mr. Pradeep Joshi',
-    phone: '+91 98201 44556',
-    order: 2,
-    avgPickupDurationMinutes: 20
-  },
-  {
-    id: 'stop-lifeline',
-    name: 'Lifeline Medicare Hospital',
-    address: 'S.V. Road, Goregaon West, Mumbai 400062',
-    lat: 19.1645,
-    lng: 72.8440,
-    contactPerson: 'Sister Mary Joseph',
-    phone: '+91 98202 55667',
-    order: 3,
-    avgPickupDurationMinutes: 15
-  }
-];
-
-const DEFAULT_MUMBAI_DESTINATION: DestinationLab = {
-  id: 'dest-central-lab',
-  name: 'SecondMedic Central Reference Laboratory',
-  address: 'Commercial Hub, BKC G-Block, Bandra East, Mumbai 400051',
-  lat: 19.0657,
-  lng: 72.8687,
-  contactPerson: 'Dr. Anita Desai (Intake Director)',
-  phone: '+91 98200 11223'
-};
-
-const DEFAULT_MUMBAI_RIDER: PickupBoy = {
-  id: 'rider-rahul',
-  name: 'Rahul Sharma',
-  phone: '+91 98765 43210',
-  email: 'rahul.sharma@secondmedic.in',
-  photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
-  vehicleNumber: 'MH-02-DN-4921',
-  vehicleType: 'Hero Splendor Plus (Cold-box Mounted)',
-  assignedRouteIds: ['route-western-express'],
-  status: 'active',
-  joiningDate: '2025-11-10',
-  currentLocation: {
-    lat: 19.1480,
-    lng: 72.8350,
-    timestamp: new Date().toISOString(),
-    heading: 180,
-    accuracy: 5
-  },
-  batteryLevel: 91,
-  isOnline: true,
-  isCheckedIn: true
-};
 
 export const LiveMap: React.FC<LiveMapProps> = ({
   stops = [],
@@ -156,30 +87,58 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [activeFilterRiderId, setActiveFilterRiderId] = useState<string | 'all'>('all');
 
-  // Real-time Firestore Subscriptions for 'locations' and 'riders' collections
+  // Real-time Firestore Subscriptions for 'riders' collection
   useEffect(() => {
     if (!enableFirestoreSync) return;
 
     let mounted = true;
-    const unsubRiders = CloudSync.subscribeToRiders((cloudRiders) => {
-      if (!mounted) return;
-      if (cloudRiders && cloudRiders.length > 0) {
-        setFirestoreRiders(cloudRiders);
+    const unsubscribe = onSnapshot(
+      collection(db, 'riders'),
+      (snapshot) => {
+        if (!mounted) return;
+        const activeFleet = snapshot.docs
+          .map((d) => {
+            const data = d.data();
+            const lat = data.lat ?? data.currentLocation?.lat;
+            const lng = data.lng ?? data.currentLocation?.lng;
+            return {
+              id: d.id,
+              ...data,
+              lat,
+              lng,
+              name: data.name || 'Mr. Satish',
+              vehicleNumber: data.vehicleNumber || data.vehicleNo || 'MH-02',
+              isOnline: data.isOnline !== false
+            } as any;
+          })
+          .filter((r) => r.lat && r.lng && r.isOnline);
+
+        setFirestoreRiders(activeFleet);
         setIsFirestoreConnected(true);
+
+        // When activeFleet updates, center and fit bounds if single rider
+        if (mapInstanceRef.current && activeFleet.length === 1) {
+          const singleRider = activeFleet[0];
+          mapInstanceRef.current.setView([singleRider.lat, singleRider.lng], Math.max(mapInstanceRef.current.getZoom(), 14), {
+            animate: true
+          });
+        }
+      },
+      (error) => {
+        console.warn('[LiveMap] onSnapshot error for riders collection:', error);
       }
-    });
+    );
 
     const unsubLocations = CloudSync.subscribeToLocations((cloudPings) => {
       if (!mounted) return;
-      if (cloudPings && cloudPings.length > 0) {
+      if (cloudPings) {
         setFirestorePings(cloudPings);
-        setIsFirestoreConnected(true);
       }
     });
 
     return () => {
       mounted = false;
-      unsubRiders();
+      unsubscribe();
       unsubLocations();
     };
   }, [enableFirestoreSync]);
@@ -187,41 +146,45 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   // Merge prop riders and real-time Firestore riders with GeoPoint extraction
   const activeRidersList = useMemo(() => {
     const isScoped = Boolean(rider || (propRiders && propRiders.length > 0));
-    const riderMap = new Map<string, PickupBoy>();
+    const riderMap = new Map<string, any>();
 
     // 1. Seed with prop riders
     if (propRiders && propRiders.length > 0) {
       propRiders.forEach((r) => {
-        if (r && r.id) riderMap.set(r.id, r);
+        if (r && r.id) {
+          const lat = (r as any).lat ?? r.currentLocation?.lat;
+          const lng = (r as any).lng ?? r.currentLocation?.lng;
+          riderMap.set(r.id, { ...r, lat, lng });
+        }
       });
     }
     if (rider && rider.id) {
-      riderMap.set(rider.id, rider);
+      const lat = (rider as any).lat ?? rider.currentLocation?.lat;
+      const lng = (rider as any).lng ?? rider.currentLocation?.lng;
+      riderMap.set(rider.id, { ...rider, lat, lng });
     }
 
     // 2. Overlay live Firestore riders
-    firestoreRiders.forEach((fr) => {
-      // In scoped mode (Client or Rider portal), NEVER inject unassigned fleet riders!
+    firestoreRiders.forEach((fr: any) => {
       if (isScoped && !riderMap.has(fr.id)) {
         return;
       }
       const existing = riderMap.get(fr.id) || fr;
-      let parsedLoc = fr.currentLocation;
-      if (fr.currentLocation) {
-        const coords = parseFirestoreGeoPoint((fr.currentLocation as any).location) || {
-          lat: fr.currentLocation.lat,
-          lng: fr.currentLocation.lng
-        };
-        parsedLoc = {
-          ...fr.currentLocation,
-          lat: coords.lat,
-          lng: coords.lng
-        };
-      }
+      const lat = fr.lat ?? fr.currentLocation?.lat;
+      const lng = fr.lng ?? fr.currentLocation?.lng;
       riderMap.set(fr.id, {
         ...existing,
         ...fr,
-        currentLocation: parsedLoc
+        lat,
+        lng,
+        currentLocation: {
+          lat,
+          lng,
+          timestamp: fr.currentLocation?.timestamp || new Date().toISOString(),
+          heading: fr.heading || 0,
+          speed: fr.currentLocation?.speed || 0,
+          accuracy: 5
+        }
       });
     });
 
@@ -232,6 +195,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         const coords = parseFirestoreGeoPoint((ping as any).location) || { lat: ping.lat, lng: ping.lng };
         riderMap.set(ping.riderId, {
           ...r,
+          lat: coords.lat,
+          lng: coords.lng,
           currentLocation: {
             lat: coords.lat,
             lng: coords.lng,
@@ -246,14 +211,11 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     });
 
-    const list = Array.from(riderMap.values()).filter((r) => r && (r.status === 'active' || r.isOnline || r.currentLocation));
-    if (list.length === 0) {
-      return isScoped ? [] : [DEFAULT_MUMBAI_RIDER];
-    }
+    const list = Array.from(riderMap.values()).filter((r) => r && (r.status === 'active' || r.isOnline || (r.lat && r.lng) || r.currentLocation));
     return list;
   }, [propRiders, rider, firestoreRiders, firestorePings]);
 
-  // Compute active stops to render (with fallbacks)
+  // Compute active stops to render strictly from props/tasks (no mock fallbacks)
   const resolvedStops: any[] = useMemo(() => {
     if (stops && stops.length > 0) return stops;
     if (tasks && tasks.length > 0 && tasks[0]?.stopsProgress && tasks[0].stopsProgress.length > 0) {
@@ -263,18 +225,18 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         address: s.address,
         lat: s.lat,
         lng: s.lng,
-        contactPerson: s.contactPerson || 'Lab Reception',
-        phone: s.phone || '+91 98200 11223',
+        contactPerson: s.contactPerson || 'Lab Coordinator',
+        phone: s.phone || '',
         status: s.status,
-        sampleCount: s.sampleCount || 10,
+        sampleCount: s.sampleCount || 0,
         order: idx + 1
       }));
     }
-    return DEFAULT_MUMBAI_STOPS;
+    return [];
   }, [stops, tasks]);
 
   const resolvedDestination: any = useMemo(() => {
-    return destination || tasks[0]?.destination || DEFAULT_MUMBAI_DESTINATION;
+    return destination || tasks[0]?.destination || null;
   }, [destination, tasks]);
 
   // Initialize Leaflet Map Centered on Mumbai with OpenStreetMap tile layer
@@ -400,14 +362,11 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     // 1. RENDER / SMOOTHLY UPDATE LIVE BIKE ICON MARKERS FOR ACTIVE RIDERS
     if (showRiderMarkers) {
       ridersToRender.forEach((activeRider) => {
-        if (!activeRider.currentLocation) return;
-        const coords = parseFirestoreGeoPoint((activeRider.currentLocation as any).location) || {
-          lat: activeRider.currentLocation.lat,
-          lng: activeRider.currentLocation.lng
-        };
+        const lat = (activeRider as any).lat ?? activeRider.currentLocation?.lat;
+        const lng = (activeRider as any).lng ?? activeRider.currentLocation?.lng;
 
-        if (typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
-        boundsPoints.push([coords.lat, coords.lng]);
+        if (typeof lat !== 'number' || typeof lng !== 'number') return;
+        boundsPoints.push([lat, lng]);
 
         const isSelected = rider?.id === activeRider.id || activeFilterRiderId === activeRider.id;
         const isStale = isRiderLocationStale(activeRider, 10);
@@ -496,12 +455,12 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         // Smooth position update if marker already exists
         if (riderMarkersMapRef.current.has(activeRider.id)) {
           const existingMarker = riderMarkersMapRef.current.get(activeRider.id)!;
-          existingMarker.setLatLng([coords.lat, coords.lng]);
+          existingMarker.setLatLng([lat, lng]);
           existingMarker.setIcon(riderIcon);
           existingMarker.setPopupContent(popupHtml);
         } else {
           // Create new marker
-          const riderMarker = L.marker([coords.lat, coords.lng], {
+          const riderMarker = L.marker([lat, lng], {
             icon: riderIcon,
             zIndexOffset: 1200
           }).addTo(markersLayer);
