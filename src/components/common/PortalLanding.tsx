@@ -214,7 +214,7 @@ export const PortalLanding: React.FC<PortalLandingProps> = ({ onSelectPortal }) 
           </div>
           <div className="flex items-center gap-1.5">
             <MapPin className="w-4 h-4 text-emerald-600" />
-            <span>Firestore Native GeoPoints</span>
+            <span>Real-Time GPS Fleet Radar</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Lock className="w-4 h-4 text-amber-600" />

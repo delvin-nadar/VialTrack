@@ -173,7 +173,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onRefresh();
     } catch (err) {
       console.error('Reassign error:', err);
-      alert('Failed to reassign rider in Firestore. Please try again.');
+      alert('Failed to reassign rider. Please try again.');
     } finally {
       setIsReassigning(false);
     }
@@ -348,7 +348,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="mt-2 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
             <div className="h-full bg-teal-500 w-[85%]"></div>
           </div>
-          <div className="text-[10px] text-slate-400 mt-1.5 font-medium">GPS telemetry broadcasting</div>
+          <div className="text-[10px] text-slate-400 mt-1.5 font-medium">GPS active and broadcasting</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-xs border border-slate-200">
@@ -416,7 +416,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Live Status indicator */}
               <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Firestore Realtime GPS</span>
+                <span>Real-Time GPS Tracking</span>
               </div>
             </div>
 

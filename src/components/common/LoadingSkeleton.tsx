@@ -108,7 +108,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({ rolePortal = '
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
                 <Shield className="w-10 h-10 text-sky-300 mb-2 animate-bounce" />
                 <span className="text-xs font-semibold text-slate-500">
-                  Synchronizing GPS Geofences & IoT Telemetry
+                  Synchronizing GPS Geofences & Fleet Radar
                 </span>
                 <span className="text-[11px] text-slate-400 mt-0.5">
                   SecondMedic Safe-Drop & Cold-Chain Tracking

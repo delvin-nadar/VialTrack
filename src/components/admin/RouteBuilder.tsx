@@ -299,10 +299,10 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <Compass className="w-5 h-5 text-sky-700" />
-            <h3 className="font-bold text-slate-900 text-base sm:text-lg">Visual Route & Polyline Builder</h3>
+            <h3 className="font-bold text-slate-900 text-base sm:text-lg">Visual Route Builder</h3>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Real-time sequential polyline pathing with verified latitude/longitude coordinates.
+            Real-time sequential route mapping with verified latitude/longitude coordinates.
           </p>
         </div>
 
@@ -348,7 +348,7 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
                 Ordered Stops ({stops.length})
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
-                Order strictly matches polyline path
+                Order matches collection sequence
               </span>
             </div>
 
@@ -475,7 +475,7 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
               className="w-full py-1.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-md shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
-              Add Stop to Polyline
+              Add Stop to Route
             </button>
           </form>
         </div>
@@ -485,7 +485,7 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-sky-700" />
-              Live Route Polyline Preview
+              Live Route Preview
             </span>
             <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
               Auto-Framed Map Bounds (40px padding)

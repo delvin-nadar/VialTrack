@@ -1545,7 +1545,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
                       <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span>Instant Snap</span>
+                      <span>Collection Acknowledgement</span>
                     </button>
                   </div>
                 )}
@@ -1619,7 +1619,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
                       <Sparkles className="w-4 h-4 text-emerald-600" />
-                      <span>Instant Slip</span>
+                      <span>Digital Handover Receipt</span>
                     </button>
                   </div>
                 )}
@@ -1756,8 +1756,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     className="py-4 px-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
                   >
                     <Sparkles className="w-5 h-5 text-emerald-600" />
-                    <span>Instant Intake Snap</span>
-                    <span className="text-[10px] text-slate-500">Auto-generated slip</span>
+                    <span>Digital Handover Receipt</span>
+                    <span className="text-[10px] text-slate-500">Auto-generated receipt</span>
                   </button>
                 </div>
               )}

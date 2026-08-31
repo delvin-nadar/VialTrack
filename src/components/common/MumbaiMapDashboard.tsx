@@ -708,7 +708,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <span className="text-[11px]">
-              {isFirestoreConnected ? 'Firestore Live GeoPoint' : 'Live Fleet Radar'}
+              {isFirestoreConnected ? 'Active Fleet Radar' : 'Live Fleet Radar'}
             </span>
             <span className="text-[10px] text-sky-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded">
               {filteredRiders.length} Riders
@@ -774,7 +774,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                 showRoutesLayer ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-500'
               }`}
             >
-              Polylines
+              Dispatch Routes
             </button>
 
             <button
@@ -1056,7 +1056,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               <div className="space-y-2">
                 {filteredClients.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 text-xs">
-                    No client diagnostic centers registered in Firestore
+                    No client diagnostic centers registered in system
                   </div>
                 ) : (
                   filteredClients.map((c) => (

@@ -533,7 +533,7 @@ export const RouteModal: React.FC<RouteModalProps> = ({
             <div className="lg:col-span-5 flex flex-col space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Live Polyline Frame
+                  Live Route Preview
                 </span>
                 <span className="text-[9px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-bold">
                   Bounds Fit (40px)

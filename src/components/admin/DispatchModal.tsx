@@ -214,7 +214,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Dispatch error:', err);
-      alert('Failed to dispatch task to Firestore. Please try again.');
+      alert('Failed to dispatch task. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,7 +236,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                 Dispatch Real-time Collection Round
               </h3>
               <p className="text-xs text-slate-500">
-                Unified Firestore task sync across Admin, Rider App, and Client Portal
+                Real-time synchronization across Admin, Courier Fleet, and Client Labs
               </p>
             </div>
           </div>
@@ -454,7 +454,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>Dispatch Task (Firestore Sync)</span>
+                  <span>Dispatch Task</span>
                 </>
               )}
             </button>

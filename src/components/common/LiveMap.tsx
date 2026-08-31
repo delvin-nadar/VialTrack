@@ -750,7 +750,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
           <span className="text-[11px]">
-            {isFirestoreConnected ? 'Firestore Live GPS' : 'Live Fleet Radar'}
+            {isFirestoreConnected ? 'Satellite GPS Active' : 'Live Fleet Radar'}
           </span>
           <span className="text-[10px] text-sky-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded">
             {activeRidersList.length} Active
@@ -800,7 +800,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             }`}
           >
             <span className="inline-block w-2.5 h-0.5 bg-indigo-600 align-middle mr-1"></span>
-            Route Polylines
+            Dispatch Routes
           </button>
 
           <button

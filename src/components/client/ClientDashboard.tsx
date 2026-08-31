@@ -311,7 +311,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{user.name}</h2>
           <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
-            Live specimen chain-of-custody, active rider GPS tracking, calibrated cold-box telemetry, and verified lab handover logs.
+            Live specimen chain-of-custody, active rider GPS tracking, calibrated box diagnostics, and verified lab handover logs.
           </p>
         </div>
 
@@ -684,10 +684,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Prescription / Requisition Photo Upload (Canvas Compressed Base64) */}
+              {/* Prescription / Requisition Photo Upload */}
               <div className="space-y-1.5">
                 <label className="block text-slate-700 font-bold uppercase tracking-wider text-[11px]">
-                  Prescription / Requisition Photo (Canvas Compressed Base64)
+                  Prescription / Requisition Document Photo
                 </label>
 
                 <input
@@ -708,7 +708,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     />
                     <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-between">
                       <span className="text-[10px] text-emerald-300 font-mono flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Canvas Compressed (Max 800px JPEG)
+                        <Check className="w-3 h-3" /> Document Verified & Attached
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -736,8 +736,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     className="w-full py-4 px-3 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
                   >
                     <Camera className="w-5 h-5 text-sky-700" />
-                    <span>{isCompressingPhoto ? 'Compressing via Canvas...' : 'Capture / Upload Prescription Photo'}</span>
-                    <span className="text-[10px] text-slate-500">Auto-compressed to 800px JPEG Base64 for Firestore storage</span>
+                    <span>{isCompressingPhoto ? 'Processing Document...' : 'Capture / Upload Prescription Photo'}</span>
+                    <span className="text-[10px] text-slate-500">Auto-optimized for rapid cloud transmission</span>
                   </button>
                 )}
               </div>

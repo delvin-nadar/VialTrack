@@ -332,7 +332,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </div>
             <div className="flex-1">
               <p className="font-bold text-slate-800 text-xs">Rider Photo ID</p>
-              <p className="text-[11px] text-slate-500 mb-2">Base64 canvas compressed</p>
+              <p className="text-[11px] text-slate-500 mb-2">Upload ID Photo</p>
               <button
                 type="button"
                 onClick={() => photoFileInputRef.current?.click()}
@@ -412,7 +412,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             />
             <p className="text-[10px] text-slate-500">
               {rider
-                ? 'Leave empty to preserve Asif\'s existing password in Firestore. Only enter text if you want to reset his password.'
+                ? 'Leave empty to preserve existing password. Only enter text if you want to reset password.'
                 : 'Enter a strong password or 4-6 digit security PIN for the rider to log into the Rider Portal.'}
             </p>
           </div>

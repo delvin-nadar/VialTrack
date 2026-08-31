@@ -446,7 +446,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       const riderPopupHtml = `
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 220px; padding: 6px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-            <span style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase;">Live Courier Telemetry</span>
+            <span style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase;">Live Specimen Location</span>
             <span style="font-size: 9px; font-weight: 700; background: ${isStale ? '#fef3c7' : '#ecfdf5'}; color: ${isStale ? '#b45309' : '#047857'}; padding: 2px 6px; border-radius: 9999px; border: 1px solid ${isStale ? '#fde68a' : '#a7f3d0'};">
               ${isStale ? 'GPS PAUSED' : 'LIVE GPS'}
             </span>
@@ -573,7 +573,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1">
                     <Radio className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
-                    Live Specimen In-Transit Telemetry
+                    Live Specimen Radar & Tracking
                   </span>
                   <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                     isStale
@@ -663,7 +663,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
             {/* Telemetry Heartbeat & Battery */}
             <div className="bg-slate-800/80 p-2.5 sm:p-3 rounded-lg border border-slate-700/80">
               <div className="flex items-center justify-between text-slate-400 text-[11px] font-semibold mb-1">
-                <span>GPS Telemetry</span>
+                <span>GPS Radar</span>
                 <Battery className="w-3.5 h-3.5 text-amber-400" />
               </div>
               <div className="text-base sm:text-lg font-mono font-extrabold text-slate-200">
@@ -693,7 +693,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Scheduled pickup cycles will appear here when dispatched. Real-time telemetry activates automatically when the rider begins the route.
+                Scheduled pickup cycles will appear here when dispatched. Real-time GPS tracking activates automatically when the rider begins the route.
               </p>
             </div>
           </div>
