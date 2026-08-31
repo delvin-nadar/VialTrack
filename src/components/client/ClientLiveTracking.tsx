@@ -12,6 +12,7 @@ import {
   DEFAULT_MUMBAI_COORDINATES
 } from '../../utils/coordinates';
 import { fetchRoadPolyline } from '../../utils/routeGeometry';
+import { animateMarkerPosition, cancelMarkerAnimation } from '../../utils/markerAnimation';
 import {
   Bike,
   Building2,
@@ -201,24 +202,48 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       }
     );
 
-    // Optional listener on task document if taskId exists
+    // Targeted listeners on active trip and active task documents
+    let unsubscribeTrip = () => {};
     let unsubscribeTask = () => {};
     const currentTaskId = activeTask?.id || (liveTaskData as any)?.id;
     if (currentTaskId) {
+      // 1. Listen directly to doc(db, "trips", currentTaskId)
+      const tripDocRef = doc(db, 'trips', currentTaskId);
+      unsubscribeTrip = onSnapshot(
+        tripDocRef,
+        (tripSnap) => {
+          if (tripSnap.exists()) {
+            const tData = tripSnap.data();
+            setLiveTaskData((prev) => ({
+              ...(prev || {}),
+              id: tripSnap.id,
+              ...tData
+            } as PickupTask));
+          }
+        },
+        (err) => console.warn('[ClientLiveTracking] Trip listener notice:', err)
+      );
+
+      // 2. Also listen to doc(db, "tasks", currentTaskId)
       const taskDocRef = doc(db, 'tasks', currentTaskId);
       unsubscribeTask = onSnapshot(
         taskDocRef,
         (taskSnap) => {
           if (taskSnap.exists()) {
-            setLiveTaskData({ id: taskSnap.id, ...taskSnap.data() } as PickupTask);
+            setLiveTaskData((prev) => ({
+              ...(prev || {}),
+              id: taskSnap.id,
+              ...taskSnap.data()
+            } as PickupTask));
           }
         },
-        (err) => console.warn('[ClientLiveTracking] Task listener error:', err)
+        (err) => console.warn('[ClientLiveTracking] Task listener notice:', err)
       );
     }
 
     return () => {
       unsubscribeRider();
+      unsubscribeTrip();
       unsubscribeTask();
     };
   }, [effectiveRiderId, activeTask?.id, targetDestinationCoords]);
@@ -472,7 +497,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       `;
 
       if (riderMarkerRef.current) {
-        riderMarkerRef.current.setLatLng(riderCoords);
+        animateMarkerPosition(riderMarkerRef.current, riderCoords[0], riderCoords[1], 10000, effectiveRiderId);
         riderMarkerRef.current.setIcon(bikeIcon);
         riderMarkerRef.current.setPopupContent(riderPopupHtml);
       } else {
@@ -483,6 +508,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
     } else {
       // If trip is not active, remove rider marker completely from active radar
       if (riderMarkerRef.current) {
+        cancelMarkerAnimation(effectiveRiderId);
         map.removeLayer(riderMarkerRef.current);
         riderMarkerRef.current = null;
       }

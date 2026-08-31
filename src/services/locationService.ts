@@ -166,13 +166,15 @@ class LocationTrackerService {
           this.recordPing(ping);
           this.notify(ping);
 
-          // Check throttle: Only write to Firestore if >= 15 seconds passed OR moved >= 30 meters
+          // Throttling: Only push GPS updates to Firestore every 10 seconds OR when moved >= 15 meters
+          const TIME_THROTTLE_MS = 10000; // 10 seconds throttle
+          const DISTANCE_FILTER_METERS = 15; // 15m distance filter
           const timeSinceLastWrite = now - this.lastSentTimestamp;
           const distMoved = this.lastSentCoords
             ? calculateDistanceMeters(this.lastSentCoords.lat, this.lastSentCoords.lng, currentLat, currentLng)
             : 999;
 
-          if (this.lastSentCoords && timeSinceLastWrite < 15000 && distMoved < 30) {
+          if (this.lastSentCoords && timeSinceLastWrite < TIME_THROTTLE_MS && distMoved < DISTANCE_FILTER_METERS) {
             this.notifyStatus();
             return;
           }
@@ -180,7 +182,7 @@ class LocationTrackerService {
           this.lastSentTimestamp = now;
           this.lastSentCoords = { lat: currentLat, lng: currentLng };
 
-          // Direct setDoc write to Firestore collection 'riders' with merge: true
+          // Direct single rider document update in Firestore 'riders' collection with serverTimestamp
           try {
             if (taskId) {
               await CloudSync.updateTripRiderLocation(taskId, riderId, currentLat, currentLng, {
@@ -197,6 +199,15 @@ class LocationTrackerService {
                   name: riderName || 'Rider',
                   lat: currentLat,
                   lng: currentLng,
+                  heading: currentHeading,
+                  speed: currentSpeed,
+                  battery: 88,
+                  batteryLevel: 88,
+                  lastPing: serverTimestamp(),
+                  lastPingTime: new Date().toISOString(),
+                  lastUpdated: serverTimestamp(),
+                  isOnline: true,
+                  status: 'active',
                   currentLocation: {
                     lat: currentLat,
                     lng: currentLng,
@@ -204,13 +215,7 @@ class LocationTrackerService {
                     heading: currentHeading,
                     speed: currentSpeed,
                     accuracy: pos.coords.accuracy || 5
-                  },
-                  heading: currentHeading,
-                  battery: 88,
-                  batteryLevel: 88,
-                  isOnline: true,
-                  status: 'active',
-                  lastUpdated: serverTimestamp()
+                  }
                 },
                 { merge: true }
               );

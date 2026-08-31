@@ -6,14 +6,13 @@ import {
   resolvedFirebaseConfig,
   resolvedFirestoreDatabaseId,
   app,
-  db as defaultDb,
   auth,
   CloudSync,
   seedCoreCollectionsIfEmpty
 } from './services/firebase';
 
-// Explicitly connect to the project database
-export const db = getFirestore(app, "ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829");
+// Use default database (removes AI shared quota bottleneck)
+export const db = getFirestore(app);
 
 export {
   firebaseConfig,

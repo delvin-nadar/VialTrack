@@ -3,9 +3,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { RouteStop, DestinationLab, PickupBoy, LocationPing, PickupTask } from '../../types';
 import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import { fetchRoadPolyline } from '../../utils/routeGeometry';
+import { animateMarkerPosition, cancelMarkerAnimation } from '../../utils/markerAnimation';
 import {
   MapPin,
   Bike,
@@ -88,12 +89,56 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [activeFilterRiderId, setActiveFilterRiderId] = useState<string | 'all'>('all');
 
-  // Real-time Firestore Subscriptions for 'riders' collection
+  // Real-time Firestore Subscriptions for 'riders' collection / single rider document
   useEffect(() => {
     if (!enableFirestoreSync) return;
 
     let mounted = true;
-    const unsubscribe = onSnapshot(
+
+    // If scoped to a single rider, subscribe directly to their document
+    if (rider?.id) {
+      const unsubRiderDoc = onSnapshot(
+        doc(db, 'riders', rider.id),
+        (docSnap) => {
+          if (!mounted) return;
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const lat = data.lat ?? data.currentLocation?.lat;
+            const lng = data.lng ?? data.currentLocation?.lng;
+            if (lat && lng) {
+              const singleRider = {
+                id: docSnap.id,
+                ...data,
+                lat,
+                lng,
+                name: data.name || rider.name || 'Courier Partner',
+                vehicleNumber: data.vehicleNumber || data.vehicleNo || rider.vehicleNumber || '',
+                isOnline: data.isOnline !== false
+              } as any;
+              setFirestoreRiders([singleRider]);
+              setIsFirestoreConnected(true);
+
+              if (mapInstanceRef.current) {
+                mapInstanceRef.current.setView([lat, lng], Math.max(mapInstanceRef.current.getZoom(), 14), {
+                  animate: true
+                });
+              }
+            }
+          }
+        },
+        (error) => {
+          console.warn('[LiveMap] onSnapshot error for single rider doc:', error);
+        }
+      );
+
+      return () => {
+        mounted = false;
+        unsubRiderDoc();
+      };
+    }
+
+    // Otherwise subscribe to the active fleet 'riders' collection
+    const unsubscribeFleet = onSnapshot(
       collection(db, 'riders'),
       (snapshot) => {
         if (!mounted) return;
@@ -130,19 +175,11 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     );
 
-    const unsubLocations = CloudSync.subscribeToLocations((cloudPings) => {
-      if (!mounted) return;
-      if (cloudPings) {
-        setFirestorePings(cloudPings);
-      }
-    });
-
     return () => {
       mounted = false;
-      unsubscribe();
-      unsubLocations();
+      unsubscribeFleet();
     };
-  }, [enableFirestoreSync]);
+  }, [enableFirestoreSync, rider?.id]);
 
   // Merge prop riders and real-time Firestore riders with GeoPoint extraction
   const activeRidersList = useMemo(() => {
@@ -452,10 +489,10 @@ export const LiveMap: React.FC<LiveMapProps> = ({
           </div>
         `;
 
-        // Smooth position update if marker already exists
+        // Smooth position update if marker already exists with 10-second interpolation
         if (riderMarkersMapRef.current.has(activeRider.id)) {
           const existingMarker = riderMarkersMapRef.current.get(activeRider.id)!;
-          existingMarker.setLatLng([lat, lng]);
+          animateMarkerPosition(existingMarker, lat, lng, 10000, activeRider.id);
           existingMarker.setIcon(riderIcon);
           existingMarker.setPopupContent(popupHtml);
         } else {
@@ -478,6 +515,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     // Clean up markers for removed riders
     riderMarkersMapRef.current.forEach((marker, id) => {
       if (!currentRiderIds.has(id) || !showRiderMarkers) {
+        cancelMarkerAnimation(id);
         markersLayer.removeLayer(marker);
         riderMarkersMapRef.current.delete(id);
       }

@@ -166,20 +166,11 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
       }
     });
 
-    const unsubLocations = CloudSync.subscribeToLocations((pings) => {
-      if (!mounted) return;
-      if (pings) {
-        setCloudPings(pings);
-        setIsFirestoreConnected(true);
-      }
-    });
-
     return () => {
       mounted = false;
       unsubRiders();
       unsubTasks();
       unsubClients();
-      unsubLocations();
     };
   }, []);
 

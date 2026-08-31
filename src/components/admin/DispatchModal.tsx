@@ -230,18 +230,18 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     }
 
     setIsSubmitting(true);
-    const taskId = `task-${Date.now()}`;
+    const taskId = `task_${Date.now()}`;
     const stopsPayload = selectedStopsList.map((stop, idx) => ({
       id: stop.id,
-      stopId: `stop-${idx + 1}`,
+      stopId: stop.id || `stop_${idx + 1}`,
       name: stop.name,
       stopName: stop.name,
-      address: stop.address,
+      address: stop.address || '',
       lat: Number(stop.lat || 19.1287852),
       lng: Number(stop.lng || 72.8294183),
       specimenCount: Number(stop.specimenCount || 0),
       sampleCount: Number(stop.specimenCount || 0),
-      status: 'assigned' as const,
+      status: idx === 0 ? ('in_progress' as const) : ('pending' as const),
       assignedRiderId: rider.id,
       assignedRiderName: rider.name,
       contactPerson: stop.contactPerson || 'Lab Coordinator',
@@ -251,45 +251,53 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
     const localTask: PickupTask = formatUnifiedTask(taskId, {
       id: taskId,
+      clientId: client.id,
+      clientName: client.name,
+      clientEmail: client.email || '',
       clientLabId: client.id,
       clientLabName: client.name,
-      clientAddress: client.address,
+      clientAddress: client.address || '',
       clientCoords: [Number(client.lat || 19.1287852), Number(client.lng || 72.8294183)],
       riderId: rider.id,
       riderName: rider.name,
-      riderPhone: rider.phone,
-      riderVehicle: rider.vehicleNumber,
+      riderPhone: rider.phone || '',
+      riderVehicle: rider.vehicleNumber || '',
       status: 'assigned',
-      routeId: route?.id || 'custom-route',
-      routeName: route?.name || `${client.name} Collection Loop`,
+      currentStopIndex: 0,
+      routeId: route?.id || 'route_1',
+      routeName: route?.name || `${client.name} Specimen Pickup Loop`,
       scheduledDate: taskDate,
       timeSlot: taskTimeSlot,
       createdAt: new Date().toISOString(),
       stops: stopsPayload,
+      stopsProgress: stopsPayload,
       taskNotes
     });
 
     try {
-      // 1. Direct root document write to 'tasks' collection (Standardized Root Task Write)
+      // 1. Direct root document write to 'tasks' collection using setDoc
       const rootTaskDoc = {
         id: taskId,
-        clientLabId: client.id,
+        clientId: client.id,
         clientName: client.name,
+        clientEmail: client.email || '',
+        clientLabId: client.id,
         clientLabName: client.name,
-        clientAddress: client.address,
+        clientAddress: client.address || '',
         clientCoords: [Number(client.lat || 19.1287852), Number(client.lng || 72.8294183)],
+        routeId: route?.id || 'route_1',
+        routeName: route?.name || `${client.name} Specimen Pickup Loop`,
         riderId: rider.id,
         riderName: rider.name,
-        riderPhone: rider.phone,
-        riderVehicle: rider.vehicleNumber,
+        riderPhone: rider.phone || '',
+        riderVehicle: rider.vehicleNumber || '',
         assignedRiderId: rider.id,
         assignedRiderName: rider.name,
-        assignedRiderPhone: rider.phone,
+        assignedRiderPhone: rider.phone || '',
         status: 'assigned' as const,
+        currentStopIndex: 0,
         stops: stopsPayload,
         stopsProgress: stopsPayload,
-        routeId: route?.id || 'custom-route',
-        routeName: route?.name || `${client.name} Collection Loop`,
         scheduledDate: taskDate,
         timeSlot: taskTimeSlot,
         taskNotes,
@@ -302,7 +310,20 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
       await setDoc(doc(db, 'tasks', taskId), rootTaskDoc);
 
-      // Direct unified dispatch to sync trips, fleet status and listeners
+      // 2. Update rider doc `riders/${selectedRider.id}` setting dutyStatus = "on_trip" and activeTaskId = taskId
+      await setDoc(
+        doc(db, 'riders', rider.id),
+        {
+          dutyStatus: 'on_trip',
+          activeTaskId: taskId,
+          status: 'active',
+          isOnline: true,
+          lastUpdated: serverTimestamp()
+        },
+        { merge: true }
+      );
+
+      // 3. Dispatch unified helper to sync trips and notify listeners
       const newTask = await CloudSync.dispatchTask({
         client: {
           id: client.id,

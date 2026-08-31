@@ -56,6 +56,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   // Live Firestore tasks state
   const [firestoreTasks, setFirestoreTasks] = useState<PickupTask[]>([]);
+  const [activeRoundsCount, setActiveRoundsCount] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'alerts'>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [dispatchNotice, setDispatchNotice] = useState<string | null>(null);
@@ -68,46 +69,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedNewRiderId, setSelectedNewRiderId] = useState<string>('');
   const [isReassigning, setIsReassigning] = useState(false);
 
-  // 1. Direct Firestore tasks and trips collection listeners
+  // 1. Direct Firestore root 'tasks' collection listener
   useEffect(() => {
     try {
-      const unsubTrips = CloudSync.subscribeToTrips((cloudTrips) => {
-        if (cloudTrips && cloudTrips.length > 0) {
-          const formatted = cloudTrips.map((t) => formatUnifiedTask(t.id, t));
-          setFirestoreTasks((prev) => {
-            const map = new Map<string, PickupTask>();
-            prev.forEach((item) => map.set(item.id, item));
-            formatted.forEach((item) => map.set(item.id, item));
-            return Array.from(map.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-          });
-        }
-      });
-
-      const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'), limit(50));
-      const unsubTasks = onSnapshot(
+      const q = collection(db, 'tasks');
+      const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          if (!snapshot.empty) {
-            const fetched = snapshot.docs.map((docSnap) => {
-              const data = docSnap.data();
-              return formatUnifiedTask(docSnap.id, data);
-            });
-            setFirestoreTasks((prev) => {
-              const map = new Map<string, PickupTask>();
-              prev.forEach((item) => map.set(item.id, item));
-              fetched.forEach((item) => map.set(item.id, item));
-              return Array.from(map.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-            });
-          }
+          const taskList: PickupTask[] = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return formatUnifiedTask(docSnap.id, { id: docSnap.id, ...data });
+          });
+
+          // Sort so most recent tasks appear first
+          taskList.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+          });
+
+          setFirestoreTasks(taskList);
+
+          const active = taskList.filter((t) => t.status === 'assigned' || t.status === 'in_transit');
+          setActiveRoundsCount(active.length);
         },
         (err) => {
-          console.warn('[AdminDashboard] Firestore tasks listener error:', err);
+          console.warn('[AdminDashboard] Live tasks listener notice:', err);
         }
       );
-      return () => {
-        unsubTrips();
-        unsubTasks();
-      };
+
+      return () => unsubscribe();
     } catch (e) {
       console.warn('[AdminDashboard] Setup tasks listener failed:', e);
     }

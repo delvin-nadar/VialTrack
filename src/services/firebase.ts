@@ -106,8 +106,8 @@ export const resolvedFirestoreDatabaseId: string =
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
-// Explicitly connect to the project database
-export const db = getFirestore(app, "ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829");
+// Use default database (removes AI shared quota bottleneck)
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 export { GeoPoint };
@@ -900,49 +900,36 @@ export const CloudSync = {
     }
   },
 
-  // Record a live location ping in Firestore 'locations' and update the rider's GeoPoint in 'riders'
+  // Update rider document directly in Firestore 'riders' with GeoPoint, battery, heading, speed, and serverTimestamp
   async recordLocationPing(ping: LocationPing) {
     try {
+      if (!ping.riderId) return;
       const geoPoint = toFirestoreGeoPoint(ping.lat, ping.lng);
+      const riderDocRef = doc(db, 'riders', ping.riderId);
       
-      // 1. Write to 'locations' collection with native GeoPoint
-      const locationDocRef = doc(db, 'locations', ping.id);
-      await setDoc(locationDocRef, {
-        id: ping.id,
-        riderId: ping.riderId,
-        riderName: ping.riderName,
-        timestamp: ping.timestamp,
+      await setDoc(riderDocRef, {
+        id: ping.riderId,
         lat: ping.lat,
         lng: ping.lng,
-        location: geoPoint,
-        speed: ping.speed ?? 0,
         heading: ping.heading ?? 0,
-        battery: ping.battery ?? 100,
-        taskId: ping.taskId || null,
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
-
-      // 2. Update rider document in 'riders' collection with current GeoPoint and serverTimestamp
-      if (ping.riderId) {
-        const riderDocRef = doc(db, 'riders', ping.riderId);
-        await setDoc(riderDocRef, {
-          id: ping.riderId,
-          lastPingTime: ping.timestamp,
-          lastUpdated: serverTimestamp(),
-          isOnline: true,
-          batteryLevel: ping.battery ?? 100,
+        speed: ping.speed ?? 0,
+        battery: ping.battery ?? 88,
+        batteryLevel: ping.battery ?? 88,
+        lastPing: serverTimestamp(),
+        lastPingTime: ping.timestamp || new Date().toISOString(),
+        lastUpdated: serverTimestamp(),
+        isOnline: true,
+        status: 'active',
+        currentLocation: {
+          lat: ping.lat,
+          lng: ping.lng,
+          location: geoPoint,
+          timestamp: ping.timestamp || new Date().toISOString(),
           heading: ping.heading ?? 0,
-          currentLocation: {
-            lat: ping.lat,
-            lng: ping.lng,
-            location: geoPoint,
-            timestamp: ping.timestamp,
-            heading: ping.heading ?? 0,
-            speed: ping.speed ?? 0,
-            accuracy: 5
-          }
-        }, { merge: true });
-      }
+          speed: ping.speed ?? 0,
+          accuracy: 5
+        }
+      }, { merge: true });
     } catch (err: any) {
       console.warn('[CloudSync] Location ping sync notice:', err?.message || err);
     }
@@ -952,18 +939,22 @@ export const CloudSync = {
   async updateRiderGpsLocation(riderId: string, lat: number, lng: number, heading: number = 0, speed: number = 0, battery: number = 90, taskId?: string) {
     try {
       const geoPoint = toFirestoreGeoPoint(lat, lng);
-      const pingId = `ping-${Date.now()}`;
       const nowIso = new Date().toISOString();
 
       // Update rider document directly
       const riderDocRef = doc(db, 'riders', riderId);
       await setDoc(riderDocRef, {
         id: riderId,
+        lat,
+        lng,
+        heading: heading || 0,
+        speed: speed || 0,
+        battery,
+        batteryLevel: battery,
+        lastPing: serverTimestamp(),
         lastPingTime: nowIso,
         lastUpdated: serverTimestamp(),
         isOnline: true,
-        batteryLevel: battery,
-        heading: heading || 0,
         currentLocation: {
           lat,
           lng,
@@ -974,63 +965,109 @@ export const CloudSync = {
           accuracy: 5
         }
       }, { merge: true });
-
-      // Also record in locations collection
-      const locationDocRef = doc(db, 'locations', pingId);
-      await setDoc(locationDocRef, {
-        id: pingId,
-        riderId,
-        timestamp: nowIso,
-        lat,
-        lng,
-        location: geoPoint,
-        speed: speed || 0,
-        heading: heading || 0,
-        battery: battery || 90,
-        taskId: taskId || null,
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
     } catch (err: any) {
       console.warn('[CloudSync] updateRiderGpsLocation notice:', err?.message || err);
     }
   },
 
-  // Subscribe to real-time updates for a collection
+  // Subscribe to real-time updates for a collection with polling fallback on quota exhaustion
   subscribeToCollection<T>(collectionName: string, onUpdate: (items: T[]) => void): Unsubscribe {
+    let isCancelled = false;
+    let pollIntervalId: number | null = null;
+    let unsubSnapshot: Unsubscribe = () => {};
+
+    const fetchViaPolling = async () => {
+      try {
+        const colRef = collection(db, collectionName);
+        const snapshot = await getDocs(colRef);
+        if (isCancelled) return;
+        if (!snapshot.empty) {
+          const list: T[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.location instanceof GeoPoint) {
+              data.lat = data.location.latitude;
+              data.lng = data.location.longitude;
+            } else if (data.currentLocation?.location instanceof GeoPoint) {
+              data.currentLocation.lat = data.currentLocation.location.latitude;
+              data.currentLocation.lng = data.currentLocation.location.longitude;
+            }
+            list.push(data as T);
+          });
+          onUpdate(list);
+        }
+      } catch (pollErr: any) {
+        console.warn(`[CloudSync] Polling fallback error for ${collectionName}:`, pollErr?.message || pollErr);
+      }
+    };
+
+    const activatePollingFallback = (reason: string) => {
+      console.warn(`[CloudSync] Real-time listener for ${collectionName} paused, switching to interval sync (15s):`, reason);
+      fetchViaPolling();
+      if (!pollIntervalId) {
+        pollIntervalId = window.setInterval(fetchViaPolling, 15000);
+      }
+    };
+
     try {
       const colRef = collection(db, collectionName);
-      const unsubscribe = onSnapshot(
+      unsubSnapshot = onSnapshot(
         colRef,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const list: T[] = [];
-            snapshot.forEach((docSnap) => {
-              const data = docSnap.data();
-              // Parse GeoPoint fields if present
-              if (data.location instanceof GeoPoint) {
-                data.lat = data.location.latitude;
-                data.lng = data.location.longitude;
-              } else if (data.currentLocation?.location instanceof GeoPoint) {
-                data.currentLocation.lat = data.currentLocation.location.latitude;
-                data.currentLocation.lng = data.currentLocation.location.longitude;
-              }
-              list.push(data as T);
-            });
-            onUpdate(list);
-          }
-        },
-        (error: any) => {
-          if (error?.code === 'permission-denied') {
-            console.info(`[CloudSync] Real-time listener on ${collectionName}: ${error.message}`);
-          } else {
-            console.warn(`[CloudSync] Real-time listener notice for ${collectionName}:`, error?.message || error);
+        {
+          next: (snapshot) => {
+            if (isCancelled) return;
+            if (pollIntervalId) {
+              clearInterval(pollIntervalId);
+              pollIntervalId = null;
+            }
+            if (!snapshot.empty) {
+              const list: T[] = [];
+              snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                // Parse GeoPoint fields if present
+                if (data.location instanceof GeoPoint) {
+                  data.lat = data.location.latitude;
+                  data.lng = data.location.longitude;
+                } else if (data.currentLocation?.location instanceof GeoPoint) {
+                  data.currentLocation.lat = data.currentLocation.location.latitude;
+                  data.currentLocation.lng = data.currentLocation.location.longitude;
+                }
+                list.push(data as T);
+              });
+              onUpdate(list);
+            }
+          },
+          error: (error: any) => {
+            if (isCancelled) return;
+            const errMsg = error?.message || '';
+            const errCode = error?.code || '';
+            if (
+              errCode === 'resource-exhausted' ||
+              errMsg.toLowerCase().includes('quota') ||
+              errMsg.toLowerCase().includes('resource_exhausted')
+            ) {
+              activatePollingFallback('Quota exceeded / Resource exhausted');
+            } else if (error?.code === 'permission-denied') {
+              console.info(`[CloudSync] Real-time listener on ${collectionName}: ${errMsg}`);
+            } else {
+              console.warn(`[CloudSync] Real-time listener notice for ${collectionName}:`, errMsg);
+              activatePollingFallback(errMsg);
+            }
           }
         }
       );
-      return unsubscribe;
-    } catch (err) {
-      return () => {};
+    } catch (err: any) {
+      activatePollingFallback(err?.message || 'Listener initialization failed');
     }
+
+    return () => {
+      isCancelled = true;
+      unsubSnapshot();
+      if (pollIntervalId) {
+        clearInterval(pollIntervalId);
+        pollIntervalId = null;
+      }
+    };
   },
 
   // Dedicated real-time snapshot subscription for 'locations' collection
