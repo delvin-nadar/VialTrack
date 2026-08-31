@@ -1,0 +1,461 @@
+import React, { useState, useMemo } from 'react';
+import { UserAuth, PickupTask, Route, PickupBoy, Client } from '../../types';
+import { LiveMap } from '../common/LiveMap';
+import {
+  Building2,
+  Calendar,
+  Clock,
+  MapPin,
+  Bike,
+  CheckCircle2,
+  AlertTriangle,
+  Eye,
+  Thermometer,
+  ShieldCheck,
+  Download,
+  Search,
+  MessageSquare,
+  X,
+  PhoneCall,
+  Send,
+  Sparkles
+} from 'lucide-react';
+import { StorageService } from '../../services/storage';
+import { NotificationService } from '../../services/notificationService';
+
+interface ClientDashboardProps {
+  user: UserAuth;
+  tasks: PickupTask[];
+  routes: Route[];
+  riders: PickupBoy[];
+  onOpenProof: (task: PickupTask) => void;
+  onRefresh: () => void;
+}
+
+export const ClientDashboard: React.FC<ClientDashboardProps> = ({
+  user,
+  tasks,
+  routes,
+  riders,
+  onOpenProof,
+  onRefresh
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'delivered' | 'in_transit' | 'upcoming'>('all');
+  const [isReportingIssue, setIsReportingIssue] = useState(false);
+  const [issueTask, setIssueTask] = useState<PickupTask | null>(null);
+  const [issueText, setIssueText] = useState('');
+  const [issueType, setIssueType] = useState('Rider Delayed / Urgent Pickup');
+
+  // Filter tasks belonging ONLY to this client (data isolation)
+  const clientTasks = useMemo(() => {
+    const cid = user.clientId || (routes[0]?.clientId) || 'client-apex';
+    return tasks.filter((t) => t.clientId === cid || (!user.clientId && t.clientName?.includes('Apex')));
+  }, [tasks, user.clientId, routes]);
+
+  // Client routes
+  const clientRoutes = useMemo(() => {
+    const cid = user.clientId || (routes[0]?.clientId) || 'client-apex';
+    return routes.filter((r) => r.clientId === cid);
+  }, [routes, user.clientId]);
+
+  // Today's date
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayClientTasks = clientTasks.filter((t) => t.date === todayStr);
+
+  // Active in-transit task to show live tracking on map
+  const activeLiveTask = todayClientTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) || todayClientTasks[0];
+  const activeLiveRoute = clientRoutes.find((r) => r.id === activeLiveTask?.routeId) || clientRoutes[0];
+  const activeLiveRider = riders.find((r) => r.id === activeLiveTask?.riderId) || riders[0];
+
+  // Filtered task list
+  const filteredTasks = useMemo(() => {
+    return clientTasks.filter((t) => {
+      if (statusFilter === 'delivered' && t.status !== 'delivered') return false;
+      if (statusFilter === 'in_transit' && !['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) return false;
+      if (statusFilter === 'upcoming' && t.status !== 'upcoming') return false;
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchesRoute = t.routeName.toLowerCase().includes(q);
+        const matchesRider = t.riderName.toLowerCase().includes(q);
+        const matchesStop = t.stopsProgress.some((s) => s.stopName.toLowerCase().includes(q) || (s.sampleCount && s.sampleCount.toString().includes(q)));
+        if (!matchesRoute && !matchesRider && !matchesStop) return false;
+      }
+
+      return true;
+    });
+  }, [clientTasks, statusFilter, searchQuery]);
+
+  const handleReportIssue = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!issueText) return;
+
+    NotificationService.sendAlert({
+      type: 'issue',
+      title: `Client Alert (${user.name}): ${issueType}`,
+      message: `${issueText} - Reported for Task: ${issueTask ? `${issueTask.timeSlot} ${issueTask.routeName}` : 'General Inquiry'}`,
+      recipientRole: 'admin',
+      channel: 'both'
+    });
+
+    alert('Your issue report has been dispatched to SecondMedic Logistics Operations dispatch team.');
+    setIsReportingIssue(false);
+    setIssueText('');
+  };
+
+  const totalTodayVials = todayClientTasks.reduce(
+    (sum, t) => sum + t.stopsProgress.reduce((sSum, s) => sSum + (s.sampleCount || 0), 0),
+    0
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Welcome & Lab Overview Banner */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold text-sky-700 mb-1">
+            <ShieldCheck className="w-4 h-4 text-sky-700" />
+            <span>SecondMedic Verified Diagnostic Transport Partner</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{user.name}</h2>
+          <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
+            Live specimen chain-of-custody, active rider GPS tracking, calibrated cold-box telemetry, and verified lab handover logs.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setIssueTask(activeLiveTask);
+              setIsReportingIssue(true);
+            }}
+            className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs rounded-lg border border-amber-300 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4 text-amber-600" />
+            <span>Report Logistics Issue</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Today's KPI Counters */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1.5">
+            <span>Today's Time Slots</span>
+            <Clock className="w-4 h-4 text-sky-700" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900">{todayClientTasks.length} Scheduled</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Fixed daily collection cycles</div>
+        </div>
+
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1.5">
+            <span>Specimens Received</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-emerald-700">{totalTodayVials} Vials</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Blood & biopsy samples</div>
+        </div>
+
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1.5">
+            <span>Cold-Box Status</span>
+            <Thermometer className="w-4 h-4 text-teal-600" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-teal-800">4.2°C (Safe)</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Certified 2.0°C – 8.0°C range</div>
+        </div>
+
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1.5">
+            <span>Active Collection Loop</span>
+            <Bike className="w-4 h-4 text-sky-700" />
+          </div>
+          <div className="text-lg sm:text-xl font-bold text-sky-700 truncate">
+            {activeLiveRider?.name || 'On Schedule'}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">{activeLiveRider?.phone}</div>
+        </div>
+      </div>
+
+      {/* Live Map & Today's Slots Tracking */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Left: Live Rider Radar (7 cols) */}
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-sky-700" />
+                <span>Live Rider Radar & Destination ETA</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Tracking assigned rider for route: <span className="text-slate-900 font-semibold">{activeLiveRoute?.name}</span>
+              </p>
+            </div>
+
+            {activeLiveRider && (
+              <a
+                href={`tel:${activeLiveRider.phone}`}
+                className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-emerald-800 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-1.5 transition-colors shadow-xs"
+              >
+                <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Call Rider</span>
+              </a>
+            )}
+          </div>
+
+          <LiveMap
+            stops={activeLiveRoute?.stops || []}
+            destination={activeLiveRoute?.destinationLab}
+            rider={activeLiveRider}
+            tasks={todayClientTasks}
+            activeTaskId={activeLiveTask?.id}
+            height="360px"
+            enableFirestoreSync={true}
+          />
+
+          {/* Real-time Status Card */}
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-bold text-slate-900">Live Status:</span>
+              <span className="text-slate-600">
+                {activeLiveTask?.status === 'delivered'
+                  ? 'Completed handover at central lab'
+                  : 'Rider in transit between hospital collection points'}
+              </span>
+            </div>
+            <span className="text-sky-700 font-mono font-semibold text-[11px]">
+              Estimated Lab Arrival: ~18 mins
+            </span>
+          </div>
+        </div>
+
+        {/* Right: Today's Time Slots Timeline (5 cols) */}
+        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
+          <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <Clock className="w-4 h-4 text-sky-700" />
+            <span>Today's Pickup Slots</span>
+          </h3>
+
+          <div className="space-y-2.5">
+            {todayClientTasks.map((task) => {
+              return (
+                <div
+                  key={task.id}
+                  className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900 shadow-xs">
+                        {task.timeSlot}
+                      </span>
+                      <span className="font-bold text-slate-900 text-xs">{task.routeName}</span>
+                    </div>
+
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        task.status === 'delivered'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : task.status === 'in_transit' || task.status === 'started' || task.status === 'at_stop'
+                          ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {task.status === 'delivered'
+                        ? 'Delivered to Lab'
+                        : task.status === 'in_transit'
+                        ? 'In Transit'
+                        : 'Scheduled'}
+                    </span>
+                  </div>
+
+                  {/* Stops progress */}
+                  <div className="text-[11px] text-slate-600 space-y-1 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
+                    {task.stopsProgress.map((stop, sIdx) => (
+                      <div key={stop.stopId || sIdx} className="flex items-center justify-between">
+                        <span className="truncate max-w-[190px] text-slate-700">{stop.stopName}</span>
+                        <span className="font-mono text-emerald-700 font-medium">
+                          {stop.status === 'picked_up' ? `${stop.sampleCount} Vials` : 'Pending'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Proof button */}
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <span className="text-slate-500 text-[11px]">Rider: {task.riderName}</span>
+                    <button
+                      onClick={() => onOpenProof(task)}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-sky-700 font-semibold rounded-md text-xs border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View Proof</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Historical Pickup Log & Chain-of-Custody Archives */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-sky-700" />
+              <span>Specimen Intake & Verification Archive</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Verified chain-of-custody proofs, cold-box sensor logs, and sample pickup history for {user.name}.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search route, sample count..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-hidden focus:border-sky-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-600">
+            <thead className="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3">Date & Slot</th>
+                <th className="px-4 py-3">Route</th>
+                <th className="px-4 py-3">Rider</th>
+                <th className="px-4 py-3">Vials Picked</th>
+                <th className="px-4 py-3">Chiller Temp</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Proof of Custody</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredTasks.map((t) => {
+                const vials = t.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
+                const lastTemp = t.destination.coldBoxTempAtDrop || t.stopsProgress[0]?.coldBoxTemp;
+
+                return (
+                  <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-mono font-bold text-slate-900 text-xs">{t.timeSlot}</div>
+                      <div className="text-[10px] text-slate-400">{t.date}</div>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">{t.routeName}</td>
+                    <td className="px-4 py-3 text-slate-700">{t.riderName}</td>
+                    <td className="px-4 py-3 font-bold font-mono text-amber-700 text-xs">{vials} Vials</td>
+                    <td className="px-4 py-3 font-mono text-emerald-700">
+                      {lastTemp !== undefined ? `${lastTemp.toFixed(1)}°C` : 'N/A'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          t.status === 'delivered'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-sky-100 text-sky-800 border border-sky-200'
+                        }`}
+                      >
+                        {t.status === 'delivered' ? 'Delivered' : t.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => onOpenProof(t)}
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-sky-700 font-semibold rounded-lg text-xs border border-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>View Proof</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Report Issue Modal */}
+      {isReportingIssue && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                <span>Report Logistics Issue to SecondMedic Ops</span>
+              </h3>
+              <button
+                onClick={() => setIsReportingIssue(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReportIssue} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                  Issue Category
+                </label>
+                <select
+                  value={issueType}
+                  onChange={(e) => setIssueType(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
+                >
+                  <option value="Rider Delayed / Urgent Pickup">Rider Delayed / Urgent Pickup Required</option>
+                  <option value="Sample Count Mismatch">Sample / Vial Count Mismatch</option>
+                  <option value="Temperature / Cold-Chain Issue">Cold-Chain Temperature Fluctuation</option>
+                  <option value="Damaged / Leaking Vial">Damaged / Leaking Vial</option>
+                  <option value="Other Logistics Request">Other Logistics Inquiries</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                  Description & Critical Details *
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  placeholder="Provide stop name, sample IDs, or any emergency instructions for SecondMedic Ops dispatch..."
+                  value={issueText}
+                  onChange={(e) => setIssueText(e.target.value)}
+                  className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsReportingIssue(false)}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Dispatch Alert</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

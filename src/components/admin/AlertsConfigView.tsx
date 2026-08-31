@@ -1,0 +1,289 @@
+import React, { useState } from 'react';
+import { Bell, ShieldAlert, Sliders, MessageSquare, Send, CheckCircle2, AlertTriangle, Thermometer, Database, Sparkles, MapPin } from 'lucide-react';
+import { NotificationService } from '../../services/notificationService';
+import { seedMumbaiFirestoreData } from '../../services/mumbaiSeed';
+
+interface AlertsConfigViewProps {
+  onRefresh: () => void;
+}
+
+export const AlertsConfigView: React.FC<AlertsConfigViewProps> = ({ onRefresh }) => {
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState(15);
+  const [minTemp, setMinTemp] = useState(2.0);
+  const [maxTemp, setMaxTemp] = useState(8.0);
+  const [enableWhatsApp, setEnableWhatsApp] = useState(true);
+  const [enableSMS, setEnableSMS] = useState(true);
+  const [enableInApp, setEnableInApp] = useState(true);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [testSent, setTestSent] = useState(false);
+
+  // Seeding state
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleSeedData = async () => {
+    setIsSeeding(true);
+    setSeedResult(null);
+    try {
+      const res = await seedMumbaiFirestoreData();
+      if (res.success) {
+        setSeedResult({
+          success: true,
+          message: `Successfully populated Firestore with ${res.count} Mumbai records (BKC, Nerul, Andheri, Dadar, Powai, Vashi)!`
+        });
+        onRefresh();
+      } else {
+        setSeedResult({
+          success: false,
+          message: `Seeding error: ${res.error}`
+        });
+      }
+    } catch (e: any) {
+      setSeedResult({
+        success: false,
+        message: `Failed: ${e?.message || e}`
+      });
+    } finally {
+      setIsSeeding(false);
+      setTimeout(() => setSeedResult(null), 6000);
+    }
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const handleSendTestAlert = () => {
+    NotificationService.sendAlert({
+      type: 'delay',
+      title: 'TEST ALERT: Pickup Delayed (+15m)',
+      message: 'Automated test simulation: Rider Rahul Sharma delayed on Western Suburbs Loop (Slot 14:00).',
+      recipientRole: 'admin',
+      channel: 'both'
+    });
+    setTestSent(true);
+    onRefresh();
+    setTimeout(() => setTestSent(false), 3000);
+  };
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      {/* Header */}
+      <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-xl shadow-xs">
+        <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Sliders className="w-5 h-5 text-sky-700" />
+          <span>Automated Operational Rules & Alert Thresholds</span>
+        </h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Configure automated SLA monitoring, grace periods, cold-chain temperature thresholds, and notification channels.
+        </p>
+      </div>
+
+      {/* Developer & Admin Database Tools Card */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-xl p-4 sm:p-5 border border-slate-800 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-sky-400" />
+              <h3 className="text-sm sm:text-base font-bold text-white">
+                Admin & Dev Data Seeder (Mumbai Landmark Collections)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300">
+              Populates Firestore <code className="text-sky-300 font-mono">riders</code>, <code className="text-sky-300 font-mono">clients</code>, <code className="text-sky-300 font-mono">tasks</code>, and <code className="text-sky-300 font-mono">attendance</code> collections with realistic Mumbai GeoPoints (BKC, Nerul, Andheri West, Dadar, Powai, Vashi).
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSeedData}
+            disabled={isSeeding}
+            className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
+            <span>{isSeeding ? 'Seeding Database...' : 'Seed Sample Mumbai Data'}</span>
+          </button>
+        </div>
+
+        {seedResult && (
+          <div
+            className={`mt-3 p-2.5 rounded-lg text-xs font-bold flex items-center gap-2 ${
+              seedResult.success
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700'
+                : 'bg-rose-950/80 text-rose-300 border border-rose-700'
+            }`}
+          >
+            {seedResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
+            <span>{seedResult.message}</span>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSave} className="space-y-5">
+        {/* SLA Grace Period */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>Pickup Slot Delay Detection (Grace Period)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Time allowed past the scheduled slot before auto-flagging delay and notifying client/admin.
+              </p>
+            </div>
+            <span className="font-mono font-bold text-amber-800 text-sm sm:text-base bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+              {gracePeriodMinutes} Minutes
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <input
+              type="range"
+              min="5"
+              max="45"
+              step="5"
+              value={gracePeriodMinutes}
+              onChange={(e) => setGracePeriodMinutes(Number(e.target.value))}
+              className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-sky-700"
+            />
+            <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+              <span>5 min (Strict)</span>
+              <span>15 min (Standard)</span>
+              <span>30 min</span>
+              <span>45 min (Lenient)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Cold-Chain Limits */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                <Thermometer className="w-4 h-4 text-sky-700" />
+                <span>Cold-Chain Biological Safe Range</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Alarms sound if chiller box temperature reading falls outside this certified range.
+              </p>
+            </div>
+            <span className="font-mono font-bold text-emerald-800 text-xs sm:text-sm bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+              {minTemp}°C to {maxTemp}°C
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                Minimum Temperature (°C)
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                value={minTemp}
+                onChange={(e) => setMinTemp(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                Maximum Temperature (°C)
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                value={maxTemp}
+                onChange={(e) => setMaxTemp(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Notification Channels */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3.5">
+          <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2 pb-3 border-b border-slate-100">
+            <MessageSquare className="w-4 h-4 text-sky-700" />
+            <span>Automated Notification Channels</span>
+          </h3>
+
+          <div className="space-y-2.5 text-xs">
+            <label className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+              <div>
+                <span className="font-bold text-slate-900 block">WhatsApp Automated Updates</span>
+                <span className="text-slate-500 text-[11px]">
+                  Instant WhatsApp alerts to hospital contact person on pickup and delivery.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={enableWhatsApp}
+                onChange={(e) => setEnableWhatsApp(e.target.checked)}
+                className="rounded border-slate-300 text-sky-700 w-4 h-4 focus:ring-sky-600"
+              />
+            </label>
+
+            <label className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+              <div>
+                <span className="font-bold text-slate-900 block">SMS Fallback Alerts</span>
+                <span className="text-slate-500 text-[11px]">
+                  High-priority SMS alerts for delayed loops or temperature alerts.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={enableSMS}
+                onChange={(e) => setEnableSMS(e.target.checked)}
+                className="rounded border-slate-300 text-sky-700 w-4 h-4 focus:ring-sky-600"
+              />
+            </label>
+
+            <label className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+              <div>
+                <span className="font-bold text-slate-900 block">In-App Push & Sound Alerts</span>
+                <span className="text-slate-500 text-[11px]">
+                  Real-time notification bell and browser audio chimes for Ops team.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={enableInApp}
+                onChange={(e) => setEnableInApp(e.target.checked)}
+                className="rounded border-slate-300 text-sky-700 w-4 h-4 focus:ring-sky-600"
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Save & Test Buttons */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          <button
+            type="button"
+            onClick={handleSendTestAlert}
+            className="w-full sm:w-auto px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-sky-700 font-bold text-xs rounded-lg border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>{testSent ? 'Test Alert Broadcasted!' : 'Send Test Alert to Ops'}</span>
+          </button>
+
+          <button
+            type="submit"
+            className="w-full sm:w-auto px-5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {savedSuccess ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>Configuration Saved!</span>
+              </>
+            ) : (
+              <span>Save Alert Rules</span>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};

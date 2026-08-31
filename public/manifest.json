@@ -1,0 +1,22 @@
+{
+  "short_name": "VialTrack",
+  "name": "SecondMedic VialTrack - Pickup Boy Portal",
+  "description": "Diagnostic Sample Pickup & Logistics Portal for SecondMedic Riders",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/rider",
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "display": "standalone",
+  "orientation": "portrait"
+}
