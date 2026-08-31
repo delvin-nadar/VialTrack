@@ -146,9 +146,6 @@ function AppContent() {
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
 
-  // Simulation State
-  const [isSimulating, setIsSimulating] = useState(false);
-
   // Load / Reload all state from storage
   const reloadData = useCallback(() => {
     try {
@@ -358,20 +355,6 @@ function AppContent() {
     navigate('/rider/login');
   };
 
-  // Toggle GPS Route Simulation
-  const handleToggleSimulation = () => {
-    if (isSimulating) {
-      LocationService.stopSimulation();
-      setIsSimulating(false);
-    } else {
-      const activeRider = riders.find((r) => r.status === 'active') || riders[0];
-      if (activeRider) {
-        LocationService.startSimulation(activeRider.id, activeRider.name, tasks[0]?.id);
-        setIsSimulating(true);
-      }
-    }
-  };
-
   // Open Proof Modal
   const handleOpenProof = (task: PickupTask) => {
     setSelectedProofTask(task);
@@ -428,8 +411,6 @@ function AppContent() {
                 onLogout={handleAdminLogout}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-                isSimulating={isSimulating}
-                onToggleSimulation={handleToggleSimulation}
               />
 
               <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
@@ -475,8 +456,6 @@ function AppContent() {
                       notifications={notifications}
                       onOpenProof={handleOpenProof}
                       onRefresh={reloadData}
-                      isSimulating={isSimulating}
-                      onToggleSimulation={handleToggleSimulation}
                     />
                   )}
 

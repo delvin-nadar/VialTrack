@@ -125,12 +125,16 @@ export interface PickupBoy {
   status: RiderStatus;
   joiningDate: string;
   area?: string;
+  lat?: number;
+  lng?: number;
+  speed?: number;
   location?: any;
   currentLocation?: {
     lat: number;
     lng: number;
     timestamp: string;
     heading?: number;
+    speed?: number;
     accuracy?: number;
     location?: any;
   };

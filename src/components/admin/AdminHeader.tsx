@@ -1,23 +1,19 @@
 import React from 'react';
 import { UserAuth } from '../../types';
-import { Bell, LogOut, Radio, Activity, ShieldCheck } from 'lucide-react';
+import { Bell, LogOut, Activity } from 'lucide-react';
 
 interface AdminHeaderProps {
   user: UserAuth;
   onLogout: () => void;
   unreadNotifsCount: number;
   onOpenNotifications: () => void;
-  isSimulating: boolean;
-  onToggleSimulation: () => void;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
   user,
   onLogout,
   unreadNotifsCount,
-  onOpenNotifications,
-  isSimulating,
-  onToggleSimulation
+  onOpenNotifications
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
@@ -48,22 +44,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <div className="hidden lg:flex items-center gap-2 text-xs text-slate-600 font-medium bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
             <span>Live GPS Radar</span>
-          </div>
-
-          {/* Live Simulator Quick Control */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs">
-            <Radio className={`w-3.5 h-3.5 ${isSimulating ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`} />
-            <button
-              onClick={onToggleSimulation}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer ${
-                isSimulating
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
-              }`}
-              title="Toggle simulated live GPS rider route movement"
-            >
-              {isSimulating ? 'Sim Active' : 'Start Sim'}
-            </button>
           </div>
 
           {/* Notifications Button */}

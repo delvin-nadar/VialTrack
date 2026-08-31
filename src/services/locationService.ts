@@ -2,17 +2,6 @@ import { LocationPing, PickupBoy, PickupTask } from '../types';
 import { StorageService } from './storage';
 import { CloudSync } from './firebase';
 
-// Coordinates waypoint list along the Mumbai Western Suburbs route
-export const DEMO_ROUTE_WAYPOINTS = [
-  { name: 'Kandivali Hub', lat: 19.2082, lng: 72.8398 },
-  { name: 'S.V. Road Junction', lat: 19.1980, lng: 72.8420 },
-  { name: 'Malad Link Road', lat: 19.1860, lng: 72.8485 },
-  { name: 'Goregaon West Signal', lat: 19.1720, lng: 72.8440 },
-  { name: 'Oscar Hospital Goregaon', lat: 19.1624, lng: 72.8465 },
-  { name: 'Inorbit Flyover', lat: 19.1790, lng: 72.8475 },
-  { name: 'Apex Central Lab', lat: 19.1860, lng: 72.8485 }
-];
-
 // Distance calculation (Haversine formula in km)
 export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Earth's radius in km
@@ -33,7 +22,7 @@ export function calculateDistanceMeters(lat1: number, lon1: number, lat2: number
   return calculateDistanceKm(lat1, lon1, lat2, lon2) * 1000;
 }
 
-// Calculate ETA in minutes based on distance and average Mumbai city bike speed (25 km/h)
+// Calculate ETA in minutes based on distance and average Mumbai city bike speed (24 km/h)
 export function calculateEtaMinutes(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
   const distKm = calculateDistanceKm(fromLat, fromLng, toLat, toLng);
   const avgSpeedKmh = 24; // avg bike speed in traffic
@@ -71,7 +60,7 @@ export function isRiderLocationStale(rider?: PickupBoy | null, maxAgeMinutes: nu
 
 export interface GpsStatusEvent {
   isActive: boolean;
-  mode: 'real' | 'simulated' | 'idle';
+  mode: 'real' | 'idle';
   isPermissionDenied: boolean;
   errorCode: number | null;
   errorMessage: string | null;
@@ -80,11 +69,8 @@ export interface GpsStatusEvent {
 
 class LocationTrackerService {
   private watchId: number | null = null;
-  private simulationInterval: any = null;
-  private simIndex: number = 0;
-  private isSimulating: boolean = false;
   
-  // Throttling state: 10 seconds or 25 meters
+  // Throttling state: 5 seconds or 15 meters
   private lastSentTimestamp: number = 0;
   private lastSentCoords: { lat: number; lng: number } | null = null;
   
@@ -114,8 +100,8 @@ class LocationTrackerService {
 
   public getStatus(): GpsStatusEvent {
     return {
-      isActive: this.watchId !== null || this.isSimulating,
-      mode: this.watchId !== null ? 'real' : this.isSimulating ? 'simulated' : 'idle',
+      isActive: this.watchId !== null,
+      mode: this.watchId !== null ? 'real' : 'idle',
       isPermissionDenied: this.isPermissionDenied,
       errorCode: this.lastErrorCode,
       errorMessage: this.lastErrorMessage,
@@ -133,9 +119,9 @@ class LocationTrackerService {
   }
 
   /**
-   * Start real browser geolocation watch
-   * Configured with { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-   * Throttles writes to Firestore every 10 seconds OR if moved > 25 meters.
+   * Start real browser geolocation watch for production live telemetry
+   * Configured with { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+   * Throttles writes to Firestore every 5-10 seconds OR if moved > 15 meters.
    */
   public startRealGeolocation(riderId: string, riderName: string, taskId?: string) {
     this.stop();
@@ -143,11 +129,10 @@ class LocationTrackerService {
     this.lastErrorCode = null;
     this.lastErrorMessage = null;
 
-    if (!navigator.geolocation) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       this.lastErrorMessage = 'Geolocation is not supported by this browser';
       this.lastErrorCode = 2;
       this.notifyStatus();
-      this.startSimulation(riderId, riderName, taskId);
       return;
     }
 
@@ -175,8 +160,8 @@ class LocationTrackerService {
           }
 
           const timeElapsedMs = now - this.lastSentTimestamp;
-          // Throttle: write to Firestore every 10s OR if moved > 25 meters (or on first ping)
-          const shouldWrite = !this.lastSentCoords || timeElapsedMs >= 10000 || movedMeters >= 25;
+          // Write to Firestore immediately on first ping or every 8s or on 15m delta
+          const shouldWrite = !this.lastSentCoords || timeElapsedMs >= 8000 || movedMeters >= 15;
 
           const ping: LocationPing = {
             id: `ping-${Date.now()}`,
@@ -196,14 +181,14 @@ class LocationTrackerService {
             this.lastSentCoords = { lat: currentLat, lng: currentLng };
             this.recordPing(ping);
           } else {
-            // Local broadcast only without writing to Firestore
+            // Local memory broadcast
             this.notify(ping);
           }
 
           this.notifyStatus();
         },
         (err) => {
-          console.warn('[LocationService] Geolocation watch error:', err.code, err.message);
+          console.warn('[LocationService] Geolocation watch notice:', err.code, err.message);
           this.lastErrorCode = err.code;
           if (err.code === 1) { // PERMISSION_DENIED
             this.isPermissionDenied = true;
@@ -220,7 +205,7 @@ class LocationTrackerService {
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 5000,
+          maximumAge: 3000,
           timeout: 10000
         }
       );
@@ -233,85 +218,10 @@ class LocationTrackerService {
     }
   }
 
-  /**
-   * Start continuous simulated rider route movement for test demonstration
-   */
-  public startSimulation(riderId: string, riderName: string, taskId?: string) {
-    this.stop();
-    this.isSimulating = true;
-    this.isPermissionDenied = false;
-    this.lastErrorCode = null;
-    this.lastErrorMessage = null;
-
-    // Initial ping
-    const initialWay = DEMO_ROUTE_WAYPOINTS[this.simIndex % DEMO_ROUTE_WAYPOINTS.length];
-    const initialPing: LocationPing = {
-      id: `sim-ping-${Date.now()}`,
-      riderId,
-      riderName,
-      timestamp: new Date().toISOString(),
-      lat: initialWay.lat + (Math.random() - 0.5) * 0.0008,
-      lng: initialWay.lng + (Math.random() - 0.5) * 0.0008,
-      speed: 28,
-      heading: 175,
-      battery: 88,
-      taskId
-    };
-    this.lastSentTimestamp = Date.now();
-    this.lastSentCoords = { lat: initialPing.lat, lng: initialPing.lng };
-    this.recordPing(initialPing);
-    this.notifyStatus();
-
-    this.simulationInterval = setInterval(() => {
-      this.simIndex = (this.simIndex + 1) % DEMO_ROUTE_WAYPOINTS.length;
-      const way = DEMO_ROUTE_WAYPOINTS[this.simIndex];
-      // Add slight jitter for realistic micro-movement
-      const jitterLat = (Math.random() - 0.5) * 0.0006;
-      const jitterLng = (Math.random() - 0.5) * 0.0006;
-
-      const ping: LocationPing = {
-        id: `sim-ping-${Date.now()}`,
-        riderId,
-        riderName,
-        timestamp: new Date().toISOString(),
-        lat: way.lat + jitterLat,
-        lng: way.lng + jitterLng,
-        speed: Math.floor(20 + Math.random() * 15),
-        heading: Math.floor(Math.random() * 360),
-        battery: Math.max(20, 92 - Math.floor(this.simIndex * 0.5)),
-        taskId
-      };
-
-      this.lastSentTimestamp = Date.now();
-      this.lastSentCoords = { lat: ping.lat, lng: ping.lng };
-      this.recordPing(ping);
-    }, 10000); // 10s interval for simulated throttle
-  }
-
-  public stepSimulationManually(riderId: string, riderName: string, taskId?: string) {
-    this.simIndex = (this.simIndex + 1) % DEMO_ROUTE_WAYPOINTS.length;
-    const way = DEMO_ROUTE_WAYPOINTS[this.simIndex];
-    const ping: LocationPing = {
-      id: `manual-ping-${Date.now()}`,
-      riderId,
-      riderName,
-      timestamp: new Date().toISOString(),
-      lat: way.lat,
-      lng: way.lng,
-      speed: 26,
-      heading: 180,
-      battery: 85,
-      taskId
-    };
-    this.lastSentTimestamp = Date.now();
-    this.lastSentCoords = { lat: ping.lat, lng: ping.lng };
-    this.recordPing(ping);
-  }
-
   private recordPing(ping: LocationPing) {
     StorageService.addPing(ping);
 
-    // Update rider's active location in storage
+    // Update rider's active location in local storage
     const rider = StorageService.getRiderById(ping.riderId);
     if (rider) {
       const updatedRider: PickupBoy = {
@@ -321,8 +231,11 @@ class LocationTrackerService {
           lng: ping.lng,
           timestamp: ping.timestamp,
           heading: ping.heading,
+          speed: ping.speed,
           accuracy: 5
         },
+        lat: ping.lat,
+        lng: ping.lng,
         heading: ping.heading || 0,
         batteryLevel: ping.battery,
         isOnline: true,
@@ -331,7 +244,7 @@ class LocationTrackerService {
       StorageService.updateRider(updatedRider);
     }
 
-    // Sync to Firestore 'locations' and update 'riders/{riderId}' with currentLocation, heading, lastUpdated serverTimestamp
+    // Sync straight to Firestore 'locations' and 'riders/{riderId}' with GeoPoint and serverTimestamp
     CloudSync.recordLocationPing(ping).catch((err) => {
       console.warn('[LocationService] Firestore location sync notice:', err);
     });
@@ -342,7 +255,6 @@ class LocationTrackerService {
   public startTracking(callbackOrRiderId?: ((ping: LocationPing) => void) | string, riderName?: string, taskId?: string) {
     if (typeof callbackOrRiderId === 'function') {
       this.subscribe(callbackOrRiderId);
-      // Auto start tracking with active rider
       const riders = StorageService.getRiders();
       const activeRider = riders.find((r) => r.status === 'active') || riders[0];
       if (activeRider) {
@@ -354,24 +266,11 @@ class LocationTrackerService {
   }
 
   public stop() {
-    if (this.watchId !== null) {
+    if (this.watchId !== null && typeof navigator !== 'undefined') {
       navigator.geolocation?.clearWatch(this.watchId);
       this.watchId = null;
     }
-    if (this.simulationInterval !== null) {
-      clearInterval(this.simulationInterval);
-      this.simulationInterval = null;
-    }
-    this.isSimulating = false;
     this.notifyStatus();
-  }
-
-  public stopSimulation() {
-    this.stop();
-  }
-
-  public getIsSimulating(): boolean {
-    return this.isSimulating;
   }
 }
 
