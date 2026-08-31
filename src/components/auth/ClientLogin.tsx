@@ -3,6 +3,7 @@ import { UserAuth } from '../../types';
 import { Building2, Mail, Lock, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { auth, signInWithEmailAndPassword } from '../../services/firebase';
+import { BrandLogo } from '../common/BrandLogo';
 
 interface ClientLoginProps {
   onLoginSuccess: (user: UserAuth) => void;
@@ -163,12 +164,10 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
         )}
 
         {/* Brand header */}
-        <div className="text-center mb-6">
-          <img
-            src="/logo.webp"
-            alt="SecondMedic"
-            className="h-10 sm:h-11 w-auto object-contain mx-auto mb-3"
-          />
+        <div className="text-center mb-6 flex flex-col items-center">
+          <div className="mb-3">
+            <BrandLogo size="md" className="h-10 sm:h-11 w-auto" />
+          </div>
           <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Client Diagnostic Portal</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Hospital & Diagnostic Lab Partner Specimen Intake

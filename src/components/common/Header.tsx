@@ -1,6 +1,7 @@
 import React from 'react';
 import { UserAuth } from '../../types';
 import { Shield, Bell, LogOut, Radio, Play, Activity } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 interface HeaderProps {
   user: UserAuth;
@@ -45,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
         {/* Brand Logo & Title */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <img src="/logo.webp" alt="SecondMedic" className="h-8 w-auto object-contain" />
+          <BrandLogo className="h-8 w-auto" />
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-700 shadow-xs whitespace-nowrap">
               VialTrack | Operations Console

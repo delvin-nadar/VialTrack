@@ -274,10 +274,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     setIssueText('');
   };
 
-  const totalTodayVials = todayClientTasks.reduce(
-    (sum, t) => sum + t.stopsProgress.reduce((sSum, s) => sSum + (s.sampleCount || 0), 0),
-    0
-  );
+  const totalSlotsCount = activeLiveRoute?.stops?.length || todayClientTasks.length || 0;
+
+  const totalTodayVials = useMemo(() => {
+    let sum = todayClientTasks.reduce(
+      (acc, t) => acc + (t.stopsProgress || []).reduce((sAcc, s: any) => sAcc + Number(s.sampleCount || s.specimenCount || 0), 0),
+      0
+    );
+    if (sum === 0 && activeLiveRoute?.stops && activeLiveRoute.stops.length > 0) {
+      sum = activeLiveRoute.stops.reduce((acc, s: any) => acc + Number(s.specimenCount || s.sampleCount || 0), 0);
+    }
+    return sum;
+  }, [todayClientTasks, activeLiveRoute]);
 
   return (
     <div className="space-y-5">
@@ -323,7 +331,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             <span>Today's Time Slots</span>
             <Clock className="w-4 h-4 text-sky-700" />
           </div>
-          <div className="text-xl sm:text-2xl font-bold text-slate-900">{todayClientTasks.length} Scheduled</div>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900">{totalSlotsCount} Scheduled</div>
           <div className="text-[11px] text-slate-400 mt-0.5">Fixed daily collection cycles</div>
         </div>
 
@@ -353,7 +361,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           <div className="text-lg sm:text-xl font-bold text-sky-700 truncate">
             {activeLiveRider?.name || 'On Schedule'}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">{activeLiveRider?.phone}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">{activeLiveRider?.phone || '+91 80 4719 3333'}</div>
         </div>
       </div>
 
@@ -382,70 +390,126 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           </h3>
 
           <div className="space-y-2.5">
-            {todayClientTasks.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                No active pickup tasks scheduled
-              </div>
-            ) : (
+            {todayClientTasks.length > 0 ? (
               todayClientTasks.map((task) => {
                 return (
                   <div
                     key={task.id}
                     className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2"
                   >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900 shadow-xs">
-                        {task.timeSlot}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900 shadow-xs">
+                          {task.timeSlot}
+                        </span>
+                        <span className="font-bold text-slate-900 text-xs">{task.routeName}</span>
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          task.status === 'delivered'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : task.status === 'in_transit' || task.status === 'started' || task.status === 'at_stop'
+                            ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {task.status === 'delivered'
+                          ? 'Delivered to Lab'
+                          : task.status === 'in_transit'
+                          ? 'In Transit'
+                          : 'Scheduled'}
                       </span>
-                      <span className="font-bold text-slate-900 text-xs">{task.routeName}</span>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        task.status === 'delivered'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : task.status === 'in_transit' || task.status === 'started' || task.status === 'at_stop'
-                          ? 'bg-sky-100 text-sky-800 border border-sky-200'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}
-                    >
-                      {task.status === 'delivered'
-                        ? 'Delivered to Lab'
-                        : task.status === 'in_transit'
-                        ? 'In Transit'
-                        : 'Scheduled'}
+                    {/* Stops progress */}
+                    <div className="text-[11px] text-slate-600 space-y-1 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
+                      {task.stopsProgress.map((stop, sIdx) => (
+                        <div key={stop.stopId || sIdx} className="flex items-center justify-between">
+                          <span className="truncate max-w-[190px] text-slate-700">{stop.stopName}</span>
+                          <span className="font-mono text-emerald-700 font-medium">
+                            {stop.status === 'picked_up' ? `${stop.sampleCount || (stop as any).specimenCount || 0} Vials` : 'Pending'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Proof button */}
+                    <div className="flex items-center justify-between pt-1 text-xs">
+                      <span className="text-slate-500 text-[11px]">Rider: {task.riderName}</span>
+                      <button
+                        onClick={() => onOpenProof(task)}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-sky-700 font-semibold rounded-md text-xs border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Proof</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : activeLiveRoute && activeLiveRoute.stops && activeLiveRoute.stops.length > 0 ? (
+              <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900 shadow-xs">
+                      {activeLiveRoute.timeSlots?.[0] || '10:30 AM'}
                     </span>
+                    <span className="font-bold text-slate-900 text-xs">{activeLiveRoute.name}</span>
                   </div>
 
-                  {/* Stops progress */}
-                  <div className="text-[11px] text-slate-600 space-y-1 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
-                    {task.stopsProgress.map((stop, sIdx) => (
-                      <div key={stop.stopId || sIdx} className="flex items-center justify-between">
-                        <span className="truncate max-w-[190px] text-slate-700">{stop.stopName}</span>
-                        <span className="font-mono text-emerald-700 font-medium">
-                          {stop.status === 'picked_up' ? `${stop.sampleCount} Vials` : 'Pending'}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                    In Transit
+                  </span>
+                </div>
+
+                {/* Route stops in transit */}
+                <div className="text-[11px] text-slate-600 space-y-1.5 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
+                  {activeLiveRoute.stops.map((stop: any, sIdx: number) => (
+                    <div key={stop.id || sIdx} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                        <span className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {sIdx + 1}
+                        </span>
+                        <span className="truncate text-slate-800 font-medium">
+                          {stop.stopName || stop.name}
                         </span>
                       </div>
-                    ))}
-                  </div>
+                      <span className="font-mono text-emerald-700 font-semibold shrink-0">
+                        {stop.specimenCount || stop.sampleCount || 10} Vials
+                      </span>
+                    </div>
+                  ))}
 
-                  {/* Proof button */}
-                  <div className="flex items-center justify-between pt-1 text-xs">
-                    <span className="text-slate-500 text-[11px]">Rider: {task.riderName}</span>
-                    <button
-                      onClick={() => onOpenProof(task)}
-                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-sky-700 font-semibold rounded-md text-xs border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>View Proof</span>
-                    </button>
+                  {/* Destination Lab item */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-slate-900 font-bold">
+                    <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                      <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center shrink-0">
+                        ✓
+                      </span>
+                      <span className="truncate text-emerald-900">
+                        {activeLiveRoute.destinationLab?.name || user.name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] uppercase font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Destination Lab
+                    </span>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+
+                <div className="flex items-center justify-between pt-1 text-xs">
+                  <span className="text-slate-500 text-[11px]">
+                    Assigned: {activeLiveRider?.name || 'Asif (Bike MH-02-DN-4821)'}
+                  </span>
+                  <span className="text-[11px] font-semibold text-sky-700">Live GPS Active</span>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                No active pickup tasks scheduled
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

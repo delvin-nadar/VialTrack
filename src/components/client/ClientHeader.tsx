@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 import { UserAuth } from '../../types';
 import { Building2, Bell, LogOut, PhoneCall, Eye, ArrowLeft } from 'lucide-react';
+import { BrandLogo } from '../common/BrandLogo';
 
 interface ClientHeaderProps {
   user: UserAuth;
@@ -17,6 +20,24 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({
   onOpenNotifications,
   onExitPreview
 }) => {
+  const [opsHotline, setOpsHotline] = useState<string>('+91 80 4719 3333');
+
+  // Pull Ops Hotline dynamically from the organization settings Firestore doc
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'organization'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.opsHotline || data.hotline || data.phone || data.supportContact) {
+          setOpsHotline(data.opsHotline || data.hotline || data.phone || data.supportContact);
+        }
+      }
+    }, (err) => {
+      console.warn('[ClientHeader] Organization settings listener:', err);
+    });
+
+    return () => unsub();
+  }, []);
+
   return (
     <>
       {/* Admin Preview Mode Banner */}
@@ -47,7 +68,7 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
           {/* Client Brand Logo & Lab Name */}
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <img src="/logo.webp" alt="SecondMedic" className="h-8 w-auto object-contain" />
+            <BrandLogo className="h-8 w-auto" />
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 bg-emerald-800 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-emerald-700 shadow-xs whitespace-nowrap">
                 VialTrack | Client Diagnostic Portal
@@ -63,7 +84,7 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({
             {/* Ops Support Hotline */}
             <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
               <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Ops Hotline: <strong>+91 98200 99887</strong></span>
+              <span>Ops Hotline: <strong className="font-mono">{opsHotline}</strong></span>
             </div>
 
             {/* Notifications Button */}

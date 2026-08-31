@@ -82,17 +82,22 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
 
   // Destination coordinates for the client
   const targetDestinationCoords = useMemo<[number, number]>(() => {
-    if (clientLocation?.lat && clientLocation?.lng) {
-      return normalizeLatLng(clientLocation.lat, clientLocation.lng);
+    let lat = 19.1287852;
+    let lng = 72.8294183;
+
+    if (clientLocation?.lat != null && clientLocation?.lng != null) {
+      lat = Number(clientLocation.lat);
+      lng = Number(clientLocation.lng);
+    } else if (activeTask?.destination?.lat != null && activeTask?.destination?.lng != null) {
+      lat = Number(activeTask.destination.lat);
+      lng = Number(activeTask.destination.lng);
+    } else if (activeRoute?.destinationLab?.lat != null && activeRoute?.destinationLab?.lng != null) {
+      lat = Number(activeRoute.destinationLab.lat);
+      lng = Number(activeRoute.destinationLab.lng);
     }
-    if (activeTask?.destination?.lat && activeTask?.destination?.lng) {
-      return normalizeLatLng(activeTask.destination.lat, activeTask.destination.lng);
-    }
-    if (activeRoute?.destinationLab?.lat && activeRoute?.destinationLab?.lng) {
-      return normalizeLatLng(activeRoute.destinationLab.lat, activeRoute.destinationLab.lng);
-    }
-    // Default to Lifecare Diagnostics Andheri West
-    return DEFAULT_MUMBAI_COORDINATES.LIFECARE_ANDHERI_WEST;
+
+    const centralLabCoords: [number, number] = [Number(lat), Number(lng)];
+    return normalizeLatLng(centralLabCoords[0], centralLabCoords[1], 19.1287852, 72.8294183);
   }, [clientLocation, activeTask, activeRoute]);
 
   // Intermediate stops if available
@@ -207,7 +212,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
 
   const riderName = liveRiderData?.name || liveTaskData?.riderName || 'Asif';
   const riderVehicle = liveRiderData?.vehicleNumber || liveTaskData?.riderVehicle || 'MH-02-DN-4821';
-  const riderPhone = liveRiderData?.phone || liveTaskData?.riderPhone || '+91 98201 54321';
+  const riderPhone = liveRiderData?.phone || liveTaskData?.riderPhone || '+91 80 4719 3333';
   const coldBoxTemp = liveRiderData?.coldBoxTemp ?? 4.0;
   const currentDestinationStop =
     liveTaskData?.currentDestinationStop ||

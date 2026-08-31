@@ -1,4 +1,5 @@
 import React from 'react';
+import { BrandLogo } from './BrandLogo';
 import {
   ShieldCheck,
   Building2,
@@ -22,12 +23,10 @@ export const PortalLanding: React.FC<PortalLandingProps> = ({ onSelectPortal }) 
   return (
     <div className="min-h-[88vh] flex flex-col justify-between py-6 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
       {/* Header / Hero Section */}
-      <div className="text-center pt-4 pb-8 sm:pb-12 max-w-3xl mx-auto">
-        <img
-          src="/logo.webp"
-          alt="SecondMedic"
-          className="h-12 sm:h-14 w-auto object-contain mx-auto mb-4"
-        />
+      <div className="text-center pt-4 pb-8 sm:pb-12 max-w-3xl mx-auto flex flex-col items-center">
+        <div className="mb-4">
+          <BrandLogo size="lg" className="h-12 sm:h-14 w-auto" />
+        </div>
 
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-sky-50 border border-sky-200 text-sky-800 rounded-full text-xs font-semibold mb-4">
           <Activity className="w-3.5 h-3.5 text-sky-700" />

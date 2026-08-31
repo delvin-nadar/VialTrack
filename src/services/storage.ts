@@ -424,21 +424,42 @@ export const StorageService = {
   },
 
   getRiderSession(): RiderSession | null {
-    const raw = safeGetItem(STORAGE_KEYS.RIDER_SESSION);
+    let raw = safeGetItem(STORAGE_KEYS.RIDER_SESSION);
+    if (!raw) {
+      raw = safeGetItem('vialtrack_active_rider');
+    }
     const session = safeParse<RiderSession | null>(raw, null);
-    if (session && session.role === 'rider' && session.riderId) {
-      return session;
+    if (session && (session.role === 'rider' || session.riderId || (session as any).id)) {
+      const normalized: RiderSession = {
+        role: 'rider',
+        riderId: session.riderId || (session as any).id,
+        phone: session.phone,
+        name: session.name,
+        email: session.email,
+        avatar: session.avatar || (session as any).photoUrl,
+        vehicleNo: session.vehicleNo || session.vehicleNumber,
+        vehicleNumber: session.vehicleNumber || session.vehicleNo,
+        vehicleType: session.vehicleType,
+        token: session.token || `rider_token_${Date.now()}`,
+        mustChangePassword: session.mustChangePassword ?? false,
+        loginTimestamp: session.loginTimestamp || new Date().toISOString()
+      };
+      return normalized;
     }
     if (raw) {
       safeRemoveItem(STORAGE_KEYS.RIDER_SESSION);
+      safeRemoveItem('vialtrack_active_rider');
     }
     return null;
   },
   setRiderSession(session: RiderSession | null): void {
-    if (session && session.role === 'rider' && session.riderId) {
-      safeSetItem(STORAGE_KEYS.RIDER_SESSION, JSON.stringify(session));
+    if (session && (session.role === 'rider' || session.riderId)) {
+      const jsonStr = JSON.stringify(session);
+      safeSetItem(STORAGE_KEYS.RIDER_SESSION, jsonStr);
+      safeSetItem('vialtrack_active_rider', jsonStr);
     } else {
       safeRemoveItem(STORAGE_KEYS.RIDER_SESSION);
+      safeRemoveItem('vialtrack_active_rider');
     }
   },
 

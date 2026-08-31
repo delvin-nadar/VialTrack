@@ -39,7 +39,7 @@ import { LocationService, GpsStatusEvent } from '../../services/locationService'
 import { NotificationService } from '../../services/notificationService';
 import { LiveMap } from '../common/LiveMap';
 import { CloudSync, db } from '../../services/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { DailyRoundsSchedule, ScheduleStopItem } from './DailyRoundsSchedule';
 
 interface RiderDashboardProps {
@@ -138,13 +138,24 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       }
     });
 
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'organization'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.opsHotline) {
+          setOpsHotline(data.opsHotline);
+        }
+      }
+    });
+
     return () => {
       unsubTasks();
       unsubRoutes();
       unsubRiderDoc();
+      unsubSettings();
     };
   }, [sessionRiderId, sessionPhone]);
 
+  const [opsHotline, setOpsHotline] = useState<string>('+91 80 4719 3333');
   const [isCheckedIn, setIsCheckedIn] = useState<boolean>(activeRider.isCheckedIn ?? true);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [currentStopIndex, setCurrentStopIndex] = useState<number>(0);
@@ -1124,11 +1135,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             You currently have no diagnostic routes or pickup tasks assigned to your shift. Please contact SecondMedic Ops Dispatch to assign your schedule.
           </p>
           <a
-            href="tel:+919876543210"
+            href={`tel:${opsHotline.replace(/\D/g, '')}`}
             className="inline-flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
           >
             <PhoneCall className="w-3.5 h-3.5" />
-            <span>Call Ops Dispatch Desk</span>
+            <span>Call Ops Dispatch Desk ({opsHotline})</span>
           </a>
         </div>
       )}

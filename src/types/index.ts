@@ -33,6 +33,9 @@ export interface RiderSession {
   token?: string;
   id?: string;
   avatar?: string;
+  vehicleNo?: string;
+  vehicleNumber?: string;
+  vehicleType?: string;
   mustChangePassword?: boolean;
   loginTimestamp?: string;
 }
