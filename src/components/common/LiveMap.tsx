@@ -255,13 +255,18 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         attributionControl: true
       });
 
+      // Configure official enterprise attribution prefix
+      if (map.attributionControl) {
+        map.attributionControl.setPrefix('SecondMedic Fleet Radar |');
+      }
+
       // Add Zoom control at top-left
       L.control.zoom({ position: 'topleft' }).addTo(map);
 
-      // Standard OpenStreetMap Tile Layer as explicitly requested
+      // Standard OpenStreetMap Tile Layer with clean legal attribution
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
       }).addTo(map);
 
       // Setup dedicated layer groups

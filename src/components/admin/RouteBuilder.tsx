@@ -86,12 +86,17 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
       const map = L.map(mapContainerRef.current, {
         center: [19.1624, 72.8398],
         zoom: 12,
-        zoomControl: true
+        zoomControl: true,
+        attributionControl: true
       });
+
+      if (map.attributionControl) {
+        map.attributionControl.setPrefix('SecondMedic Route Builder |');
+      }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
       }).addTo(map);
 
       markersLayerRef.current = L.layerGroup().addTo(map);

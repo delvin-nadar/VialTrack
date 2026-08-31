@@ -76,9 +76,13 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
         attributionControl: true
       }).setView([19.1624, 72.8465], 12);
 
+      if (map.attributionControl) {
+        map.attributionControl.setPrefix('SecondMedic Route Engine |');
+      }
+
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
       }).addTo(map);
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);

@@ -95,12 +95,17 @@ export const RouteModal: React.FC<RouteModalProps> = ({
       const map = L.map(mapContainerRef.current, {
         center: [19.1624, 72.8465],
         zoom: 12,
-        zoomControl: true
+        zoomControl: true,
+        attributionControl: true
       });
+
+      if (map.attributionControl) {
+        map.attributionControl.setPrefix('SecondMedic Route Preview |');
+      }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
       }).addTo(map);
 
       markersGroupRef.current = L.layerGroup().addTo(map);

@@ -241,12 +241,17 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         attributionControl: true
       });
 
+      // Configure official enterprise attribution prefix
+      if (map.attributionControl) {
+        map.attributionControl.setPrefix('SecondMedic Fleet Radar |');
+      }
+
       L.control.zoom({ position: 'topleft' }).addTo(map);
 
-      // OpenStreetMap tile layer
+      // OpenStreetMap tile layer with clean legal attribution
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
       }).addTo(map);
 
       polylinesLayerRef.current = L.layerGroup().addTo(map);
