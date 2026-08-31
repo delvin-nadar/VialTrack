@@ -4,7 +4,7 @@ import { UserAuth, PickupTask, Route as LogisticsRoute, PickupBoy, Client, Atten
 import { StorageService } from './services/storage';
 import { LocationService } from './services/locationService';
 import { NotificationService } from './services/notificationService';
-import { CloudSync } from './services/firebase';
+import { CloudSync, auth, signOut, onAuthStateChanged } from './services/firebase';
 
 // Portals & Components
 import { PortalLanding } from './components/common/PortalLanding';
@@ -17,7 +17,8 @@ import { NotificationDrawer } from './components/common/NotificationDrawer';
 import { LoadingSkeleton } from './components/common/LoadingSkeleton';
 import { MumbaiMapDashboard } from './components/common/MumbaiMapDashboard';
 
-// Auth
+// Auth & Route Protection
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminLogin } from './components/auth/AdminLogin';
 import { ClientLogin } from './components/auth/ClientLogin';
 import { RiderLogin } from './components/auth/RiderLogin';
@@ -263,8 +264,25 @@ function AppContent() {
     };
   }, []);
 
-  // Logout
-  const handleLogout = () => {
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      if (!fbUser) {
+        StorageService.setCurrentUser(null);
+        setCurrentUser(null);
+      }
+    });
+
+    return () => unsubAuth();
+  }, []);
+
+  // Logout with Firebase signOut
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn('[App] SignOut notice:', err);
+    }
     StorageService.setCurrentUser(null);
     setCurrentUser(null);
     navigate('/');
@@ -314,8 +332,10 @@ function AppContent() {
         <Route
           path="/admin"
           element={
-            <>
-              {(!currentUser || currentUser.role !== 'admin') ? (
+            <ProtectedRoute
+              requiredRole="admin"
+              currentUser={currentUser}
+              fallback={
                 <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
                   <AdminLogin
                     onLoginSuccess={(user) => {
@@ -326,124 +346,122 @@ function AppContent() {
                     onBackToLanding={() => navigate('/')}
                   />
                 </main>
-              ) : (
-                <>
-                  <AdminHeader
-                    user={currentUser}
-                    onLogout={handleLogout}
-                    unreadNotifsCount={unreadNotifsCount}
-                    onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-                    isSimulating={isSimulating}
-                    onToggleSimulation={handleToggleSimulation}
-                  />
+              }
+            >
+              <AdminHeader
+                user={currentUser}
+                onLogout={handleLogout}
+                unreadNotifsCount={unreadNotifsCount}
+                onOpenNotifications={() => setIsNotifDrawerOpen(true)}
+                isSimulating={isSimulating}
+                onToggleSimulation={handleToggleSimulation}
+              />
 
-                  <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
-                    <div className="space-y-5">
-                      {/* Admin Navigation Tabs Bar */}
-                      <div className="flex items-center gap-1 overflow-x-auto pb-1.5 border-b border-slate-200 text-xs no-scrollbar bg-slate-100/70 p-1 rounded-xl">
-                        {[
-                          { id: 'dashboard', label: 'Fleet & Live Ops', icon: LayoutDashboard },
-                          { id: 'map', label: 'Mumbai Interactive Map', icon: MapPin },
-                          { id: 'clients', label: 'Client Labs & Routes', icon: Building2 },
-                          { id: 'riders', label: 'Pickup Boys', icon: Bike },
-                          { id: 'attendance', label: 'Attendance Logs', icon: UserCheck },
-                          { id: 'history', label: 'Chain of Custody', icon: History },
-                          { id: 'reports', label: 'SLA & Billing', icon: FileText },
-                          { id: 'alerts_config', label: 'Alerts & Rules', icon: Sliders }
-                        ].map((tab) => {
-                          const Icon = tab.icon;
-                          const isActive = adminActiveTab === tab.id;
-                          return (
-                            <button
-                              key={tab.id}
-                              onClick={() => setAdminActiveTab(tab.id)}
-                              className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer text-xs ${
-                                isActive
-                                  ? 'bg-sky-700 text-white shadow-xs font-semibold'
-                                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-                              }`}
-                            >
-                              <Icon className="w-3.5 h-3.5" />
-                              <span>{tab.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+                <div className="space-y-5">
+                  {/* Admin Navigation Tabs Bar */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1.5 border-b border-slate-200 text-xs no-scrollbar bg-slate-100/70 p-1 rounded-xl">
+                    {[
+                      { id: 'dashboard', label: 'Fleet & Live Ops', icon: LayoutDashboard },
+                      { id: 'map', label: 'Mumbai Interactive Map', icon: MapPin },
+                      { id: 'clients', label: 'Client Labs & Routes', icon: Building2 },
+                      { id: 'riders', label: 'Pickup Boys', icon: Bike },
+                      { id: 'attendance', label: 'Attendance Logs', icon: UserCheck },
+                      { id: 'history', label: 'Chain of Custody', icon: History },
+                      { id: 'reports', label: 'SLA & Billing', icon: FileText },
+                      { id: 'alerts_config', label: 'Alerts & Rules', icon: Sliders }
+                    ].map((tab) => {
+                      const Icon = tab.icon;
+                      const isActive = adminActiveTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setAdminActiveTab(tab.id)}
+                          className={`px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer text-xs ${
+                            isActive
+                              ? 'bg-sky-700 text-white shadow-xs font-semibold'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                      {/* Render Selected Admin View */}
-                      {adminActiveTab === 'dashboard' && (
-                        <AdminDashboard
-                          tasks={tasks}
-                          riders={riders}
-                          routes={routes}
-                          clients={clients}
-                          notifications={notifications}
-                          onOpenProof={handleOpenProof}
-                          onRefresh={reloadData}
-                          isSimulating={isSimulating}
-                          onToggleSimulation={handleToggleSimulation}
-                        />
-                      )}
+                  {/* Render Selected Admin View */}
+                  {adminActiveTab === 'dashboard' && (
+                    <AdminDashboard
+                      tasks={tasks}
+                      riders={riders}
+                      routes={routes}
+                      clients={clients}
+                      notifications={notifications}
+                      onOpenProof={handleOpenProof}
+                      onRefresh={reloadData}
+                      isSimulating={isSimulating}
+                      onToggleSimulation={handleToggleSimulation}
+                    />
+                  )}
 
-                      {adminActiveTab === 'map' && (
-                        <div className="space-y-4">
-                          <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-sky-700" />
-                                <span>Mumbai Diagnostic Logistics Map (Center: 19.0760° N, 72.8777° E)</span>
-                              </h2>
-                              <p className="text-xs text-slate-500 mt-0.5">
-                                Real-time Firestore GeoPoint tracking across BKC, Nerul, Andheri West, Dadar, Powai, and Vashi with area filters and route polylines.
-                              </p>
-                            </div>
-                          </div>
-                          <MumbaiMapDashboard
-                            initialRiders={riders}
-                            initialTasks={tasks}
-                            initialClients={clients}
-                            onOpenProof={handleOpenProof}
-                            onRefreshData={reloadData}
-                            height="650px"
-                            showSidebarByDefault={true}
-                          />
+                  {adminActiveTab === 'map' && (
+                    <div className="space-y-4">
+                      <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <MapPin className="w-5 h-5 text-sky-700" />
+                            <span>Mumbai Diagnostic Logistics Map (Center: 19.0760° N, 72.8777° E)</span>
+                          </h2>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Real-time Firestore GeoPoint tracking across BKC, Nerul, Andheri West, Dadar, Powai, and Vashi with area filters and route polylines.
+                          </p>
                         </div>
-                      )}
-
-                      {adminActiveTab === 'clients' && (
-                        <ManageClients clients={clients} routes={routes} onRefresh={reloadData} />
-                      )}
-
-                      {adminActiveTab === 'riders' && (
-                        <ManageRiders riders={riders} routes={routes} onRefresh={reloadData} />
-                      )}
-
-                      {adminActiveTab === 'attendance' && (
-                        <AttendanceView attendance={attendance} riders={riders} onRefresh={reloadData} />
-                      )}
-
-                      {adminActiveTab === 'history' && (
-                        <TaskHistory
-                          tasks={tasks}
-                          clients={clients}
-                          riders={riders}
-                          routes={routes}
-                          onOpenProof={handleOpenProof}
-                        />
-                      )}
-
-                      {adminActiveTab === 'reports' && (
-                        <ReportsView tasks={tasks} riders={riders} clients={clients} />
-                      )}
-
-                      {adminActiveTab === 'alerts_config' && (
-                        <AlertsConfigView onRefresh={reloadData} />
-                      )}
+                      </div>
+                      <MumbaiMapDashboard
+                        initialRiders={riders}
+                        initialTasks={tasks}
+                        initialClients={clients}
+                        onOpenProof={handleOpenProof}
+                        onRefreshData={reloadData}
+                        height="650px"
+                        showSidebarByDefault={true}
+                      />
                     </div>
-                  </main>
-                </>
-              )}
-            </>
+                  )}
+
+                  {adminActiveTab === 'clients' && (
+                    <ManageClients clients={clients} routes={routes} onRefresh={reloadData} />
+                  )}
+
+                  {adminActiveTab === 'riders' && (
+                    <ManageRiders riders={riders} routes={routes} onRefresh={reloadData} />
+                  )}
+
+                  {adminActiveTab === 'attendance' && (
+                    <AttendanceView attendance={attendance} riders={riders} onRefresh={reloadData} />
+                  )}
+
+                  {adminActiveTab === 'history' && (
+                    <TaskHistory
+                      tasks={tasks}
+                      clients={clients}
+                      riders={riders}
+                      routes={routes}
+                      onOpenProof={handleOpenProof}
+                    />
+                  )}
+
+                  {adminActiveTab === 'reports' && (
+                    <ReportsView tasks={tasks} riders={riders} clients={clients} />
+                  )}
+
+                  {adminActiveTab === 'alerts_config' && (
+                    <AlertsConfigView onRefresh={reloadData} />
+                  )}
+                </div>
+              </main>
+            </ProtectedRoute>
           }
         />
 
@@ -451,8 +469,10 @@ function AppContent() {
         <Route
           path="/client"
           element={
-            <>
-              {(!currentUser || currentUser.role !== 'client') ? (
+            <ProtectedRoute
+              requiredRole="client"
+              currentUser={currentUser}
+              fallback={
                 <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
                   <ClientLogin
                     onLoginSuccess={(user) => {
@@ -463,28 +483,26 @@ function AppContent() {
                     onBackToLanding={() => navigate('/')}
                   />
                 </main>
-              ) : (
-                <>
-                  <ClientHeader
-                    user={currentUser}
-                    onLogout={handleLogout}
-                    unreadNotifsCount={unreadNotifsCount}
-                    onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-                  />
+              }
+            >
+              <ClientHeader
+                user={currentUser}
+                onLogout={handleLogout}
+                unreadNotifsCount={unreadNotifsCount}
+                onOpenNotifications={() => setIsNotifDrawerOpen(true)}
+              />
 
-                  <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
-                    <ClientDashboard
-                      user={currentUser}
-                      tasks={tasks}
-                      routes={routes}
-                      riders={riders}
-                      onOpenProof={handleOpenProof}
-                      onRefresh={reloadData}
-                    />
-                  </main>
-                </>
-              )}
-            </>
+              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+                <ClientDashboard
+                  user={currentUser}
+                  tasks={tasks}
+                  routes={routes}
+                  riders={riders}
+                  onOpenProof={handleOpenProof}
+                  onRefresh={reloadData}
+                />
+              </main>
+            </ProtectedRoute>
           }
         />
 
@@ -492,8 +510,10 @@ function AppContent() {
         <Route
           path="/rider"
           element={
-            <>
-              {(!currentUser || currentUser.role !== 'rider') ? (
+            <ProtectedRoute
+              requiredRole="rider"
+              currentUser={currentUser}
+              fallback={
                 <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
                   <RiderLogin
                     onLoginSuccess={(user) => {
@@ -504,29 +524,27 @@ function AppContent() {
                     onBackToLanding={() => navigate('/')}
                   />
                 </main>
-              ) : (
-                <>
-                  <RiderHeader
-                    user={currentUser}
-                    rider={riders.find((r) => r.id === currentUser.riderId) || riders[0]}
-                    onLogout={handleLogout}
-                    unreadNotifsCount={unreadNotifsCount}
-                    onOpenNotifications={() => setIsNotifDrawerOpen(true)}
-                  />
+              }
+            >
+              <RiderHeader
+                user={currentUser}
+                rider={riders.find((r) => r.id === currentUser?.riderId) || riders[0]}
+                onLogout={handleLogout}
+                unreadNotifsCount={unreadNotifsCount}
+                onOpenNotifications={() => setIsNotifDrawerOpen(true)}
+              />
 
-                  <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
-                    <RiderDashboard
-                      user={currentUser}
-                      tasks={tasks}
-                      routes={routes}
-                      rider={riders.find((r) => r.id === currentUser.riderId) || riders[0]}
-                      onRefresh={reloadData}
-                      onOpenProof={handleOpenProof}
-                    />
-                  </main>
-                </>
-              )}
-            </>
+              <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
+                <RiderDashboard
+                  user={currentUser}
+                  tasks={tasks}
+                  routes={routes}
+                  rider={riders.find((r) => r.id === currentUser?.riderId) || riders[0]}
+                  onRefresh={reloadData}
+                  onOpenProof={handleOpenProof}
+                />
+              </main>
+            </ProtectedRoute>
           }
         />
 

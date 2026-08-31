@@ -17,7 +17,9 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  User
+  onAuthStateChanged,
+  User,
+  UserCredential
 } from 'firebase/auth';
 import { UserRole, LocationPing, PickupBoy, PickupTask, Client, AttendanceRecord } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -224,80 +226,30 @@ export const OPERATIONAL_ACCOUNTS = {
 
 export const DEMO_ACCOUNTS = OPERATIONAL_ACCOUNTS;
 
-let authProviderNoticeLogged = false;
-
 /**
- * Signs out any active session and signs in to the requested Operational Firebase Auth account.
+ * Ensures standard operational test accounts are provisioned in Firebase Auth
+ * so valid credentials authenticate strictly via signInWithEmailAndPassword.
  */
-export async function signInOperationalAccount(role: UserRole, customEmail?: string, customPassword?: string): Promise<User | null> {
-  const account = OPERATIONAL_ACCOUNTS[role];
-  const emailToUse = customEmail || account?.email;
-  const passwordToUse = customPassword || account?.password;
-  if (!emailToUse || !passwordToUse) return null;
-
-  try {
-    if (auth.currentUser) {
-      await signOut(auth);
-    }
-  } catch {
-    // Non-fatal warning
-  }
-
-  let user: User | null = null;
-  try {
-    const cred = await signInWithEmailAndPassword(auth, emailToUse, passwordToUse);
-    user = cred.user;
-  } catch (signInError: any) {
-    const errorCode = signInError?.code || '';
-
-    if (errorCode === 'auth/configuration-not-found' || errorCode === 'auth/operation-not-allowed') {
-      if (!authProviderNoticeLogged) {
-        console.info(
-          '[FirebaseAuth] Note: Email/Password provider is active. Running live Firestore synchronization.'
-        );
-        authProviderNoticeLogged = true;
-      }
-      return null;
-    }
-
-    if (
-      errorCode === 'auth/user-not-found' ||
-      errorCode === 'auth/invalid-credential' ||
-      errorCode === 'auth/wrong-password'
-    ) {
-      try {
-        const newCred = await createUserWithEmailAndPassword(auth, emailToUse, passwordToUse);
-        user = newCred.user;
-      } catch (createError: any) {
-        if (createError?.code === 'auth/email-already-in-use') {
-          try {
-            const cred = await signInWithEmailAndPassword(auth, emailToUse, passwordToUse);
-            user = cred.user;
-          } catch {
-            return null;
-          }
-        } else {
-          return null;
-        }
-      }
-    } else {
-      return null;
-    }
-  }
-
-  if (user) {
+export async function seedOperationalAuthAccounts(): Promise<void> {
+  const accounts = Object.values(OPERATIONAL_ACCOUNTS);
+  for (const acc of accounts) {
     try {
-      const idTokenResult = await user.getIdTokenResult(true);
-      console.log(`[FirebaseAuth] Signed in as ${user.email}. Custom claims:`, idTokenResult.claims);
-    } catch {
-      // Non-fatal token refresh warning
+      await createUserWithEmailAndPassword(auth, acc.email, acc.password);
+      console.log(`[FirebaseAuth] Initialized operational account: ${acc.email}`);
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        // Account exists
+      } else {
+        // Non-blocking log
+      }
     }
   }
-
-  return user;
 }
 
-export const signInDemoAccount = signInOperationalAccount;
+// Auto-seed operational accounts at startup
+seedOperationalAuthAccounts().catch(() => {});
+
+export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
 
 // Realtime Firestore synchronization helpers
 export const CloudSync = {

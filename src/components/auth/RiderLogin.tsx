@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, CheckCircle2, Bike, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, Bike, ArrowLeft } from 'lucide-react';
 import { StorageService } from '../../services/storage';
-import { signInDemoAccount } from '../../services/firebase';
+import { auth, signInWithEmailAndPassword } from '../../services/firebase';
 
 interface RiderLoginProps {
   onLoginSuccess: (user: UserAuth) => void;
@@ -10,50 +10,70 @@ interface RiderLoginProps {
 }
 
 export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
-  const [identifier, setIdentifier] = useState('rahul.sharma@vialtrack.in');
-  const [pin, setPin] = useState('1234');
+  const [identifier, setIdentifier] = useState('');
+  const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!identifier) {
+    const cleanIdentifier = identifier.trim().toLowerCase();
+
+    if (!cleanIdentifier) {
       setError('Please enter your rider phone number or email.');
       return;
     }
 
+    if (!pin) {
+      setError('Please enter your security PIN or password.');
+      return;
+    }
+
     setLoading(true);
-    signInDemoAccount('rider')
-      .catch((err) => console.warn('[RiderLogin] Firebase Auth notice:', err))
-      .finally(() => {
-        setLoading(false);
-        const riders = StorageService.getRiders();
-        const matchedRider =
-          riders.find(
-            (r) =>
-              r.email.toLowerCase() === identifier.toLowerCase() ||
-              r.phone.replace(/\D/g, '').includes(identifier.replace(/\D/g, ''))
-          ) || riders[0];
 
-        const user: UserAuth = {
-          id: `user-${matchedRider?.id || 'rider-rahul'}`,
-          email: matchedRider?.email || 'rahul-demo@secondmedic.com',
-          name: matchedRider?.name || 'Rahul Sharma',
-          role: 'rider',
-          riderId: matchedRider?.id || 'rider-rahul',
-          phone: matchedRider?.phone || '+91 98765 43210',
-          avatar: matchedRider?.photoUrl
-        };
-        onLoginSuccess(user);
-      });
-  };
+    try {
+      const riders = StorageService.getRiders();
+      const cleanPhone = cleanIdentifier.replace(/\D/g, '');
+      const matchedRider = riders.find(
+        (r) =>
+          r.email.toLowerCase() === cleanIdentifier ||
+          (cleanPhone.length >= 6 && r.phone.replace(/\D/g, '').includes(cleanPhone)) ||
+          r.id.toLowerCase() === cleanIdentifier
+      );
 
-  const handleDemoFill = () => {
-    setIdentifier('rahul.sharma@vialtrack.in');
-    setPin('1234');
-    setError(null);
+      // Determine corresponding Firebase account email
+      const emailToAuth = cleanIdentifier.includes('@')
+        ? cleanIdentifier
+        : (matchedRider?.email || `${cleanIdentifier}@secondmedic.com`);
+
+      // 1. Strict Firebase Authentication verification exclusively
+      const userCredential = await signInWithEmailAndPassword(auth, emailToAuth, pin);
+
+      if (!userCredential || !userCredential.user) {
+        throw new Error('No user credential returned');
+      }
+
+      const fbUser = userCredential.user;
+      const user: UserAuth = {
+        id: fbUser.uid || `user-${matchedRider?.id || 'rider-rahul'}`,
+        email: emailToAuth,
+        name: fbUser.displayName || matchedRider?.name || 'Rahul Sharma (Courier)',
+        role: 'rider',
+        riderId: matchedRider?.id || 'rider-rahul',
+        phone: matchedRider?.phone || '+91 98765 43210',
+        avatar: matchedRider?.photoUrl
+      };
+
+      onLoginSuccess(user);
+    } catch (authError: any) {
+      console.warn('[RiderLogin] Firebase authentication failed:', authError?.code || authError?.message);
+      // Keep user on login screen, do not update auth state, show red banner
+      setError('Invalid email or password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -92,7 +112,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3.5">
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
               Rider Phone or Email
@@ -104,6 +124,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
+                autoComplete="off"
                 placeholder="+91 98765 43210 or email"
                 className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:border-sky-600 focus:ring-1 focus:ring-sky-600 transition-all font-mono"
               />
@@ -118,7 +139,6 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                 Security PIN / Password
               </label>
-              <span className="text-[11px] text-slate-500">Default: 1234</span>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -127,6 +147,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
                 required
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
+                autoComplete="new-password"
                 placeholder="4-digit PIN or password"
                 className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:border-sky-600 focus:ring-1 focus:ring-sky-600 transition-all"
               />
@@ -142,18 +163,6 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Quick Fast Login */}
-        <div className="mt-5 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleDemoFill}
-            className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer active:scale-98 shadow-xs"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-sky-700" />
-            <span>Fill Rahul Sharma Credentials</span>
-          </button>
-        </div>
 
         <div className="mt-4 text-center">
           <span className="text-[11px] text-slate-500">Powered by </span>

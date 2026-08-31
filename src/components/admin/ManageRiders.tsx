@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { PickupBoy, Route, RiderStatus } from '../../types';
 import {
   Bike,
@@ -18,9 +18,13 @@ import {
   Calendar,
   AlertCircle,
   Search,
-  Trash2
+  Trash2,
+  Camera,
+  UploadCloud,
+  Check
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
+import { compressImageToBase64 } from '../../services/imageWatermark';
 
 interface ManageRidersProps {
   riders: PickupBoy[];
@@ -39,6 +43,28 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     pin: string;
     link: string;
   } | null>(null);
+
+  // Photo input ref
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
+  const [isCompressingRiderPhoto, setIsCompressingRiderPhoto] = useState(false);
+
+  // Handle rider profile picture upload with max 800px 0.6 JPEG canvas compression
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCompressingRiderPhoto(true);
+    try {
+      const base64 = await compressImageToBase64(file, 800, 0.6);
+      setForm((prev) => ({ ...prev, photoUrl: base64 }));
+    } catch (err) {
+      console.error('Failed to compress rider photo:', err);
+      alert('Could not process rider image.');
+    } finally {
+      setIsCompressingRiderPhoto(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   // Form state
   const [form, setForm] = useState<{
@@ -370,6 +396,37 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
             </div>
 
             <form onSubmit={handleSaveRider} className="space-y-3.5 text-xs">
+              {/* Rider Photo Avatar */}
+              <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <input
+                  ref={photoFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-sky-600 bg-slate-200 shrink-0">
+                  <img
+                    src={form.photoUrl}
+                    alt={form.name || 'Rider avatar'}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-slate-800 text-xs">Rider Photo ID</p>
+                  <p className="text-[11px] text-slate-500 mb-2">Base64 canvas compressed (Max 800px JPEG)</p>
+                  <button
+                    type="button"
+                    onClick={() => photoFileInputRef.current?.click()}
+                    disabled={isCompressingRiderPhoto}
+                    className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 rounded text-slate-700 font-semibold text-[11px] flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-sky-700" />
+                    <span>{isCompressingRiderPhoto ? 'Compressing...' : 'Upload Photo'}</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
                   Rider Full Name *

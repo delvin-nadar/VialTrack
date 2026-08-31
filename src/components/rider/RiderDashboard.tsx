@@ -28,7 +28,7 @@ import {
   RefreshCw,
   Image as ImageIcon
 } from 'lucide-react';
-import { addWatermarkToImage, generateSampleVialPhoto } from '../../services/imageWatermark';
+import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
 import { LocationService } from '../../services/locationService';
 import { NotificationService } from '../../services/notificationService';
@@ -202,42 +202,46 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     if (!file) return;
 
     setWatermarking(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      const currentStop = activeTask?.stopsProgress[currentStopIndex];
+    const currentStop = activeTask?.stopsProgress[currentStopIndex];
 
-      // Reset file input value so repeated captures trigger onChange
-      if (e.target) {
-        e.target.value = '';
-      }
+    // Reset file input value so repeated captures trigger onChange
+    if (e.target) {
+      e.target.value = '';
+    }
 
+    try {
+      // Step 1: Compress via HTML5 Canvas to max 800px JPEG (0.6 quality)
+      const compressedBase64 = await compressImageToBase64(file, 800, 0.6);
+
+      // Step 2: Apply GPS & cold-chain watermark overlay
+      const watermarked = await addWatermarkToImage(
+        compressedBase64,
+        {
+          timestamp: new Date().toISOString(),
+          lat: 19.2082,
+          lng: 72.8398,
+          address: isDrop ? activeTask?.destination.name || 'Diagnostic Lab' : currentStop?.stopName || 'Hospital Stop',
+          riderName: activeRider.name,
+          clientName: activeTask?.clientName || 'Diagnostic Partner',
+          vialCount: vialCount,
+          temperature: coldBoxTemp,
+          isDrop: isDrop,
+          receiverName: isDrop ? receiverName : undefined
+        }
+      );
+
+      setStopPhoto(watermarked);
+    } catch (err) {
+      console.warn('Watermark generation fallback to compressed photo:', err);
       try {
-        const watermarked = await addWatermarkToImage(
-          base64,
-          {
-            timestamp: new Date().toISOString(),
-            lat: 19.2082,
-            lng: 72.8398,
-            address: isDrop ? activeTask?.destination.name || 'Diagnostic Lab' : currentStop?.stopName || 'Hospital Stop',
-            riderName: activeRider.name,
-            clientName: activeTask?.clientName || 'Diagnostic Partner',
-            vialCount: vialCount,
-            temperature: coldBoxTemp,
-            isDrop: isDrop,
-            receiverName: isDrop ? receiverName : undefined
-          }
-        );
-
-        setStopPhoto(watermarked);
-      } catch (err) {
-        console.warn('Watermark generation fallback to original photo:', err);
-        setStopPhoto(base64);
-      } finally {
-        setWatermarking(false);
+        const fallbackBase64 = await compressImageToBase64(file, 800, 0.6);
+        setStopPhoto(fallbackBase64);
+      } catch {
+        // Safe fallback
       }
-    };
-    reader.readAsDataURL(file);
+    } finally {
+      setWatermarking(false);
+    }
   };
 
   // Instant Sample / Cam Snap Simulator

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PickupTask } from '../../types';
-import { X, CheckCircle, MapPin, Thermometer, ShieldCheck, Download, Package, UserCheck, Calendar, Clock } from 'lucide-react';
+import { X, CheckCircle, MapPin, Thermometer, ShieldCheck, Download, Package, UserCheck, Calendar, Clock, Maximize2, ExternalLink } from 'lucide-react';
 
 interface ProofModalProps {
   task: PickupTask | null;
@@ -9,6 +9,8 @@ interface ProofModalProps {
 }
 
 export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose }) => {
+  const [zoomedImage, setZoomedImage] = useState<{ url: string; title: string } | null>(null);
+
   if (!isOpen || !task) return null;
 
   const totalVials = task.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
@@ -145,15 +147,30 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                   {/* Watermarked Photo Preview */}
                   {stop.photoUrl ? (
                     <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-sky-700" /> GPS-Watermarked Specimen Photo
-                      </span>
-                      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-sky-700" /> GPS-Watermarked Specimen Photo
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setZoomedImage({ url: stop.photoUrl!, title: `Pickup Proof: ${stop.stopName}` })}
+                          className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Maximize2 className="w-3 h-3" /> Zoom
+                        </button>
+                      </div>
+                      <div
+                        onClick={() => setZoomedImage({ url: stop.photoUrl!, title: `Pickup Proof: ${stop.stopName}` })}
+                        className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
+                      >
                         <img
                           src={stop.photoUrl}
                           alt={`Proof at ${stop.stopName}`}
-                          className="w-full h-40 object-cover rounded-lg"
+                          className="w-full h-40 object-cover rounded-lg group-hover:scale-101 transition-transform"
                         />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                          Click to enlarge
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -215,15 +232,36 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
 
               {(task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl) && (
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" /> Lab Intake Watermarked Proof
-                  </span>
-                  <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" /> Lab Intake Watermarked Proof
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setZoomedImage({
+                        url: (task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl)!,
+                        title: `Lab Handover Proof: ${task.destination.name}`
+                      })}
+                      className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Maximize2 className="w-3 h-3" /> Zoom
+                    </button>
+                  </div>
+                  <div
+                    onClick={() => setZoomedImage({
+                      url: (task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl)!,
+                      title: `Lab Handover Proof: ${task.destination.name}`
+                    })}
+                    className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
+                  >
                     <img
                       src={task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl}
                       alt="Lab Drop Proof"
-                      className="w-full max-h-64 object-cover rounded-lg"
+                      className="w-full max-h-64 object-cover rounded-lg group-hover:scale-101 transition-transform"
                     />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                      Click to enlarge
+                    </div>
                   </div>
                 </div>
               )}
@@ -251,6 +289,39 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
           </button>
         </div>
       </div>
+
+      {/* Full-screen Zoom Modal */}
+      {zoomedImage && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700">
+            <div className="px-4 py-3 bg-slate-800 text-white flex items-center justify-between border-b border-slate-700">
+              <span className="font-bold text-xs sm:text-sm">{zoomedImage.title}</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={zoomedImage.url}
+                  download="vialtrack-chain-of-custody-proof.jpg"
+                  className="px-2.5 py-1 bg-sky-700 hover:bg-sky-600 rounded text-xs text-white font-medium flex items-center gap-1"
+                >
+                  <Download className="w-3 h-3" /> Download
+                </a>
+                <button
+                  onClick={() => setZoomedImage(null)}
+                  className="p-1 rounded text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-2 flex-1 overflow-auto flex items-center justify-center">
+              <img
+                src={zoomedImage.url}
+                alt={zoomedImage.title}
+                className="max-w-full max-h-[75vh] object-contain rounded"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

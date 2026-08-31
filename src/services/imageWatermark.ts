@@ -1,7 +1,7 @@
 /**
- * Image Watermark Service
- * Takes a source image/camera capture and superimposes GPS coordinates, timestamp,
- * stop details, and SecondMedic VialTrack chain-of-custody verification overlay.
+ * Image Watermark & Base64 Compression Service
+ * Resizes images to max 800px and compresses to JPEG (quality 0.6) for direct Base64 Firestore storage.
+ * Superimposes GPS coordinates, timestamp, stop details, and SecondMedic VialTrack chain-of-custody verification overlay.
  */
 
 export interface WatermarkData {
@@ -20,6 +20,73 @@ export interface WatermarkData {
   verificationCode?: string;
   isDrop?: boolean;
   receiverName?: string;
+}
+
+/**
+ * Compresses an image to max dimension of 800px and JPEG quality 0.6 Base64 string for Firestore.
+ */
+export async function compressImageToBase64(
+  imageSource: File | Blob | string | HTMLImageElement,
+  maxDimension: number = 800,
+  quality: number = 0.6
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (typeof imageSource === 'string' && /^https?:\/\//i.test(imageSource)) {
+      img.crossOrigin = 'anonymous';
+    }
+
+    const handleLoad = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          throw new Error('Canvas 2D context not available');
+        }
+
+        let width = img.naturalWidth || img.width || 800;
+        let height = img.naturalHeight || img.height || 600;
+
+        // Maintain aspect ratio, max dimension 800px
+        if (width > maxDimension || height > maxDimension) {
+          const scale = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.max(1, Math.round(width * scale));
+          height = Math.max(1, Math.round(height * scale));
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw image onto canvas
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to compressed Base64 JPEG
+        const base64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(base64);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    img.onload = handleLoad;
+    img.onerror = (err) => reject(err);
+
+    if (typeof imageSource === 'string') {
+      img.src = imageSource;
+    } else if (imageSource instanceof Blob || imageSource instanceof File) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(imageSource);
+    } else if (imageSource instanceof HTMLImageElement) {
+      img.src = imageSource.src;
+    }
+  });
 }
 
 export async function addWatermarkToImage(
@@ -42,25 +109,28 @@ export async function addWatermarkToImage(
           throw new Error('Canvas 2D context not available');
         }
 
-        // Set dimensions (maintain aspect ratio, max 1280px width for fast sync)
-        const maxWidth = 1280;
-        let width = img.width || 800;
-        let height = img.height || 600;
+        // Set dimensions (maintain aspect ratio, max 800px dimension for Spark plan Firestore limits)
+        const maxDimension = 800;
+        let width = img.naturalWidth || img.width || 800;
+        let height = img.naturalHeight || img.height || 600;
 
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
+        if (width > maxDimension || height > maxDimension) {
+          const scale = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.max(1, Math.round(width * scale));
+          height = Math.max(1, Math.round(height * scale));
         }
 
         canvas.width = width;
         canvas.height = height;
 
         // Draw original photo
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
         // Calculate responsive scaling
-        const baseFontSize = Math.max(14, Math.floor(width / 45));
-        const padding = Math.max(16, Math.floor(width / 40));
+        const baseFontSize = Math.max(12, Math.floor(width / 45));
+        const padding = Math.max(12, Math.floor(width / 40));
 
         // Draw top brand banner
         ctx.fillStyle = 'rgba(15, 23, 42, 0.88)'; // slate-900 with alpha
@@ -75,7 +145,7 @@ export async function addWatermarkToImage(
         const roleLabel = data.isDrop ? '• LAB DESTINATION DROP PROOF' : '• COLLECTION POINT PICKUP PROOF';
         ctx.fillText(roleLabel, padding + ctx.measureText('SECOND MEDIC VIALTRACK ').width + 10, baseFontSize * 1.7);
 
-        // Draw bottom metadata box (Dark glass panel with cyan accent line)
+        // Draw bottom metadata box (Dark glass panel with cyan/emerald accent line)
         const boxHeight = baseFontSize * 7.5;
         const boxY = height - boxHeight;
 
@@ -152,8 +222,8 @@ export async function addWatermarkToImage(
         ctx.font = `bold ${baseFontSize * 0.8}px 'JetBrains Mono', monospace`;
         ctx.fillText(`CHAIN-OF-CUSTODY ID: #${hash}`, rightColX, rightY);
 
-        // Convert back to Data URL
-        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.88);
+        // Convert back to compressed Data URL (quality 0.6 JPEG for Firestore efficiency)
+        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.6);
         resolve(watermarkedUrl);
       } catch (err) {
         reject(err);

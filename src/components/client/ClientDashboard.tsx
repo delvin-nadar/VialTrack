@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { UserAuth, PickupTask, Route, PickupBoy, Client } from '../../types';
+import React, { useState, useMemo, useRef } from 'react';
+import { UserAuth, PickupTask, Route, PickupBoy, Client, StopProgress } from '../../types';
 import { LiveMap } from '../common/LiveMap';
 import {
   Building2,
@@ -18,10 +18,15 @@ import {
   X,
   PhoneCall,
   Send,
-  Sparkles
+  Sparkles,
+  Camera,
+  FileText,
+  Plus,
+  Check
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { NotificationService } from '../../services/notificationService';
+import { compressImageToBase64 } from '../../services/imageWatermark';
 
 interface ClientDashboardProps {
   user: UserAuth;
@@ -46,6 +51,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const [issueTask, setIssueTask] = useState<PickupTask | null>(null);
   const [issueText, setIssueText] = useState('');
   const [issueType, setIssueType] = useState('Rider Delayed / Urgent Pickup');
+
+  // Prescription / On-Demand Pickup Modal State
+  const [isRequestingPickup, setIsRequestingPickup] = useState(false);
+  const [pickupStopName, setPickupStopName] = useState('');
+  const [pickupAddress, setPickupAddress] = useState('');
+  const [estimatedVials, setEstimatedVials] = useState<number>(5);
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [prescriptionPhoto, setPrescriptionPhoto] = useState<string | null>(null);
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+  const prescriptionFileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter tasks belonging ONLY to this client (data isolation)
   const clientTasks = useMemo(() => {
@@ -87,6 +102,102 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     });
   }, [clientTasks, statusFilter, searchQuery]);
 
+  // Handle Prescription Photo File Select & Canvas Compression
+  const handlePrescriptionPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCompressingPhoto(true);
+    try {
+      // Compress via HTML5 Canvas (max 800px, 0.6 JPEG quality)
+      const compressedBase64 = await compressImageToBase64(file, 800, 0.6);
+      setPrescriptionPhoto(compressedBase64);
+    } catch (err) {
+      console.error('Failed to compress prescription photo:', err);
+      alert('Unable to process photo. Please try another image.');
+    } finally {
+      setIsCompressingPhoto(false);
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
+  };
+
+  // Submit On-Demand Specimen Pickup Request with Prescription Base64
+  const handleCreateOnDemandRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const selectedRoute = clientRoutes[0] || routes[0];
+    const defaultRider = riders.find((r) => r.isOnline && r.isCheckedIn) || riders[0];
+    const clientId = user.clientId || selectedRoute?.clientId || 'client-apex';
+    const currentTime = new Date().toTimeString().slice(0, 5);
+
+    const newTaskId = `task-${todayStr.replace(/-/g, '')}-stat-${Date.now().toString().slice(-4)}`;
+    const stopNameFinal = pickupStopName || `${user.name} (On-Demand OPD)`;
+    const addressFinal = pickupAddress || selectedRoute?.stops[0]?.address || 'Hospital OPD Wing B, Malad West, Mumbai';
+
+    const stop: StopProgress = {
+      stopId: `stop-stat-${Date.now()}`,
+      stopName: stopNameFinal,
+      address: addressFinal,
+      lat: 19.2082,
+      lng: 72.8398,
+      contactPerson: user.name,
+      phone: user.phone || '+91 98200 11223',
+      status: 'pending',
+      sampleCount: estimatedVials,
+      photoUrl: prescriptionPhoto || undefined,
+      notes: specialInstructions ? `Prescription/Requisition: ${specialInstructions}` : 'Urgent stat on-demand specimen pickup'
+    };
+
+    const newTask: PickupTask = {
+      id: newTaskId,
+      date: todayStr,
+      timeSlot: currentTime,
+      routeId: selectedRoute?.id || 'route-on-demand',
+      routeName: `STAT Urgent On-Demand: ${stopNameFinal}`,
+      clientId: clientId,
+      clientName: user.name,
+      riderId: defaultRider?.id || 'rider-rahul',
+      riderName: defaultRider?.name || 'Rahul Sharma',
+      riderPhone: defaultRider?.phone || '+91 98765 43210',
+      riderVehicle: defaultRider?.vehicleNumber || 'MH-02-AB-1234',
+      status: 'upcoming',
+      currentStopIndex: 0,
+      stopsProgress: [stop],
+      destination: {
+        name: selectedRoute?.destinationLab?.name || 'Central Diagnostic Lab',
+        address: selectedRoute?.destinationLab?.address || 'Malad West, Mumbai',
+        lat: selectedRoute?.destinationLab?.lat || 19.1860,
+        lng: selectedRoute?.destinationLab?.lng || 72.8485,
+        notes: `Urgent pickup: ${estimatedVials} vials. Cold-chain required.`
+      },
+      isDelayed: false,
+      delayMinutes: 0,
+      issueFlags: [],
+      createdAt: new Date().toISOString()
+    };
+
+    // Save directly to Firestore and LocalStorage
+    StorageService.addTask(newTask);
+    setIsRequestingPickup(false);
+    setPrescriptionPhoto(null);
+    setPickupStopName('');
+    setPickupAddress('');
+    setSpecialInstructions('');
+    onRefresh();
+
+    NotificationService.sendAlert({
+      type: 'task_started',
+      title: `New On-Demand Request: ${user.name}`,
+      message: `Urgent specimen pickup requested for ${stopNameFinal} (${estimatedVials} vials). Prescription photo attached.`,
+      recipientRole: 'both',
+      channel: 'both'
+    });
+
+    alert('On-Demand pickup request submitted successfully! Rider assigned and operations notified.');
+  };
+
   const handleReportIssue = (e: React.FormEvent) => {
     e.preventDefault();
     if (!issueText) return;
@@ -124,7 +235,15 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsRequestingPickup(true)}
+            className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Request STAT Pickup & Prescription</span>
+          </button>
+
           <button
             onClick={() => {
               setIssueTask(activeLiveTask);
@@ -386,6 +505,169 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           </table>
         </div>
       </div>
+
+      {/* On-Demand Pickup & Prescription Upload Modal */}
+      {isRequestingPickup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto animate-fadeIn">
+          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 my-6">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">Request STAT Specimen Pickup</h3>
+                  <p className="text-xs text-slate-500">Attach doctor prescription or test requisition photo</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsRequestingPickup(false);
+                  setPrescriptionPhoto(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateOnDemandRequest} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                  Collection Stop / Hospital OPD Unit *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Apex Hospital - Ward 3 OPD"
+                  value={pickupStopName}
+                  onChange={(e) => setPickupStopName(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:outline-hidden focus:border-sky-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                    Stop Street Address
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. S.V. Road, Malad West"
+                    value={pickupAddress}
+                    onChange={(e) => setPickupAddress(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                    Estimated Vial Count
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={estimatedVials}
+                    onChange={(e) => setEstimatedVials(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
+                  />
+                </div>
+              </div>
+
+              {/* Prescription / Requisition Photo Upload (Canvas Compressed Base64) */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 font-bold uppercase tracking-wider text-[11px]">
+                  Prescription / Requisition Photo (Canvas Compressed Base64)
+                </label>
+
+                <input
+                  ref={prescriptionFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handlePrescriptionPhotoSelect}
+                />
+
+                {prescriptionPhoto ? (
+                  <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 group">
+                    <img
+                      src={prescriptionPhoto}
+                      alt="Prescription Preview"
+                      className="w-full h-44 object-cover"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-between">
+                      <span className="text-[10px] text-emerald-300 font-mono flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Canvas Compressed (Max 800px JPEG)
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => prescriptionFileInputRef.current?.click()}
+                          className="px-2.5 py-1 bg-white/90 hover:bg-white text-slate-900 rounded text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          Change Photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrescriptionPhoto(null)}
+                          className="p-1 bg-red-600/90 hover:bg-red-600 text-white rounded text-xs cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => prescriptionFileInputRef.current?.click()}
+                    disabled={isCompressingPhoto}
+                    className="w-full py-4 px-3 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
+                  >
+                    <Camera className="w-5 h-5 text-sky-700" />
+                    <span>{isCompressingPhoto ? 'Compressing via Canvas...' : 'Capture / Upload Prescription Photo'}</span>
+                    <span className="text-[10px] text-slate-500">Auto-compressed to 800px JPEG Base64 for Firestore storage</span>
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
+                  Special Sample Instructions
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Fasting blood sugar vials, centrifuge immediately on arrival..."
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRequestingPickup(false);
+                    setPrescriptionPhoto(null);
+                  }}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Dispatch STAT Request</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Report Issue Modal */}
       {isReportingIssue && (

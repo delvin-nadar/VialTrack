@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { ShieldCheck, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2, ArrowLeft } from 'lucide-react';
-import { signInDemoAccount } from '../../services/firebase';
+import { ShieldCheck, Mail, Lock, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { auth, signInWithEmailAndPassword } from '../../services/firebase';
 
 interface AdminLoginProps {
   onLoginSuccess: (user: UserAuth) => void;
@@ -9,17 +9,19 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
-  const [email, setEmail] = useState('ops.lead@secondmedic.com');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Enforce @secondmedic.com domain requirement as strictly requested
-    if (!email.toLowerCase().endsWith('@secondmedic.com')) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Enforce @secondmedic.com domain requirement
+    if (!cleanEmail.endsWith('@secondmedic.com')) {
       setError('Admin access restricted: You must use an authorized @secondmedic.com corporate email address.');
       return;
     }
@@ -30,25 +32,33 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
     }
 
     setLoading(true);
-    signInDemoAccount('admin')
-      .catch((err) => console.warn('[AdminLogin] Firebase Auth notice:', err))
-      .finally(() => {
-        setLoading(false);
-        const user: UserAuth = {
-          id: 'admin-1',
-          email: email.trim().toLowerCase(),
-          name: 'Vikas Mehra (Ops Dispatch Lead)',
-          role: 'admin',
-          phone: '+91 98200 99887'
-        };
-        onLoginSuccess(user);
-      });
-  };
 
-  const handleDemoFill = () => {
-    setEmail('ops.lead@secondmedic.com');
-    setPassword('Admin@SecondMedic2026');
-    setError(null);
+    try {
+      // 1. Strict Firebase Authentication verification exclusively
+      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+
+      if (!userCredential || !userCredential.user) {
+        throw new Error('No user credential returned');
+      }
+
+      // 2. Only on successful credential validation
+      const fbUser = userCredential.user;
+      const user: UserAuth = {
+        id: fbUser.uid || 'admin-1',
+        email: cleanEmail,
+        name: fbUser.displayName || 'Vikas Mehra (Ops Dispatch Lead)',
+        role: 'admin',
+        phone: '+91 98200 99887'
+      };
+
+      onLoginSuccess(user);
+    } catch (authError: any) {
+      console.warn('[AdminLogin] Firebase authentication failed:', authError?.code || authError?.message);
+      // Keep user on login screen, do not update auth state, show red banner
+      setError('Invalid email or password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,7 +96,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3.5">
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
               SecondMedic Corporate Email
@@ -98,6 +108,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
                 placeholder="name@secondmedic.com"
                 className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:border-sky-600 focus:ring-1 focus:ring-sky-600 transition-all font-mono"
               />
@@ -127,6 +138,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
                 placeholder="Enter password"
                 className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:border-sky-600 focus:ring-1 focus:ring-sky-600 transition-all"
               />
@@ -142,18 +154,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Quick Fast Login */}
-        <div className="mt-5 pt-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleDemoFill}
-            className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer shadow-xs"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-sky-700" />
-            <span>Fill Ops Lead Credentials</span>
-          </button>
-        </div>
       </div>
     </div>
   );
