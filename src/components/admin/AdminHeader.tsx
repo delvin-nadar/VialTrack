@@ -20,21 +20,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
         {/* Brand Logo & Title */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white shadow-xs font-bold text-sm shrink-0">
-            <Activity className="w-4 h-4 text-sky-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">
-                SecondMedic <span className="text-sky-700 font-semibold">VialTrack</span>
-              </h1>
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-200">
-                Admin Ops Console
-              </span>
-            </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium hidden md:block">
-              Mumbai Diagnostic Specimen Cold-Chain Dispatch & Fleet Control
-            </p>
+          <img src="/logo.webp" alt="SecondMedic" className="h-8 w-auto object-contain" />
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-700 shadow-xs whitespace-nowrap">
+              VialTrack | Operations Console
+            </span>
           </div>
         </div>
 

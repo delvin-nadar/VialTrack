@@ -164,15 +164,17 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
 
         {/* Brand header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto mb-3 shadow-xs">
-            <Building2 className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">VialTrack — Client Portal</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Diagnostic Lab & Hospital Specimen Intake Tracking
+          <img
+            src="/logo.webp"
+            alt="SecondMedic"
+            className="h-10 sm:h-11 w-auto object-contain mx-auto mb-3"
+          />
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Client Diagnostic Portal</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Hospital & Diagnostic Lab Partner Specimen Intake
           </p>
-          <div className="mt-2 inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
-            <span>Hospital & Diagnostic Lab Partner Portal</span>
+          <div className="mt-2.5 inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+            <span>Verified Diagnostic Centers & Hospital Partners</span>
           </div>
         </div>
 

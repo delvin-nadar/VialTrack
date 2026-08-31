@@ -251,14 +251,16 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
 
         {/* Brand header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center mx-auto mb-3 shadow-xs">
-            <Bike className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">VialTrack — Rider Portal</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Specimen Pickup & Cold-Chain Delivery App
+          <img
+            src="/logo.webp"
+            alt="SecondMedic"
+            className="h-10 sm:h-11 w-auto object-contain mx-auto mb-3"
+          />
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Rider Operations Portal</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Diagnostic Sample Logistics & Cold-Chain Delivery
           </p>
-          <div className="mt-2 inline-flex items-center gap-1.5 bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+          <div className="mt-2.5 inline-flex items-center gap-1.5 bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
             <Smartphone className="w-3.5 h-3.5" />
             <span>Mobile-Optimized PWA Edition</span>
           </div>

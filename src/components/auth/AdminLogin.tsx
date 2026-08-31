@@ -101,14 +101,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
 
         {/* Brand header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center mx-auto mb-3 shadow-xs">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">VialTrack — Admin Portal</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            SecondMedic Diagnostic Operations & Dispatch Command
+          <img
+            src="/logo.webp"
+            alt="SecondMedic"
+            className="h-10 sm:h-11 w-auto object-contain mx-auto mb-3"
+          />
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Operations Console</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Fleet Dispatch & Diagnostic Specimen Cold-Chain Radar
           </p>
-          <div className="mt-2 inline-flex items-center gap-1 bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+          <div className="mt-2.5 inline-flex items-center gap-1 bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
             <span>Corporate Access (@secondmedic.com only)</span>
           </div>
         </div>
