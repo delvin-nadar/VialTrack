@@ -971,6 +971,9 @@ export const StorageService = {
     if (session && session.role === 'admin') {
       return session;
     }
+    if (raw) {
+      safeRemoveItem(STORAGE_KEYS.ADMIN_SESSION);
+    }
     return null;
   },
   setAdminSession(session: AdminSession | null): void {
@@ -984,13 +987,16 @@ export const StorageService = {
   getClientSession(): ClientSession | null {
     const raw = safeGetItem(STORAGE_KEYS.CLIENT_SESSION);
     const session = safeParse<ClientSession | null>(raw, null);
-    if (session && session.role === 'client') {
+    if (session && session.role === 'client' && session.clientId) {
       return session;
+    }
+    if (raw) {
+      safeRemoveItem(STORAGE_KEYS.CLIENT_SESSION);
     }
     return null;
   },
   setClientSession(session: ClientSession | null): void {
-    if (session && session.role === 'client') {
+    if (session && session.role === 'client' && session.clientId) {
       safeSetItem(STORAGE_KEYS.CLIENT_SESSION, JSON.stringify(session));
     } else {
       safeRemoveItem(STORAGE_KEYS.CLIENT_SESSION);
@@ -1000,13 +1006,16 @@ export const StorageService = {
   getRiderSession(): RiderSession | null {
     const raw = safeGetItem(STORAGE_KEYS.RIDER_SESSION);
     const session = safeParse<RiderSession | null>(raw, null);
-    if (session && session.role === 'rider') {
+    if (session && session.role === 'rider' && session.riderId) {
       return session;
+    }
+    if (raw) {
+      safeRemoveItem(STORAGE_KEYS.RIDER_SESSION);
     }
     return null;
   },
   setRiderSession(session: RiderSession | null): void {
-    if (session && session.role === 'rider') {
+    if (session && session.role === 'rider' && session.riderId) {
       safeSetItem(STORAGE_KEYS.RIDER_SESSION, JSON.stringify(session));
     } else {
       safeRemoveItem(STORAGE_KEYS.RIDER_SESSION);

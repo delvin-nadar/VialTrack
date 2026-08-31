@@ -186,18 +186,25 @@ export const LiveMap: React.FC<LiveMapProps> = ({
 
   // Merge prop riders and real-time Firestore riders with GeoPoint extraction
   const activeRidersList = useMemo(() => {
+    const isScoped = Boolean(rider || (propRiders && propRiders.length > 0));
     const riderMap = new Map<string, PickupBoy>();
 
     // 1. Seed with prop riders
     if (propRiders && propRiders.length > 0) {
-      propRiders.forEach((r) => riderMap.set(r.id, r));
+      propRiders.forEach((r) => {
+        if (r && r.id) riderMap.set(r.id, r);
+      });
     }
-    if (rider) {
+    if (rider && rider.id) {
       riderMap.set(rider.id, rider);
     }
 
     // 2. Overlay live Firestore riders
     firestoreRiders.forEach((fr) => {
+      // In scoped mode (Client or Rider portal), NEVER inject unassigned fleet riders!
+      if (isScoped && !riderMap.has(fr.id)) {
+        return;
+      }
       const existing = riderMap.get(fr.id) || fr;
       let parsedLoc = fr.currentLocation;
       if (fr.currentLocation) {
@@ -239,9 +246,9 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       }
     });
 
-    const list = Array.from(riderMap.values()).filter((r) => r.status === 'active' || r.isOnline || r.currentLocation);
+    const list = Array.from(riderMap.values()).filter((r) => r && (r.status === 'active' || r.isOnline || r.currentLocation));
     if (list.length === 0) {
-      return [DEFAULT_MUMBAI_RIDER];
+      return isScoped ? [] : [DEFAULT_MUMBAI_RIDER];
     }
     return list;
   }, [propRiders, rider, firestoreRiders, firestorePings]);

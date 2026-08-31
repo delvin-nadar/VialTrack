@@ -22,7 +22,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const location = useLocation();
   const activeSession = StorageService.getPortalSession(requiredRole);
 
-  if (!activeSession || activeSession.role !== requiredRole) {
+  const isValidSession =
+    Boolean(activeSession) &&
+    activeSession?.role === requiredRole &&
+    (requiredRole !== 'client' || Boolean(activeSession?.clientId)) &&
+    (requiredRole !== 'rider' || Boolean(activeSession?.riderId));
+
+  if (!isValidSession) {
+    // Clear potentially corrupted or incomplete session
+    StorageService.clearPortalSession(requiredRole);
     if (fallback) {
       return <>{fallback}</>;
     }

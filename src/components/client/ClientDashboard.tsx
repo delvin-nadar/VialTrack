@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserAuth, PickupTask, Route, PickupBoy, Client, StopProgress } from '../../types';
 import { LiveMap } from '../common/LiveMap';
 import { isRiderLocationStale } from '../../services/locationService';
@@ -23,9 +24,11 @@ import {
   Camera,
   FileText,
   Plus,
-  Check
+  Check,
+  Inbox
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
+import { CloudSync } from '../../services/firebase';
 import { NotificationService } from '../../services/notificationService';
 import { compressImageToBase64 } from '../../services/imageWatermark';
 
@@ -46,6 +49,47 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   onOpenProof,
   onRefresh
 }) => {
+  const navigate = useNavigate();
+
+  // Validate authenticated client session on mount
+  useEffect(() => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('vialtrack_client_session') : null;
+    let session: any = null;
+    try {
+      if (raw) session = JSON.parse(raw);
+    } catch {
+      session = null;
+    }
+    if (!session || session.role !== 'client' || !session.clientId) {
+      StorageService.clearPortalSession('client');
+      navigate('/client/login', { replace: true });
+    }
+  }, [navigate]);
+
+  const activeClientId = user.clientId || StorageService.getClientSession()?.clientId || '';
+
+  // Real-time scoped Firestore subscriptions strictly for active client account
+  const [liveClientTasks, setLiveClientTasks] = useState<PickupTask[]>([]);
+  const [liveClientRoutes, setLiveClientRoutes] = useState<Route[]>([]);
+
+  useEffect(() => {
+    if (!activeClientId) return;
+    const unsubTasks = CloudSync.subscribeToClientTasks(activeClientId, (fetchedTasks) => {
+      if (fetchedTasks) {
+        setLiveClientTasks(fetchedTasks);
+      }
+    });
+    const unsubRoutes = CloudSync.subscribeToClientRoutes(activeClientId, (fetchedRoutes) => {
+      if (fetchedRoutes) {
+        setLiveClientRoutes(fetchedRoutes);
+      }
+    });
+    return () => {
+      unsubTasks();
+      unsubRoutes();
+    };
+  }, [activeClientId]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'delivered' | 'in_transit' | 'upcoming'>('all');
   const [isReportingIssue, setIsReportingIssue] = useState(false);
@@ -63,17 +107,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
   const prescriptionFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Filter tasks belonging ONLY to this client (data isolation)
+  // Scope tasks strictly to activeClientId (no cross-tenant leakage)
   const clientTasks = useMemo(() => {
-    const cid = user.clientId || (routes[0]?.clientId) || 'client-apex';
-    return tasks.filter((t) => t.clientId === cid || (!user.clientId && t.clientName?.includes('Apex')));
-  }, [tasks, user.clientId, routes]);
+    const taskMap = new Map<string, PickupTask>();
+    tasks.filter((t) => t.clientId === activeClientId).forEach((t) => taskMap.set(t.id, t));
+    liveClientTasks.filter((t) => t.clientId === activeClientId).forEach((t) => taskMap.set(t.id, t));
+    return Array.from(taskMap.values());
+  }, [tasks, liveClientTasks, activeClientId]);
 
-  // Client routes
+  // Scope routes strictly to activeClientId
   const clientRoutes = useMemo(() => {
-    const cid = user.clientId || (routes[0]?.clientId) || 'client-apex';
-    return routes.filter((r) => r.clientId === cid);
-  }, [routes, user.clientId]);
+    const routeMap = new Map<string, Route>();
+    routes.filter((r) => r.clientId === activeClientId).forEach((r) => routeMap.set(r.id, r));
+    liveClientRoutes.filter((r) => r.clientId === activeClientId).forEach((r) => routeMap.set(r.id, r));
+    return Array.from(routeMap.values());
+  }, [routes, liveClientRoutes, activeClientId]);
 
   // Today's date
   const todayStr = new Date().toISOString().split('T')[0];
@@ -82,7 +130,33 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   // Active in-transit task to show live tracking on map
   const activeLiveTask = todayClientTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) || todayClientTasks[0];
   const activeLiveRoute = clientRoutes.find((r) => r.id === activeLiveTask?.routeId) || clientRoutes[0];
-  const activeLiveRider = riders.find((r) => r.id === activeLiveTask?.riderId) || riders[0];
+  
+  // Specific runner assigned strictly to this client route/task (never render all 7 fleet riders)
+  const activeLiveRider: PickupBoy | null = useMemo(() => {
+    const targetRiderId = activeLiveTask?.riderId || activeLiveRoute?.assignedRiderId;
+    if (!targetRiderId) return null;
+    const found = riders.find((r) => r.id === targetRiderId);
+    if (found) return found;
+    if (activeLiveTask?.riderName) {
+      const fallbackBoy: PickupBoy = {
+        id: targetRiderId,
+        name: activeLiveTask.riderName,
+        phone: activeLiveTask.riderPhone || '+91 98765 43210',
+        email: `${targetRiderId}@secondmedic.in`,
+        photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
+        vehicleNumber: activeLiveTask.riderVehicle || 'MH-02-DN-4921',
+        vehicleType: 'Cold-box Mounted Two-Wheeler',
+        assignedRouteIds: [activeLiveRoute?.id || ''],
+        status: 'active' as const,
+        joiningDate: '2025-01-01',
+        batteryLevel: 90,
+        isOnline: true,
+        isCheckedIn: true
+      };
+      return fallbackBoy;
+    }
+    return null;
+  }, [riders, activeLiveTask, activeLiveRoute]);
 
   // Filtered task list
   const filteredTasks = useMemo(() => {
@@ -129,8 +203,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     e.preventDefault();
 
     const selectedRoute = clientRoutes[0] || routes[0];
-    const defaultRider = riders.find((r) => r.isOnline && r.isCheckedIn) || riders[0];
-    const clientId = user.clientId || selectedRoute?.clientId || 'client-apex';
+    const defaultRider = activeLiveRider || riders.find((r) => r.isOnline && r.isCheckedIn) || riders[0];
+    const clientId = activeClientId || 'client-apex';
     const currentTime = new Date().toTimeString().slice(0, 5);
 
     const newTaskId = `task-${todayStr.replace(/-/g, '')}-stat-${Date.now().toString().slice(-4)}`;
@@ -167,8 +241,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
       currentStopIndex: 0,
       stopsProgress: [stop],
       destination: {
-        name: selectedRoute?.destinationLab?.name || 'Central Diagnostic Lab',
-        address: selectedRoute?.destinationLab?.address || 'Malad West, Mumbai',
+        name: selectedRoute?.destinationLab?.name || user.name || 'Central Diagnostic Lab',
+        address: selectedRoute?.destinationLab?.address || 'Mumbai, Maharashtra',
         lat: selectedRoute?.destinationLab?.lat || 19.1860,
         lng: selectedRoute?.destinationLab?.lng || 72.8485,
         notes: `Urgent pickup: ${estimatedVials} vials. Cold-chain required.`
@@ -334,6 +408,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
               stops={activeLiveRoute?.stops || []}
               destination={activeLiveRoute?.destinationLab}
               rider={activeLiveRider}
+              riders={activeLiveRider ? [activeLiveRider] : []}
               tasks={todayClientTasks}
               activeTaskId={activeLiveTask?.id}
               height="380px"

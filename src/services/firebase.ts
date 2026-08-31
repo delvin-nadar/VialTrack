@@ -6,6 +6,8 @@ import {
   getDoc,
   deleteDoc,
   collection,
+  query,
+  where,
   onSnapshot,
   writeBatch,
   getDocFromServer,
@@ -571,5 +573,177 @@ export const CloudSync = {
       });
       onUpdate(formatted);
     });
+  },
+
+  // Scoped Firestore query subscription: Client Tasks (strictly filtered to session.clientId)
+  subscribeToClientTasks(clientId: string, onUpdate: (tasks: PickupTask[]) => void): Unsubscribe {
+    if (!clientId) return () => {};
+    try {
+      const q = query(collection(db, 'tasks'), where('clientId', '==', clientId));
+      return onSnapshot(
+        q,
+        (snapshot) => {
+          const list: PickupTask[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            if (data.pickupGeoPoint) {
+              const coords = parseFirestoreGeoPoint(data.pickupGeoPoint);
+              if (coords) {
+                data.pickupLocation = { ...(data.pickupLocation || {}), lat: coords.lat, lng: coords.lng };
+              }
+            }
+            if (data.deliveryGeoPoint) {
+              const coords = parseFirestoreGeoPoint(data.deliveryGeoPoint);
+              if (coords) {
+                data.deliveryLocation = { ...(data.deliveryLocation || {}), lat: coords.lat, lng: coords.lng };
+              }
+            }
+            if (data.clientId === clientId) {
+              list.push(data as PickupTask);
+            }
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          console.warn(`[CloudSync] Client tasks subscription notice for ${clientId}:`, err?.message || err);
+          // Fallback to local storage tasks filtered by clientId
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToClientTasks init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Scoped Firestore query subscription: Client Routes (strictly filtered to session.clientId)
+  subscribeToClientRoutes(clientId: string, onUpdate: (routes: Route[]) => void): Unsubscribe {
+    if (!clientId) return () => {};
+    try {
+      const q = query(collection(db, 'routes'), where('clientId', '==', clientId));
+      return onSnapshot(
+        q,
+        (snapshot) => {
+          const list: Route[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            if (data.destinationLab) {
+              const coords = parseFirestoreGeoPoint(data.destinationLab.location) || {
+                lat: data.destinationLab.lat,
+                lng: data.destinationLab.lng
+              };
+              data.destinationLab.lat = coords.lat;
+              data.destinationLab.lng = coords.lng;
+            }
+            if (Array.isArray(data.stops)) {
+              data.stops = data.stops.map((s: any) => {
+                const coords = parseFirestoreGeoPoint(s.location) || { lat: s.lat, lng: s.lng };
+                return { ...s, lat: coords.lat, lng: coords.lng };
+              });
+            }
+            if (data.clientId === clientId) {
+              list.push(data as Route);
+            }
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          console.warn(`[CloudSync] Client routes subscription notice for ${clientId}:`, err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToClientRoutes init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Scoped Firestore query subscription: Rider Tasks (strictly filtered to active rider identity)
+  subscribeToRiderTasks(riderId: string, riderPhone?: string, onUpdate?: (tasks: PickupTask[]) => void): Unsubscribe {
+    if (!riderId || !onUpdate) return () => {};
+    try {
+      const q = query(collection(db, 'tasks'), where('riderId', '==', riderId));
+      const cleanPhone = (riderPhone || '').replace(/\D/g, '');
+      return onSnapshot(
+        q,
+        (snapshot) => {
+          const list: PickupTask[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            const tPhone = (data.riderPhone || '').replace(/\D/g, '');
+            if (data.riderId === riderId || data.assignedRiderId === riderId || (cleanPhone && tPhone === cleanPhone)) {
+              list.push(data as PickupTask);
+            }
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          console.warn(`[CloudSync] Rider tasks subscription notice for ${riderId}:`, err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToRiderTasks init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Scoped Firestore query subscription: Rider Assigned Routes
+  subscribeToRiderRoutes(riderId: string, riderPhone?: string, onUpdate?: (routes: Route[]) => void): Unsubscribe {
+    if (!riderId || !onUpdate) return () => {};
+    try {
+      const q = query(collection(db, 'routes'), where('assignedRiderId', '==', riderId));
+      const cleanPhone = (riderPhone || '').replace(/\D/g, '');
+      return onSnapshot(
+        q,
+        (snapshot) => {
+          const list: Route[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            const rPhone = (data.assignedRiderPhone || '').replace(/\D/g, '');
+            if (data.assignedRiderId === riderId || (cleanPhone && rPhone === cleanPhone)) {
+              list.push(data as Route);
+            }
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          console.warn(`[CloudSync] Rider routes subscription notice for ${riderId}:`, err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToRiderRoutes init exception:', e);
+      return () => {};
+    }
+  },
+
+  // Scoped Firestore document subscription: Active Rider Document
+  subscribeToRiderDocument(riderId: string, onUpdate: (rider: PickupBoy | null) => void): Unsubscribe {
+    if (!riderId) return () => {};
+    try {
+      const ref = doc(db, 'riders', riderId);
+      return onSnapshot(
+        ref,
+        (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data() as any;
+            if (data.currentLocation) {
+              const coords = parseFirestoreGeoPoint(data.currentLocation.location) || {
+                lat: data.currentLocation.lat,
+                lng: data.currentLocation.lng
+              };
+              data.currentLocation.lat = coords.lat;
+              data.currentLocation.lng = coords.lng;
+            }
+            onUpdate(data as PickupBoy);
+          } else {
+            onUpdate(null);
+          }
+        },
+        (err) => {
+          console.warn(`[CloudSync] Rider document subscription notice for ${riderId}:`, err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CloudSync] subscribeToRiderDocument init exception:', e);
+      return () => {};
+    }
   }
 };

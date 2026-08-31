@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserAuth, PickupTask, Route, PickupBoy, StopProgress, TaskStatus, RiderSession } from '../../types';
 import {
   Bike,
@@ -27,7 +28,8 @@ import {
   Sparkles,
   RefreshCw,
   Image as ImageIcon,
-  FileText
+  FileText,
+  Inbox
 } from 'lucide-react';
 import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
@@ -54,7 +56,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   onRefresh,
   onOpenProof
 }) => {
-  // Session resolution from localStorage ('vialtrack_rider_session')
+  const navigate = useNavigate();
+
+  // Validate active authenticated rider session from localStorage ('vialtrack_rider_session')
   const getRiderSession = (): RiderSession | null => {
     try {
       const raw = typeof window !== 'undefined' ? localStorage.getItem('vialtrack_rider_session') : null;
@@ -67,6 +71,21 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   const session = getRiderSession();
 
+  // Route guard: if session data is invalid or missing, clear storage and redirect to /rider/login
+  useEffect(() => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('vialtrack_rider_session') : null;
+    let sess: RiderSession | null = null;
+    try {
+      if (raw) sess = JSON.parse(raw);
+    } catch {
+      sess = null;
+    }
+    if (!sess || sess.role !== 'rider' || !sess.riderId) {
+      StorageService.clearPortalSession('rider');
+      navigate('/rider/login', { replace: true });
+    }
+  }, [navigate]);
+
   const fallbackRider: PickupBoy = {
     id: session?.riderId || user?.riderId || 'rider-rahul',
     name: session?.name || user?.name || 'Rahul Sharma',
@@ -75,7 +94,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     photoUrl: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
     vehicleNumber: 'MH-02-DN-4921',
     vehicleType: 'Hero Splendor Plus',
-    assignedRouteIds: [routes[0]?.id || 'route-apex-western-1', 'route-abc-diagnostic-1'],
+    assignedRouteIds: ['route-apex-western-1', 'route-abc-diagnostic-1'],
     status: 'active',
     joiningDate: '2025-11-10',
     isOnline: true,
@@ -84,7 +103,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   const activeRider: PickupBoy = rider || fallbackRider;
 
-  // Active identity keys
+  // Active identity keys strictly for this rider
   const sessionRiderId = session?.riderId || user?.riderId || activeRider.id;
   const sessionPhone = session?.phone || user?.phone || activeRider.phone || '';
   const sessionName = session?.name || user?.name || activeRider.name || '';
@@ -93,46 +112,37 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const normalizedSessionPhone = normalizePhone(sessionPhone);
 
   // Local synced state for real-time Firestore listeners
-  const [liveTasks, setLiveTasks] = useState<PickupTask[]>(tasks);
-  const [liveRoutes, setLiveRoutes] = useState<Route[]>(routes);
+  const [liveTasks, setLiveTasks] = useState<PickupTask[]>([]);
+  const [liveRoutes, setLiveRoutes] = useState<Route[]>([]);
 
+  // Real-time Firestore snapshot listeners strictly scoped to active rider identity
   useEffect(() => {
-    setLiveTasks(tasks);
-  }, [tasks]);
+    if (!sessionRiderId) return;
 
-  useEffect(() => {
-    setLiveRoutes(routes);
-  }, [routes]);
-
-  // Real-time Firestore snapshot listeners on tasks and routes
-  useEffect(() => {
-    const unsubTasks = CloudSync.subscribeToTasks((cloudTasks) => {
-      if (cloudTasks && cloudTasks.length > 0) {
-        setLiveTasks((prev) => {
-          const map = new Map<string, PickupTask>();
-          prev.forEach((t) => map.set(t.id, t));
-          cloudTasks.forEach((t) => map.set(t.id, t));
-          return Array.from(map.values());
-        });
+    const unsubTasks = CloudSync.subscribeToRiderTasks(sessionRiderId, sessionPhone, (cloudTasks) => {
+      if (cloudTasks) {
+        setLiveTasks(cloudTasks);
       }
     });
 
-    const unsubRoutes = CloudSync.subscribeToRoutes((cloudRoutes) => {
-      if (cloudRoutes && cloudRoutes.length > 0) {
-        setLiveRoutes((prev) => {
-          const map = new Map<string, Route>();
-          prev.forEach((r) => map.set(r.id, r));
-          cloudRoutes.forEach((r) => map.set(r.id, r));
-          return Array.from(map.values());
-        });
+    const unsubRoutes = CloudSync.subscribeToRiderRoutes(sessionRiderId, sessionPhone, (cloudRoutes) => {
+      if (cloudRoutes) {
+        setLiveRoutes(cloudRoutes);
+      }
+    });
+
+    const unsubRiderDoc = CloudSync.subscribeToRiderDocument(sessionRiderId, (cloudRider) => {
+      if (cloudRider && cloudRider.isCheckedIn !== undefined) {
+        setIsCheckedIn(cloudRider.isCheckedIn);
       }
     });
 
     return () => {
       unsubTasks();
       unsubRoutes();
+      unsubRiderDoc();
     };
-  }, []);
+  }, [sessionRiderId, sessionPhone]);
 
   const [isCheckedIn, setIsCheckedIn] = useState<boolean>(activeRider.isCheckedIn ?? true);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -171,7 +181,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   // Today ISO Date string
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  // Data Matching: check if a task is assigned to this rider
+  // Data Matching: check if a task is strictly assigned to this rider
   const isTaskAssignedToRider = (t: PickupTask) => {
     if (!t) return false;
     if (t.riderId && (t.riderId === sessionRiderId || t.riderId === activeRider.id)) return true;
@@ -181,7 +191,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return false;
   };
 
-  // Data Matching: check if a route is assigned to this rider
+  // Data Matching: check if a route is strictly assigned to this rider
   const isRouteAssignedToRider = (r: Route) => {
     if (!r) return false;
     if (r.assignedRiderId && (r.assignedRiderId === sessionRiderId || r.assignedRiderId === activeRider.id)) return true;
@@ -192,16 +202,21 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return false;
   };
 
-  // Assigned routes list (fallback to available routes if none matched)
+  // Assigned routes list (STRICT: never fallback to other riders' routes)
   const assignedRoutes: Route[] = useMemo(() => {
-    const matched = liveRoutes.filter(isRouteAssignedToRider);
-    return matched.length > 0 ? matched : liveRoutes;
-  }, [liveRoutes, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName, liveTasks]);
+    const combinedRoutes = new Map<string, Route>();
+    routes.filter(isRouteAssignedToRider).forEach((r) => combinedRoutes.set(r.id, r));
+    liveRoutes.filter(isRouteAssignedToRider).forEach((r) => combinedRoutes.set(r.id, r));
+    return Array.from(combinedRoutes.values());
+  }, [routes, liveRoutes, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName, liveTasks]);
 
-  // Filter today's tasks for this rider
+  // Filter today's tasks strictly for this rider
   const todayRiderTasks: PickupTask[] = useMemo(() => {
-    return liveTasks.filter((t) => isTaskAssignedToRider(t) && t.date === todayStr);
-  }, [liveTasks, todayStr, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName]);
+    const combinedTasks = new Map<string, PickupTask>();
+    tasks.filter((t) => isTaskAssignedToRider(t) && t.date === todayStr).forEach((t) => combinedTasks.set(t.id, t));
+    liveTasks.filter((t) => isTaskAssignedToRider(t) && t.date === todayStr).forEach((t) => combinedTasks.set(t.id, t));
+    return Array.from(combinedTasks.values());
+  }, [tasks, liveTasks, todayStr, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName]);
 
   // Build sequential scheduled stops for "My Daily Rounds Schedule"
   const scheduleStops: ScheduleStopItem[] = useMemo(() => {
@@ -286,20 +301,20 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return items;
   }, [assignedRoutes, todayRiderTasks]);
 
-  // Find currently active task or default to first in-progress/upcoming
+  // Find currently active task strictly from this rider's tasks
   const activeTask = useMemo(() => {
     return (
       todayRiderTasks.find((t) => t.id === activeTaskId) ||
       todayRiderTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) ||
       todayRiderTasks[0] ||
-      liveTasks.find((t) => isTaskAssignedToRider(t)) ||
-      liveTasks[0]
+      null
     );
-  }, [todayRiderTasks, activeTaskId, liveTasks]);
+  }, [todayRiderTasks, activeTaskId]);
 
   const activeRoute = useMemo(() => {
-    return assignedRoutes.find((r) => r.id === activeTask?.routeId) || assignedRoutes[0] || liveRoutes[0];
-  }, [assignedRoutes, activeTask, liveRoutes]);
+    if (!activeTask) return assignedRoutes[0] || null;
+    return assignedRoutes.find((r) => r.id === activeTask.routeId) || assignedRoutes[0] || null;
+  }, [assignedRoutes, activeTask]);
 
   const [gpsStatus, setGpsStatus] = useState<GpsStatusEvent>(LocationService.getStatus());
 
@@ -311,17 +326,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return () => unsub();
   }, []);
 
-  // Start real GPS broadcasting when on duty
+  // Start real GPS broadcasting strictly for active rider ID
   useEffect(() => {
-    if (isCheckedIn) {
-      LocationService.startRealGeolocation(activeRider.id, activeRider.name, activeTask?.id);
+    if (isCheckedIn && sessionRiderId) {
+      LocationService.startRealGeolocation(sessionRiderId, activeRider.name, activeTask?.id);
     } else {
       LocationService.stop();
     }
     return () => {
       LocationService.stop();
     };
-  }, [isCheckedIn, activeRider.id, activeRider.name, activeTask?.id]);
+  }, [isCheckedIn, sessionRiderId, activeRider.name, activeTask?.id]);
 
   // Handle Attendance Toggle
   const handleToggleAttendance = () => {
@@ -826,10 +841,30 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <span>Active</span>
           </span>
           <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-            {gpsStatus.mode === 'real' ? 'High Precision GPS' : 'Simulated GPS'}
+            High Precision Live GPS
           </span>
         </div>
       </div>
+
+      {/* No Assigned Routes Empty State */}
+      {assignedRoutes.length === 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-700 flex items-center justify-center mx-auto border border-sky-200">
+            <Inbox className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900">No Collection Loops Assigned</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            You currently have no diagnostic routes or pickup tasks assigned to your shift. Please contact SecondMedic Ops Dispatch to assign your schedule.
+          </p>
+          <a
+            href="tel:+919876543210"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>Call Ops Dispatch Desk</span>
+          </a>
+        </div>
+      )}
 
       {/* Active Loop Command Hero Card */}
       {activeTask && (
@@ -870,10 +905,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           {showLiveMap && (
             <div className="rounded-xl overflow-hidden border border-slate-200 shadow-2xs">
               <LiveMap
-                tasks={[activeTask]}
+                tasks={activeTask ? [activeTask] : []}
                 riders={[activeRider]}
+                rider={activeRider}
+                stops={activeRoute?.stops || activeTask?.stopsProgress || []}
+                destination={activeRoute?.destinationLab || activeTask?.destination}
                 height="280px"
                 activeTaskId={activeTask.id}
+                enableFirestoreSync={true}
               />
             </div>
           )}
