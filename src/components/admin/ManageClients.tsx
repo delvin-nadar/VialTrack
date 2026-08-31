@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
+import { normalizeLatLng } from '../../utils/coordinates';
 import { RouteStopsManager } from './RouteStopsManager';
 
 interface ManageClientsProps {
@@ -157,6 +158,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     const effectiveEmail = clientForm.email?.trim() || `lab.${clientForm.name.toLowerCase().replace(/\s+/g, '')}@vialtrack.in`;
 
     if (isEditingClient && selectedClient) {
+      const [vLat, vLng] = normalizeLatLng(clientForm.lat, clientForm.lng, selectedClient.lat || 19.1287852, selectedClient.lng || 72.8294183);
       const updated: Client = {
         ...selectedClient,
         name: clientForm.name.trim(),
@@ -167,8 +169,8 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         role: 'client',
         status: clientForm.active ? 'active' : 'inactive',
         address: clientForm.address?.trim() || selectedClient.address,
-        lat: Number(clientForm.lat) || selectedClient.lat,
-        lng: Number(clientForm.lng) || selectedClient.lng,
+        lat: Number(vLat),
+        lng: Number(vLng),
         billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 450,
         active: clientForm.active ?? true,
         mustChangePassword: selectedClient.mustChangePassword ?? false,
@@ -176,6 +178,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       };
       StorageService.updateClient(updated);
     } else {
+      const [vLat, vLng] = normalizeLatLng(clientForm.lat, clientForm.lng, 19.1287852, 72.8294183);
       const newClient: Client = {
         id: `client-${Date.now()}`,
         name: clientForm.name.trim(),
@@ -186,8 +189,8 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         role: 'client',
         status: 'active',
         address: clientForm.address?.trim() || 'Mumbai, Maharashtra',
-        lat: Number(clientForm.lat) || 19.1860,
-        lng: Number(clientForm.lng) || 72.8485,
+        lat: Number(vLat),
+        lng: Number(vLng),
         active: true,
         mustChangePassword: true,
         failedAttempts: 0,
@@ -289,6 +292,23 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     e.preventDefault();
     if (!selectedClient || !routeForm.name) return;
 
+    const [dLat, dLng] = normalizeLatLng(
+      routeForm.destinationLat || selectedClient.lat,
+      routeForm.destinationLng || selectedClient.lng,
+      19.1287852,
+      72.8294183
+    );
+
+    const normalizedStops = routeForm.stops.map((s, idx) => {
+      const [sLat, sLng] = normalizeLatLng(s.lat, s.lng, 19.1624, 72.8465);
+      return {
+        ...s,
+        lat: Number(sLat),
+        lng: Number(sLng),
+        order: idx + 1
+      };
+    });
+
     const newRoute: Route = {
       id: `route-${Date.now()}`,
       clientId: selectedClient.id,
@@ -296,14 +316,14 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       description: routeForm.description,
       destinationLab: {
         id: `dest-${Date.now()}`,
-        name: routeForm.destinationName,
-        address: routeForm.destinationAddress,
-        lat: Number(routeForm.destinationLat) || 19.1860,
-        lng: Number(routeForm.destinationLng) || 72.8485,
-        contactPerson: routeForm.destinationContact,
-        phone: routeForm.destinationPhone
+        name: routeForm.destinationName || selectedClient.name,
+        address: routeForm.destinationAddress || selectedClient.address,
+        lat: Number(dLat),
+        lng: Number(dLng),
+        contactPerson: routeForm.destinationContact || selectedClient.contactPerson,
+        phone: routeForm.destinationPhone || selectedClient.phone
       },
-      stops: routeForm.stops,
+      stops: normalizedStops,
       timeSlots: routeForm.timeSlots.length > 0 ? routeForm.timeSlots : ['10:00', '14:00', '18:00', '22:00'],
       active: true
     };

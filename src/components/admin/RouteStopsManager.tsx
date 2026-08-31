@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Route, RouteStop } from '../../types';
 import { StorageService } from '../../services/storage';
+import { normalizeLatLng } from '../../utils/coordinates';
 
 interface RouteStopsManagerProps {
   route: Route;
@@ -35,6 +36,7 @@ interface RouteStopsManagerProps {
 const MUMBAI_LANDMARKS = [
   { name: 'Kandivali West (Oscar Hospital)', lat: 19.2082, lng: 72.8398, address: 'Mathuradas Road, Kandivali West, Mumbai' },
   { name: 'Goregaon West (Oscar Hospital)', lat: 19.1624, lng: 72.8465, address: 'Station Road, Jawahar Nagar, Goregaon West, Mumbai' },
+  { name: 'Andheri West (Lifecare Diagnostic Hub)', lat: 19.1287852, lng: 72.8294183, address: 'SV Road, Andheri West, Mumbai' },
   { name: 'Malad West (Apex Central Lab)', lat: 19.1860, lng: 72.8485, address: 'New Link Road, Malad West, Mumbai' },
   { name: 'Andheri West (Kokilaben Hospital Hub)', lat: 19.1310, lng: 72.8252, address: 'Rao Saheb Achutrao Patwardhan Marg, Andheri West, Mumbai' },
   { name: 'Bandra West (Lilavati Hospital Hub)', lat: 19.0514, lng: 72.8295, address: 'A-791, Bandra Reclamation, Bandra West, Mumbai' },
@@ -117,16 +119,17 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
     markersGroup.clearLayers();
     polylineGroup.clearLayers();
 
-    const polylineCoords: [number, number][] = [];
-    const bounds = L.latLngBounds([]);
+    // Polyline Path & Bounds Enforcement
+    // Map stops strictly as [Number(s.lat), Number(s.lng)]
+    const polylinePath: [number, number][] = route.stops.map((s) => {
+      const [sLat, sLng] = normalizeLatLng(s.lat, s.lng, 19.1624, 72.8465);
+      return [Number(sLat), Number(sLng)];
+    });
 
-    // A. Add Stop Markers in Order
+    // A. Add Stop Markers in Sequential Order
     route.stops.forEach((stop, idx) => {
-      const lat = Number(stop.lat) || 19.1624;
-      const lng = Number(stop.lng) || 72.8465;
-      const point: [number, number] = [lat, lng];
-      polylineCoords.push(point);
-      bounds.extend(point);
+      const [sLat, sLng] = normalizeLatLng(stop.lat, stop.lng, 19.1624, 72.8465);
+      const stopPos: [number, number] = [Number(sLat), Number(sLng)];
 
       const stopIcon = L.divIcon({
         className: 'custom-route-stop-icon',
@@ -142,7 +145,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
         iconAnchor: [14, 28]
       });
 
-      const marker = L.marker([lat, lng], { icon: stopIcon }).addTo(markersGroup);
+      const marker = L.marker(stopPos, { icon: stopIcon }).addTo(markersGroup);
       marker.bindPopup(`
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 180px; padding: 4px 2px;">
           <div style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase; margin-bottom: 2px;">
@@ -158,18 +161,22 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
             <div style="color: #334155;"><b>Contact:</b> ${stop.contactPerson || 'N/A'}</div>
             <div style="color: #334155;"><b>Phone:</b> ${stop.phone || 'N/A'}</div>
             <div style="color: #0284c7; font-weight: 600; margin-top: 2px;"><b>Est. Pickup:</b> ${stop.avgPickupDurationMinutes || 10} mins</div>
+            <div style="color: #64748b; font-family: monospace; font-size: 10px; margin-top: 2px;">[${stopPos[0].toFixed(5)}, ${stopPos[1].toFixed(5)}]</div>
           </div>
         </div>
       `);
     });
 
-    // B. Add Destination Lab Marker
+    // B. Add Destination Lab Marker & Append to Polyline Path
     if (route.destinationLab) {
-      const destLat = Number(route.destinationLab.lat) || 19.1860;
-      const destLng = Number(route.destinationLab.lng) || 72.8485;
-      const destPoint: [number, number] = [destLat, destLng];
-      polylineCoords.push(destPoint);
-      bounds.extend(destPoint);
+      const [destLat, destLng] = normalizeLatLng(
+        route.destinationLab.lat,
+        route.destinationLab.lng,
+        19.1287852,
+        72.8294183
+      );
+      const destinationPos: [number, number] = [Number(destLat), Number(destLng)];
+      polylinePath.push(destinationPos);
 
       const destIcon = L.divIcon({
         className: 'custom-dest-lab-icon',
@@ -185,7 +192,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
         iconAnchor: [16, 32]
       });
 
-      const destMarker = L.marker([destLat, destLng], { icon: destIcon }).addTo(markersGroup);
+      const destMarker = L.marker(destinationPos, { icon: destIcon, zIndexOffset: 1000 }).addTo(markersGroup);
       destMarker.bindPopup(`
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 190px; padding: 4px 2px;">
           <div style="font-size: 10px; font-weight: 800; color: #059669; text-transform: uppercase; margin-bottom: 2px;">
@@ -198,16 +205,17 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
             ${route.destinationLab.address}
           </div>
           <div style="margin-top: 6px; font-size: 11px; color: #334155; border-top: 1px solid #e2e8f0; padding-top: 4px;">
-            <b>Lab Intake Head:</b> ${route.destinationLab.contactPerson || 'Dr. Lab Coord'}
+            <b>Lab Intake Head:</b> ${route.destinationLab.contactPerson || 'Dr. Lab Coord'}<br/>
+            <span style="color: #047857; font-family: monospace; font-size: 10px;">[${destinationPos[0].toFixed(5)}, ${destinationPos[1].toFixed(5)}]</span>
           </div>
         </div>
       `);
     }
 
     // C. Draw Sequential Connected Polyline with directional arrows styling
-    if (polylineCoords.length >= 2) {
+    if (polylinePath.length >= 2) {
       // Glow/Background line
-      L.polyline(polylineCoords, {
+      L.polyline(polylinePath, {
         color: '#0284c7',
         weight: 6,
         opacity: 0.35,
@@ -216,7 +224,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       }).addTo(polylineGroup);
 
       // Core Solid/Dashed Line
-      L.polyline(polylineCoords, {
+      L.polyline(polylinePath, {
         color: '#0369a1',
         weight: 3.5,
         opacity: 0.95,
@@ -226,11 +234,11 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       }).addTo(polylineGroup);
     }
 
-    // D. Auto-fit bounds with graceful padding
-    if (bounds.isValid()) {
+    // D. Auto-fit bounds tightly framing stops to destination without panning into ocean
+    if (polylinePath.length > 0) {
       setTimeout(() => {
         map.invalidateSize();
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+        map.fitBounds(polylinePath, { padding: [40, 40], maxZoom: 15 });
       }, 100);
     }
   }, [route.stops, route.destinationLab, showMap, isExpandedMap]);
