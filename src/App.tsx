@@ -64,13 +64,37 @@ function AppContent() {
     : 'landing';
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<UserAuth | null>(() => {
+  const [adminUser, setAdminUser] = useState<UserAuth | null>(() => {
     try {
-      return StorageService.getCurrentUser();
+      return StorageService.getPortalSession('admin');
     } catch {
       return null;
     }
   });
+  const [clientUser, setClientUser] = useState<UserAuth | null>(() => {
+    try {
+      return StorageService.getPortalSession('client');
+    } catch {
+      return null;
+    }
+  });
+  const [riderUser, setRiderUser] = useState<UserAuth | null>(() => {
+    try {
+      return StorageService.getPortalSession('rider');
+    } catch {
+      return null;
+    }
+  });
+
+  // Current active user based on current route
+  const currentUser = currentRoute === 'admin'
+    ? adminUser
+    : currentRoute === 'client'
+    ? clientUser
+    : currentRoute === 'rider'
+    ? riderUser
+    : null;
+
   const [adminActiveTab, setAdminActiveTab] = useState<string>('dashboard');
 
   // Core domain data
@@ -134,6 +158,9 @@ function AppContent() {
       setRoutes(StorageService.getRoutes());
       setAttendance(StorageService.getAttendance());
       setNotifications(NotificationService.getNotifications());
+      setAdminUser(StorageService.getPortalSession('admin'));
+      setClientUser(StorageService.getPortalSession('client'));
+      setRiderUser(StorageService.getPortalSession('rider'));
     } catch (err) {
       console.warn('Error reloading data:', err);
     }
@@ -268,9 +295,9 @@ function AppContent() {
   // Listen to Firebase Auth state changes
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
-      if (!fbUser) {
-        StorageService.setCurrentUser(null);
-        setCurrentUser(null);
+      if (!fbUser && StorageService.getAdminSession()) {
+        StorageService.setAdminSession(null);
+        setAdminUser(null);
       }
     });
 
@@ -284,22 +311,51 @@ function AppContent() {
         ...currentUser,
         mustChangePassword: false
       };
-      StorageService.setCurrentUser(updatedUser);
-      setCurrentUser(updatedUser);
+      if (updatedUser.role === 'admin') {
+        const sess = StorageService.getAdminSession();
+        if (sess) StorageService.setAdminSession({ ...sess, mustChangePassword: false });
+        setAdminUser(updatedUser);
+      } else if (updatedUser.role === 'client') {
+        const sess = StorageService.getClientSession();
+        if (sess) StorageService.setClientSession({ ...sess, mustChangePassword: false });
+        setClientUser(updatedUser);
+      } else if (updatedUser.role === 'rider') {
+        const sess = StorageService.getRiderSession();
+        if (sess) StorageService.setRiderSession({ ...sess, mustChangePassword: false });
+        setRiderUser(updatedUser);
+      }
       reloadData();
     }
   };
 
-  // Logout with Firebase signOut
-  const handleLogout = async () => {
+  // Role-specific Logouts
+  const handleAdminLogout = async () => {
     try {
       await signOut(auth);
     } catch (err) {
       console.warn('[App] SignOut notice:', err);
     }
-    StorageService.setCurrentUser(null);
-    setCurrentUser(null);
-    navigate('/');
+    StorageService.setAdminSession(null);
+    setAdminUser(null);
+    navigate('/admin/login');
+  };
+
+  const handleClientLogout = () => {
+    StorageService.setClientSession(null);
+    setClientUser(null);
+    navigate('/client/login');
+  };
+
+  const handleExitClientPreview = () => {
+    StorageService.setClientSession(null);
+    setClientUser(null);
+    navigate('/admin');
+  };
+
+  const handleRiderLogout = () => {
+    StorageService.setRiderSession(null);
+    setRiderUser(null);
+    navigate('/rider/login');
   };
 
   // Toggle GPS Route Simulation
@@ -342,29 +398,34 @@ function AppContent() {
           }
         />
 
-        {/* 2. ADMIN PORTAL (/admin) */}
+        {/* 2. ADMIN PORTAL ROUTES */}
         <Route
-          path="/admin"
+          path="/admin/login"
           element={
-            <ProtectedRoute
-              requiredRole="admin"
-              currentUser={currentUser}
-              fallback={
-                <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                  <AdminLogin
-                    onLoginSuccess={(user) => {
-                      StorageService.setCurrentUser(user);
-                      setCurrentUser(user);
-                      reloadData();
-                    }}
-                    onBackToLanding={() => navigate('/')}
-                  />
-                </main>
-              }
-            >
+            adminUser?.role === 'admin' ? (
+              <Navigate to="/admin" replace />
+            ) : (
+              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col justify-center">
+                <AdminLogin
+                  onLoginSuccess={(user) => {
+                    setAdminUser(user);
+                    reloadData();
+                    navigate('/admin');
+                  }}
+                  onBackToLanding={() => navigate('/')}
+                />
+              </main>
+            )
+          }
+        />
+
+        <Route
+          path="/admin/*"
+          element={
+            <ProtectedRoute requiredRole="admin">
               <AdminHeader
-                user={currentUser}
-                onLogout={handleLogout}
+                user={adminUser || { id: 'admin-ops', email: 'admin@secondmedic.com', name: 'Dr. Rajesh Sharma (Head of Operations)', role: 'admin' }}
+                onLogout={handleAdminLogout}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}
                 isSimulating={isSimulating}
@@ -479,36 +540,42 @@ function AppContent() {
           }
         />
 
-        {/* 3. CLIENT PORTAL (/client) */}
+        {/* 3. CLIENT PORTAL ROUTES */}
         <Route
-          path="/client"
+          path="/client/login"
           element={
-            <ProtectedRoute
-              requiredRole="client"
-              currentUser={currentUser}
-              fallback={
-                <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                  <ClientLogin
-                    onLoginSuccess={(user) => {
-                      StorageService.setCurrentUser(user);
-                      setCurrentUser(user);
-                      reloadData();
-                    }}
-                    onBackToLanding={() => navigate('/')}
-                  />
-                </main>
-              }
-            >
+            clientUser?.role === 'client' ? (
+              <Navigate to="/client" replace />
+            ) : (
+              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col justify-center">
+                <ClientLogin
+                  onLoginSuccess={(user) => {
+                    setClientUser(user);
+                    reloadData();
+                    navigate('/client');
+                  }}
+                  onBackToLanding={() => navigate('/')}
+                />
+              </main>
+            )
+          }
+        />
+
+        <Route
+          path="/client/*"
+          element={
+            <ProtectedRoute requiredRole="client">
               <ClientHeader
-                user={currentUser}
-                onLogout={handleLogout}
+                user={clientUser || { id: 'client-apex', name: 'Metropolis Healthcare (Lab Ops)', email: 'labops@metropolis.in', role: 'client', clientId: 'client-bkc-metropolis' }}
+                onLogout={handleClientLogout}
+                onExitPreview={handleExitClientPreview}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}
               />
 
               <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
                 <ClientDashboard
-                  user={currentUser}
+                  user={clientUser || { id: 'client-apex', name: 'Metropolis Healthcare (Lab Ops)', email: 'labops@metropolis.in', role: 'client', clientId: 'client-bkc-metropolis' }}
                   tasks={tasks}
                   routes={routes}
                   riders={riders}
@@ -520,40 +587,45 @@ function AppContent() {
           }
         />
 
-        {/* 4. RIDER PORTAL (/rider) */}
+        {/* 4. RIDER PORTAL ROUTES */}
         <Route
-          path="/rider"
+          path="/rider/login"
           element={
-            <ProtectedRoute
-              requiredRole="rider"
-              currentUser={currentUser}
-              fallback={
-                <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                  <RiderLogin
-                    onLoginSuccess={(user) => {
-                      StorageService.setCurrentUser(user);
-                      setCurrentUser(user);
-                      reloadData();
-                    }}
-                    onBackToLanding={() => navigate('/')}
-                  />
-                </main>
-              }
-            >
+            riderUser?.role === 'rider' ? (
+              <Navigate to="/rider" replace />
+            ) : (
+              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col justify-center">
+                <RiderLogin
+                  onLoginSuccess={(user) => {
+                    setRiderUser(user);
+                    reloadData();
+                    navigate('/rider');
+                  }}
+                  onBackToLanding={() => navigate('/')}
+                />
+              </main>
+            )
+          }
+        />
+
+        <Route
+          path="/rider/*"
+          element={
+            <ProtectedRoute requiredRole="rider">
               <RiderHeader
-                user={currentUser}
-                rider={riders.find((r) => r.id === currentUser?.riderId) || riders[0]}
-                onLogout={handleLogout}
+                user={riderUser || { id: 'user-pb-1', name: 'Rahul Sharma', email: 'rahul.s@vialtrack.in', role: 'rider', riderId: 'pb-1' }}
+                rider={riders.find((r) => r.id === riderUser?.riderId) || riders[0]}
+                onLogout={handleRiderLogout}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}
               />
 
               <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
                 <RiderDashboard
-                  user={currentUser}
+                  user={riderUser || { id: 'user-pb-1', name: 'Rahul Sharma', email: 'rahul.s@vialtrack.in', role: 'rider', riderId: 'pb-1' }}
                   tasks={tasks}
                   routes={routes}
-                  rider={riders.find((r) => r.id === currentUser?.riderId) || riders[0]}
+                  rider={riders.find((r) => r.id === riderUser?.riderId) || riders[0]}
                   onRefresh={reloadData}
                   onOpenProof={handleOpenProof}
                 />

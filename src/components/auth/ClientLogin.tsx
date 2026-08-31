@@ -112,14 +112,31 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
         StorageService.resetClientFailedAttempts(matchedClient.id);
       }
 
-      const user: UserAuth = {
-        id: `user-${matchedClient?.id || 'client-apex'}`,
-        email: emailToAuth,
+      const clientSession = {
+        role: 'client' as const,
+        clientId: matchedClient?.id || 'client-apex',
         name: matchedClient?.name || 'Metropolis Healthcare (Lab Ops)',
-        role: 'client',
-        clientId: matchedClient?.id || 'client-bkc-metropolis',
+        email: emailToAuth,
         phone: matchedClient?.phone || '+91 98200 11223',
-        mustChangePassword: matchedClient?.mustChangePassword ?? false
+        token: `client_token_${Date.now()}`,
+        mustChangePassword: matchedClient?.mustChangePassword ?? false,
+        loginTimestamp: new Date().toISOString()
+      };
+
+      try {
+        localStorage.setItem('vialtrack_client_session', JSON.stringify(clientSession));
+      } catch (err) {
+        console.warn('Could not write client session:', err);
+      }
+
+      const user: UserAuth = {
+        id: `user-${clientSession.clientId}`,
+        email: clientSession.email,
+        name: clientSession.name,
+        role: 'client',
+        clientId: clientSession.clientId,
+        phone: clientSession.phone,
+        mustChangePassword: clientSession.mustChangePassword
       };
 
       onLoginSuccess(user);

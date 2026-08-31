@@ -116,15 +116,33 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
       // 5. Authentication Successful -> Reset failed attempts
       StorageService.resetRiderFailedAttempts(matchedRider.id);
 
-      const user: UserAuth = {
-        id: `user-${matchedRider.id}`,
-        email: matchedRider.email,
-        name: matchedRider.name,
-        role: 'rider',
+      const riderSession = {
+        role: 'rider' as const,
         riderId: matchedRider.id,
         phone: matchedRider.phone,
+        name: matchedRider.name,
+        email: matchedRider.email,
         avatar: matchedRider.photoUrl,
-        mustChangePassword: matchedRider.mustChangePassword ?? false
+        token: `rider_token_${Date.now()}`,
+        mustChangePassword: matchedRider.mustChangePassword ?? false,
+        loginTimestamp: new Date().toISOString()
+      };
+
+      try {
+        localStorage.setItem('vialtrack_rider_session', JSON.stringify(riderSession));
+      } catch (err) {
+        console.warn('Could not write rider session:', err);
+      }
+
+      const user: UserAuth = {
+        id: `user-${riderSession.riderId}`,
+        email: riderSession.email,
+        name: riderSession.name,
+        role: 'rider',
+        riderId: riderSession.riderId,
+        phone: riderSession.phone,
+        avatar: riderSession.avatar,
+        mustChangePassword: riderSession.mustChangePassword
       };
 
       onLoginSuccess(user);

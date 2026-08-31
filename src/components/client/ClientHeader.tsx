@@ -1,83 +1,122 @@
 import React from 'react';
 import { UserAuth } from '../../types';
-import { Building2, Bell, LogOut, ShieldCheck, PhoneCall } from 'lucide-react';
+import { Building2, Bell, LogOut, PhoneCall, Eye, ArrowLeft } from 'lucide-react';
 
 interface ClientHeaderProps {
   user: UserAuth;
   onLogout: () => void;
   unreadNotifsCount: number;
   onOpenNotifications: () => void;
+  onExitPreview?: () => void;
 }
 
 export const ClientHeader: React.FC<ClientHeaderProps> = ({
   user,
   onLogout,
   unreadNotifsCount,
-  onOpenNotifications
+  onOpenNotifications,
+  onExitPreview
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
-        {/* Client Brand Logo & Lab Name */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-8 h-8 bg-emerald-700 rounded-lg flex items-center justify-center text-white shadow-xs font-bold text-sm shrink-0">
-            <Building2 className="w-4 h-4 text-white" />
-          </div>
-          <div>
+    <>
+      {/* Admin Preview Mode Banner */}
+      {user.isPreview && (
+        <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-semibold flex items-center justify-between shadow-xs sticky top-0 z-50">
+          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full justify-between">
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">
-                {user.name.split('(')[0].trim()}
-              </h1>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-emerald-200">
-                Partner Lab Portal
+              <Eye className="w-4 h-4 text-slate-950 animate-pulse" />
+              <span>
+                <strong>Admin Preview Mode:</strong> Viewing client portal for <strong>{user.name}</strong> (Client ID: {user.clientId}).
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium hidden md:block">
-              SecondMedic Specimen Intake & Live Cold-Chain Tracking
-            </p>
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2.5 sm:gap-4">
-          {/* Ops Support Hotline */}
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-            <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Ops Hotline: <strong>+91 98200 99887</strong></span>
-          </div>
-
-          {/* Notifications Button */}
-          <button
-            onClick={onOpenNotifications}
-            className="relative p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
-            title="View Delivery Alerts & Pickup Updates"
-          >
-            <Bell className="w-4 h-4" />
-            {unreadNotifsCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
-                {unreadNotifsCount}
-              </span>
+            {onExitPreview && (
+              <button
+                type="button"
+                onClick={onExitPreview}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Exit Preview & Return to Admin</span>
+              </button>
             )}
-          </button>
-
-          {/* Client Profile Info & Exit */}
-          <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
-            <div className="text-right hidden sm:block">
-              <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[140px]">{user.email}</div>
-              <div className="text-[10px] text-emerald-700 font-medium">Verified Partner</div>
-            </div>
-
-            <button
-              onClick={onLogout}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-600 transition-colors text-xs flex items-center gap-1.5 cursor-pointer font-semibold"
-              title="Exit Client Portal"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline text-xs">Exit Lab</span>
-            </button>
           </div>
         </div>
-      </div>
-    </header>
+      )}
+
+      <header className={`sticky ${user.isPreview ? 'top-8' : 'top-0'} z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
+          {/* Client Brand Logo & Lab Name */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-8 h-8 bg-emerald-700 rounded-lg flex items-center justify-center text-white shadow-xs font-bold text-sm shrink-0">
+              <Building2 className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">
+                  {user.name.split('(')[0].trim()}
+                </h1>
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-emerald-200">
+                  {user.isPreview ? 'Admin Preview' : 'Partner Lab Portal'}
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium hidden md:block">
+                SecondMedic Specimen Intake & Live Cold-Chain Tracking
+              </p>
+            </div>
+          </div>
+
+          {/* Right Actions */}
+          <div className="flex items-center gap-2.5 sm:gap-4">
+            {/* Ops Support Hotline */}
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+              <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Ops Hotline: <strong>+91 98200 99887</strong></span>
+            </div>
+
+            {/* Notifications Button */}
+            <button
+              onClick={onOpenNotifications}
+              className="relative p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+              title="View Delivery Alerts & Pickup Updates"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadNotifsCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-emerald-600 text-white font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                  {unreadNotifsCount}
+                </span>
+              )}
+            </button>
+
+            {/* Client Profile Info & Exit */}
+            <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
+              <div className="text-right hidden sm:block">
+                <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[140px]">{user.email}</div>
+                <div className="text-[10px] text-emerald-700 font-medium">{user.isPreview ? 'Preview Mode' : 'Verified Partner'}</div>
+              </div>
+
+              {user.isPreview && onExitPreview ? (
+                <button
+                  onClick={onExitPreview}
+                  className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 transition-colors text-xs flex items-center gap-1.5 cursor-pointer font-semibold"
+                  title="Exit Preview"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-xs">Exit Preview</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onLogout}
+                  className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-600 transition-colors text-xs flex items-center gap-1.5 cursor-pointer font-semibold"
+                  title="Exit Client Portal"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-xs">Exit Lab</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+    </>
   );
 };

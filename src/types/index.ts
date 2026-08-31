@@ -1,5 +1,42 @@
 export type UserRole = 'admin' | 'client' | 'rider';
 
+export interface AdminSession {
+  role: 'admin';
+  email: string;
+  token?: string;
+  id?: string;
+  name?: string;
+  phone?: string;
+  mustChangePassword?: boolean;
+  loginTimestamp?: string;
+}
+
+export interface ClientSession {
+  role: 'client';
+  clientId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  token?: string;
+  id?: string;
+  mustChangePassword?: boolean;
+  isPreview?: boolean;
+  loginTimestamp?: string;
+}
+
+export interface RiderSession {
+  role: 'rider';
+  riderId: string;
+  phone: string;
+  name?: string;
+  email?: string;
+  token?: string;
+  id?: string;
+  avatar?: string;
+  mustChangePassword?: boolean;
+  loginTimestamp?: string;
+}
+
 export interface UserAuth {
   id: string;
   email: string;
@@ -10,6 +47,7 @@ export interface UserAuth {
   phone?: string;
   avatar?: string;
   mustChangePassword?: boolean;
+  isPreview?: boolean;
 }
 
 export interface RouteStop {

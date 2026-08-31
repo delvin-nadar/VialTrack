@@ -8,12 +8,19 @@ import {
   NotificationLog,
   AlertsConfig,
   OfflineProofQueueItem,
-  UserAuth
+  UserAuth,
+  UserRole,
+  AdminSession,
+  ClientSession,
+  RiderSession
 } from '../types';
 import { generateSampleVialPhoto, addWatermarkToImage } from './imageWatermark';
 import { CloudSync } from './firebase';
 // Storage keys
 const STORAGE_KEYS = {
+  ADMIN_SESSION: 'vialtrack_admin_session',
+  CLIENT_SESSION: 'vialtrack_client_session',
+  RIDER_SESSION: 'vialtrack_rider_session',
   CLIENTS: 'smvt_clients',
   ROUTES: 'smvt_routes',
   RIDERS: 'smvt_riders',
@@ -915,17 +922,169 @@ export const StorageService = {
     this.saveOfflineQueue(queue);
   },
 
-  // Auth User Session
-  getAuthUser(): UserAuth | null {
+  // Role-Based Session Isolation
+  getAdminSession(): AdminSession | null {
+    const raw = safeGetItem(STORAGE_KEYS.ADMIN_SESSION);
+    const session = safeParse<AdminSession | null>(raw, null);
+    if (session && session.role === 'admin') {
+      return session;
+    }
+    return null;
+  },
+  setAdminSession(session: AdminSession | null): void {
+    if (session && session.role === 'admin') {
+      safeSetItem(STORAGE_KEYS.ADMIN_SESSION, JSON.stringify(session));
+    } else {
+      safeRemoveItem(STORAGE_KEYS.ADMIN_SESSION);
+    }
+  },
+
+  getClientSession(): ClientSession | null {
+    const raw = safeGetItem(STORAGE_KEYS.CLIENT_SESSION);
+    const session = safeParse<ClientSession | null>(raw, null);
+    if (session && session.role === 'client') {
+      return session;
+    }
+    return null;
+  },
+  setClientSession(session: ClientSession | null): void {
+    if (session && session.role === 'client') {
+      safeSetItem(STORAGE_KEYS.CLIENT_SESSION, JSON.stringify(session));
+    } else {
+      safeRemoveItem(STORAGE_KEYS.CLIENT_SESSION);
+    }
+  },
+
+  getRiderSession(): RiderSession | null {
+    const raw = safeGetItem(STORAGE_KEYS.RIDER_SESSION);
+    const session = safeParse<RiderSession | null>(raw, null);
+    if (session && session.role === 'rider') {
+      return session;
+    }
+    return null;
+  },
+  setRiderSession(session: RiderSession | null): void {
+    if (session && session.role === 'rider') {
+      safeSetItem(STORAGE_KEYS.RIDER_SESSION, JSON.stringify(session));
+    } else {
+      safeRemoveItem(STORAGE_KEYS.RIDER_SESSION);
+    }
+  },
+
+  // Role Session Resolver to UserAuth
+  getPortalSession(role: UserRole): UserAuth | null {
+    if (role === 'admin') {
+      const s = this.getAdminSession();
+      if (!s) return null;
+      return {
+        id: s.id || 'admin-user',
+        email: s.email,
+        name: s.name || 'Ops Dispatch Lead',
+        role: 'admin',
+        phone: s.phone || '+91 98200 99887'
+      };
+    } else if (role === 'client') {
+      const s = this.getClientSession();
+      if (!s) return null;
+      return {
+        id: s.id || `user-${s.clientId}`,
+        email: s.email || `${s.clientId}@vialtrack.in`,
+        name: s.name,
+        role: 'client',
+        clientId: s.clientId,
+        phone: s.phone || '+91 98200 11223',
+        mustChangePassword: s.mustChangePassword,
+        isPreview: s.isPreview
+      };
+    } else if (role === 'rider') {
+      const s = this.getRiderSession();
+      if (!s) return null;
+      return {
+        id: s.id || `user-${s.riderId}`,
+        email: s.email || `${s.riderId}@vialtrack.in`,
+        name: s.name || 'Courier Partner',
+        role: 'rider',
+        riderId: s.riderId,
+        phone: s.phone,
+        avatar: s.avatar,
+        mustChangePassword: s.mustChangePassword
+      };
+    }
+    return null;
+  },
+
+  clearPortalSession(role: UserRole): void {
+    if (role === 'admin') {
+      this.setAdminSession(null);
+    } else if (role === 'client') {
+      this.setClientSession(null);
+    } else if (role === 'rider') {
+      this.setRiderSession(null);
+    }
+  },
+
+  clearAllSessions(): void {
+    this.setAdminSession(null);
+    this.setClientSession(null);
+    this.setRiderSession(null);
+    safeRemoveItem(STORAGE_KEYS.AUTH_USER);
+  },
+
+  // Auth User Session (generic helper)
+  getAuthUser(preferredRole?: UserRole): UserAuth | null {
+    if (preferredRole) {
+      const roleSession = this.getPortalSession(preferredRole);
+      if (roleSession) return roleSession;
+    }
+    // Check role sessions in priority
+    const admin = this.getPortalSession('admin');
+    if (admin) return admin;
+    const client = this.getPortalSession('client');
+    if (client) return client;
+    const rider = this.getPortalSession('rider');
+    if (rider) return rider;
+
     const raw = safeGetItem(STORAGE_KEYS.AUTH_USER);
     return safeParse<UserAuth | null>(raw, null);
   },
-  getCurrentUser(): UserAuth | null {
-    return this.getAuthUser();
+  getCurrentUser(preferredRole?: UserRole): UserAuth | null {
+    return this.getAuthUser(preferredRole);
   },
   setAuthUser(user: UserAuth | null): void {
     if (user) {
       safeSetItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(user));
+      if (user.role === 'admin') {
+        this.setAdminSession({
+          role: 'admin',
+          email: user.email,
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          token: `token_${Date.now()}`
+        });
+      } else if (user.role === 'client') {
+        this.setClientSession({
+          role: 'client',
+          clientId: user.clientId || 'client-apex',
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          mustChangePassword: user.mustChangePassword,
+          isPreview: user.isPreview,
+          token: `token_${Date.now()}`
+        });
+      } else if (user.role === 'rider') {
+        this.setRiderSession({
+          role: 'rider',
+          riderId: user.riderId || 'rider-1',
+          phone: user.phone || '+91 98201 22334',
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar,
+          mustChangePassword: user.mustChangePassword,
+          token: `token_${Date.now()}`
+        });
+      }
     } else {
       safeRemoveItem(STORAGE_KEYS.AUTH_USER);
     }

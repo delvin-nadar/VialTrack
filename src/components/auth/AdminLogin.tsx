@@ -43,12 +43,36 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
 
       // 2. Only on successful credential validation
       const fbUser = userCredential.user;
-      const user: UserAuth = {
-        id: fbUser.uid || 'admin-1',
+      let token = `token_admin_${Date.now()}`;
+      try {
+        const idToken = await fbUser.getIdToken();
+        if (idToken) token = idToken;
+      } catch {
+        // use fallback token
+      }
+
+      const adminSession = {
+        role: 'admin' as const,
         email: cleanEmail,
+        token,
+        id: fbUser.uid || 'admin-1',
         name: fbUser.displayName || 'Vikas Mehra (Ops Dispatch Lead)',
+        phone: '+91 98200 99887',
+        loginTimestamp: new Date().toISOString()
+      };
+
+      try {
+        localStorage.setItem('vialtrack_admin_session', JSON.stringify(adminSession));
+      } catch (err) {
+        console.warn('Could not write to localStorage:', err);
+      }
+
+      const user: UserAuth = {
+        id: adminSession.id,
+        email: adminSession.email,
+        name: adminSession.name,
         role: 'admin',
-        phone: '+91 98200 99887'
+        phone: adminSession.phone
       };
 
       onLoginSuccess(user);

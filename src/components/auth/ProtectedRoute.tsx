@@ -1,47 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '../../services/firebase';
-import { UserAuth, UserRole } from '../../types';
-import { LoadingSkeleton } from '../common/LoadingSkeleton';
+import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { UserRole } from '../../types';
+import { StorageService } from '../../services/storage';
 
 interface ProtectedRouteProps {
   requiredRole: UserRole;
-  currentUser: UserAuth | null;
   children: React.ReactNode;
-  fallback: React.ReactNode;
+  fallback?: React.ReactNode;
 }
 
 /**
- * Strict Route Protection Component:
- * Checks for an active Firebase currentUser session via onAuthStateChanged
- * before granting access to protected routes (/admin, /client, /rider).
+ * Strict Role-Based Route Guard:
+ * Validates the portal-specific session storage (vialtrack_admin_session, vialtrack_client_session, vialtrack_rider_session).
+ * If the active session does not match requiredRole, redirects immediately to /{role}/login.
  */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requiredRole,
-  currentUser,
   children,
   fallback
 }) => {
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(auth.currentUser);
-  const [authInitializing, setAuthInitializing] = useState<boolean>(true);
+  const location = useLocation();
+  const activeSession = StorageService.getPortalSession(requiredRole);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setFirebaseUser(user);
-      setAuthInitializing(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Show loading skeleton while Firebase Auth verifies session state
-  if (authInitializing) {
-    return <LoadingSkeleton rolePortal={requiredRole} />;
-  }
-
-  // Strict check: Must have an active Firebase currentUser AND a valid matching role
-  if (!firebaseUser || !currentUser || currentUser.role !== requiredRole) {
-    return <>{fallback}</>;
+  if (!activeSession || activeSession.role !== requiredRole) {
+    if (fallback) {
+      return <>{fallback}</>;
+    }
+    return <Navigate to={`/${requiredRole}/login`} state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
