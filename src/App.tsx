@@ -97,56 +97,20 @@ function AppContent() {
 
   const [adminActiveTab, setAdminActiveTab] = useState<string>('dashboard');
 
-  // Core domain data
-  const [tasks, setTasks] = useState<PickupTask[]>(() => {
-    try {
-      return StorageService.getTasks();
-    } catch {
-      return [];
-    }
-  });
-  const [clients, setClients] = useState<Client[]>(() => {
-    try {
-      return StorageService.getClients();
-    } catch {
-      return [];
-    }
-  });
-  const [riders, setRiders] = useState<PickupBoy[]>(() => {
-    try {
-      return StorageService.getRiders();
-    } catch {
-      return [];
-    }
-  });
-  const [routes, setRoutes] = useState<LogisticsRoute[]>(() => {
-    try {
-      return StorageService.getRoutes();
-    } catch {
-      return [];
-    }
-  });
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    try {
-      return StorageService.getAttendance();
-    } catch {
-      return [];
-    }
-  });
-  const [notifications, setNotifications] = useState<NotificationLog[]>(() => {
-    try {
-      return NotificationService.getNotifications();
-    } catch {
-      return [];
-    }
-  });
+  // Core domain data (Pure Firestore only - initialized strictly as empty arrays [])
+  const [tasks, setTasks] = useState<PickupTask[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [riders, setRiders] = useState<PickupBoy[]>([]);
+  const [routes, setRoutes] = useState<LogisticsRoute[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationLog[]>([]);
 
   // Modals & Drawers
   const [selectedProofTask, setSelectedProofTask] = useState<PickupTask | null>(null);
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
 
-  // Load / Reload all state from storage
+  // Load / Reload session state from storage
   const reloadData = useCallback(() => {
     try {
       setTasks(StorageService.getTasks());
@@ -163,7 +127,7 @@ function AppContent() {
     }
   }, []);
 
-  // Initial boot and clear cached mock fleet arrays
+  // Initial boot and clear cached legacy mock fleet arrays
   useEffect(() => {
     try {
       const mockKeysToRemove = [
@@ -174,7 +138,10 @@ function AppContent() {
         'vialtrack_demo_rounds',
         'vialtrack_initial_feed',
         'smvt_mock_fleet',
-        'smvt_demo_tasks'
+        'smvt_demo_tasks',
+        'smvt_initialized_v3',
+        'smvt_initialized_v2',
+        'smvt_initialized'
       ];
       mockKeysToRemove.forEach((key) => {
         localStorage.removeItem(key);

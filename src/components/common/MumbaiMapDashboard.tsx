@@ -13,7 +13,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import {
   MUMBAI_LANDMARKS
-} from '../../services/mumbaiSeed';
+} from '../../types/mumbaiLandmarks';
 import {
   MapPin,
   Bike,

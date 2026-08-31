@@ -182,9 +182,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const activeRiders = riders.filter((r) => r && r.status === 'active' && r.isCheckedIn);
 
   // Active selected task for map display
-  const activeTask = todayTasks.find((t) => t.id === selectedTaskId) || todayTasks[0];
-  const activeRoute = routes.find((r) => r.id === activeTask?.routeId) || routes[0];
-  const assignedRider = riders.find((r) => r.id === activeTask?.riderId) || riders[0];
+  const activeTask = todayTasks.find((t) => t.id === selectedTaskId) || todayTasks[0] || undefined;
+  const activeRoute = activeTask ? routes.find((r) => r.id === activeTask.routeId) : undefined;
+  const assignedRider = activeTask ? riders.find((r) => r.id === activeTask.riderId) : (riders.length === 1 ? riders[0] : undefined);
 
   // Stats calculation
   const totalScheduled = todayTasks.length;
@@ -224,13 +224,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           </div>
         </div>
-      ) : (
+      ) : totalScheduled > 0 ? (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-800 shadow-xs">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="font-semibold text-emerald-900">All Active Specimen Routes Operating Within SLA (100% On-Time)</span>
           </div>
           <span className="hidden sm:inline text-emerald-700 font-mono text-[11px]">Cold-Chain Verified: 2.0°C – 8.0°C Safe</span>
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-slate-600 shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+            <span className="font-medium text-slate-700">Live Logistics Engine Active • 0 Scheduled Pickup Tasks</span>
+          </div>
+          <span className="hidden sm:inline text-slate-500 font-mono text-[11px]">Ready for New Dispatches</span>
         </div>
       )}
 

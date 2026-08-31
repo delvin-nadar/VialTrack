@@ -27,9 +27,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private handleReset = () => {
     try {
-      StorageService.resetToDemo();
-    } catch {
       localStorage.clear();
+    } catch (e) {
+      console.warn('Could not clear localStorage:', e);
     }
     window.location.reload();
   };

@@ -2,16 +2,8 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
-import { ensureInitialized } from './services/storage.ts';
 import './index.css';
 import 'leaflet/dist/leaflet.css';
-
-// Ensure seed data is ready synchronously
-try {
-  ensureInitialized();
-} catch (e) {
-  console.warn('Seed data init warning:', e);
-}
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

@@ -347,9 +347,20 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
       </div>
 
       {/* Riders Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredRiders.map((rider) => {
-          const assignedRoutes = routes.filter((r) => rider.assignedRouteIds.includes(r.id));
+      {filteredRiders.length === 0 ? (
+        <div className="bg-white border border-dashed border-slate-200 rounded-xl p-12 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+            <Bike className="w-6 h-6" />
+          </div>
+          <h3 className="font-bold text-slate-800 text-sm">0 Active Fleet Riders</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            No delivery riders are registered or online. Click &quot;Add New Pickup Boy&quot; above to onboard your fleet.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredRiders.map((rider) => {
+            const assignedRoutes = routes.filter((r) => rider.assignedRouteIds.includes(r.id));
 
           return (
             <div
@@ -492,6 +503,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
           );
         })}
       </div>
+      )}
 
       {/* Add / Edit Rider Modal */}
       {isAddingRider && (
