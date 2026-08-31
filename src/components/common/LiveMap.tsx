@@ -380,42 +380,32 @@ export const LiveMap: React.FC<LiveMapProps> = ({
 
         // Custom High-Precision Bike Icon Courier Marker with Stale/Online Badging
         const riderIcon = L.divIcon({
-          className: 'custom-rider-marker',
+          className: 'custom-bike-marker',
           html: `
-            <div class="relative group cursor-pointer">
+            <div class="relative group cursor-pointer" style="position: relative; width: 44px; height: 44px;">
               <!-- Pulsing Live Radar Wave (only when online & fresh) -->
-              ${!isStale ? '<div class="absolute -inset-2 bg-sky-500 rounded-full animate-ping opacity-75"></div>' : ''}
+              ${!isStale ? '<div class="absolute -inset-1.5 bg-sky-500 rounded-full animate-ping opacity-60"></div>' : ''}
               
               <!-- Main Rider Badge with Bike Icon -->
-              <div class="relative w-10 h-10 rounded-full ${
-                isStale
-                  ? 'bg-slate-800 ring-2 ring-amber-500'
-                  : isSelected
-                  ? 'bg-slate-950 ring-4 ring-sky-400'
-                  : 'bg-sky-900 ring-2 ring-sky-400'
-              } text-white flex items-center justify-center shadow-xl transform transition-transform group-hover:scale-115">
-                <!-- Bike Icon SVG -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${isStale ? '#fbbf24' : '#38bdf8'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="18.5" cy="17.5" r="3.5"/>
+              <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: ${isStale ? '#334155' : '#0284c7'}; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="5.5" cy="17.5" r="3.5"/>
-                  <circle cx="15" cy="5" r="1"/>
-                  <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+                  <circle cx="18.5" cy="17.5" r="3.5"/>
+                  <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5V14l-3-3 4-3 2 3h4"/>
                 </svg>
-                
-                <!-- Status Dot -->
-                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 ${isStale ? 'bg-amber-500' : 'bg-emerald-400 animate-pulse'} rounded-full ring-2 ring-white"></span>
+                <span style="position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: ${isStale ? '#f59e0b' : '#22c55e'}; border: 2px solid #fff; border-radius: 50%;"></span>
               </div>
 
               <!-- Top Floating Rider Name Tag -->
-              <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-950/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap shadow-lg border ${isStale ? 'border-amber-600/70' : 'border-slate-700'} flex items-center gap-1.5 pointer-events-none">
-                <span class="w-1.5 h-1.5 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
+              <div style="position: absolute; top: -28px; left: 50%; transform: translateX(-50%); background: rgba(2, 6, 23, 0.95); color: #ffffff; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.25); border: 1px solid ${isStale ? '#f59e0b' : 'rgba(56, 189, 248, 0.7)'}; display: flex; align-items: center; gap: 4px; pointer-events: none;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isStale ? '#f59e0b' : '#22c55e'};"></span>
                 <span>${firstName}</span>
-                <span class="${isStale ? 'text-amber-300' : 'text-sky-300'} font-mono text-[9px]">${vehicleNum.split('-').pop() || 'BIKE'}</span>
+                <span style="color: #7dd3fc; font-family: monospace; font-size: 9px;">${vehicleNum.split('-').pop() || 'BIKE'}</span>
               </div>
             </div>
           `,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20]
+          iconSize: [44, 44],
+          iconAnchor: [22, 22]
         });
 
         const popupHtml = `

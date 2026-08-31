@@ -411,32 +411,27 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
     if (isTripActive && riderCoords) {
       boundsPoints.push(riderCoords);
       const bikeIcon = L.divIcon({
-        className: 'client-rider-bike-marker',
+        className: 'custom-bike-marker',
         html: `
-          <div class="relative group cursor-pointer">
+          <div class="relative group cursor-pointer" style="position: relative; width: 44px; height: 44px;">
             <!-- Pulsing Live Radar Wave -->
-            ${!isStale ? '<div class="absolute -inset-2.5 bg-sky-500 rounded-full animate-ping opacity-75"></div>' : ''}
+            ${!isStale ? '<div class="absolute -inset-1.5 bg-sky-500 rounded-full animate-ping opacity-60"></div>' : ''}
             
             <!-- Main Rider Badge with Bike Icon -->
-            <div class="relative w-11 h-11 rounded-full ${
-              isStale
-                ? 'bg-slate-900 ring-3 ring-amber-500'
-                : 'bg-sky-950 ring-4 ring-sky-400'
-            } text-white flex items-center justify-center shadow-2xl transform transition-transform group-hover:scale-110">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${isStale ? '#fbbf24' : '#38bdf8'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="18.5" cy="17.5" r="3.5"/>
+            <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: ${isStale ? '#334155' : '#0284c7'}; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="5.5" cy="17.5" r="3.5"/>
-                <circle cx="15" cy="5" r="1"/>
-                <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+                <circle cx="18.5" cy="17.5" r="3.5"/>
+                <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5V14l-3-3 4-3 2 3h4"/>
               </svg>
-              <span class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 ${isStale ? 'bg-amber-500' : 'bg-emerald-400 animate-pulse'} rounded-full ring-2 ring-white"></span>
+              <span style="position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: ${isStale ? '#f59e0b' : '#22c55e'}; border: 2px solid #fff; border-radius: 50%;"></span>
             </div>
 
             <!-- Top Floating Rider Name Tag -->
-            <div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-950/95 backdrop-blur-xs text-white text-[11px] font-extrabold px-2.5 py-0.5 rounded-md whitespace-nowrap shadow-xl border ${isStale ? 'border-amber-500/70' : 'border-sky-500/70'} flex items-center gap-1.5 pointer-events-none">
-              <span class="w-2 h-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
+            <div style="position: absolute; top: -28px; left: 50%; transform: translateX(-50%); background: rgba(2, 6, 23, 0.95); color: #ffffff; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 6px; white-space: nowrap; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.25); border: 1px solid ${isStale ? '#f59e0b' : 'rgba(56, 189, 248, 0.7)'}; display: flex; align-items: center; gap: 4px; pointer-events: none;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isStale ? '#f59e0b' : '#22c55e'};"></span>
               <span>${riderName}</span>
-              <span class="text-sky-300 font-mono text-[9px]">${riderVehicle.split('-').pop() || 'BIKE'}</span>
+              <span style="color: #7dd3fc; font-family: monospace; font-size: 9px;">${riderVehicle.split('-').pop() || 'BIKE'}</span>
             </div>
           </div>
         `,
@@ -594,18 +589,25 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
         <div className="bg-slate-900 text-white rounded-xl p-4 sm:p-4.5 shadow-lg border border-slate-800 space-y-3 animate-fadeIn">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
             <div className="flex items-center gap-3">
+              {/* Delivery bike avatar / badge with live moving wave animation */}
               <div className="relative shrink-0">
-                <div className="w-10 h-10 rounded-full bg-sky-600/20 border border-sky-400/40 text-sky-400 flex items-center justify-center shadow-inner">
-                  <Bike className="w-5 h-5" />
+                <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-sky-600/30 border-2 border-sky-400 text-sky-300 flex items-center justify-center shadow-lg">
+                  {/* Styled pulse wave animation */}
+                  {!isStale && <div className="absolute -inset-1.5 bg-sky-500 rounded-full animate-ping opacity-60"></div>}
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" className="relative z-10">
+                    <circle cx="5.5" cy="17.5" r="3.5"/>
+                    <circle cx="18.5" cy="17.5" r="3.5"/>
+                    <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5V14l-3-3 4-3 2 3h4"/>
+                  </svg>
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full ring-2 ring-slate-900 ${isStale ? 'bg-amber-500' : 'bg-emerald-400 animate-pulse'} z-20`} />
                 </div>
-                <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full ring-2 ring-slate-900 ${isStale ? 'bg-amber-500' : 'bg-emerald-400 animate-pulse'}`} />
               </div>
 
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1">
                     <Radio className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
-                    Live Specimen Radar & Tracking
+                    LIVE SPECIMEN IN-TRANSIT TELEMETRY
                   </span>
                   <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                     isStale
@@ -614,10 +616,16 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
                   }`}>
                     {isStale ? 'GPS PAUSED (>10M)' : 'LIVE GPS STREAMING'}
                   </span>
+                  {/* Clean Vehicle Tag */}
+                  <span className="px-2 py-0.5 text-[10px] sm:text-[11px] font-mono font-bold bg-sky-950 text-sky-300 rounded border border-sky-700/60 shadow-xs">
+                    {riderVehicle.toLowerCase().includes('motorcycle') || riderVehicle.toLowerCase().includes('bike')
+                      ? riderVehicle
+                      : `Motorcycle (${riderVehicle})`}
+                  </span>
                 </div>
 
-                <h4 className="text-base sm:text-lg font-extrabold text-white mt-0.5">
-                  Rider <span className="text-sky-300">{riderName}</span> is en route to your facility
+                <h4 className="text-base sm:text-lg font-extrabold text-white mt-1">
+                  Rider <span className="text-sky-300 font-bold">{riderName}</span> is en route to your facility
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Target Destination: <span className="text-slate-200 font-semibold">{currentDestinationStop}</span>

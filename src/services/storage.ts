@@ -399,8 +399,12 @@ export const StorageService = {
   setAdminSession(session: AdminSession | null): void {
     if (session && session.role === 'admin') {
       safeSetItem(STORAGE_KEYS.ADMIN_SESSION, JSON.stringify(session));
+      safeSetItem('vialtrack_role', 'admin');
     } else {
       safeRemoveItem(STORAGE_KEYS.ADMIN_SESSION);
+      if (safeGetItem('vialtrack_role') === 'admin') {
+        safeRemoveItem('vialtrack_role');
+      }
     }
   },
 
@@ -418,8 +422,12 @@ export const StorageService = {
   setClientSession(session: ClientSession | null): void {
     if (session && session.role === 'client' && session.clientId) {
       safeSetItem(STORAGE_KEYS.CLIENT_SESSION, JSON.stringify(session));
+      safeSetItem('vialtrack_role', 'client');
     } else {
       safeRemoveItem(STORAGE_KEYS.CLIENT_SESSION);
+      if (safeGetItem('vialtrack_role') === 'client') {
+        safeRemoveItem('vialtrack_role');
+      }
     }
   },
 
@@ -457,9 +465,13 @@ export const StorageService = {
       const jsonStr = JSON.stringify(session);
       safeSetItem(STORAGE_KEYS.RIDER_SESSION, jsonStr);
       safeSetItem('vialtrack_active_rider', jsonStr);
+      safeSetItem('vialtrack_role', 'rider');
     } else {
       safeRemoveItem(STORAGE_KEYS.RIDER_SESSION);
       safeRemoveItem('vialtrack_active_rider');
+      if (safeGetItem('vialtrack_role') === 'rider') {
+        safeRemoveItem('vialtrack_role');
+      }
     }
   },
 

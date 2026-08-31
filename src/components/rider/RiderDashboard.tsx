@@ -206,30 +206,27 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const fileInputRef2 = useRef<HTMLInputElement>(null);
   const dropFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Back button & Browser exit interceptor when ON DUTY
+  // Restrict Browser Back Navigation on Rider App
   useEffect(() => {
-    if (!isCheckedIn) return;
-
-    // Push initial history state to trap popstate events
-    window.history.pushState({ vialTrackOnDuty: true }, '', window.location.href);
-
-    const handlePopState = () => {
-      // Re-push history entry immediately so the browser doesn't navigate away
-      window.history.pushState({ vialTrackOnDuty: true }, '', window.location.href);
+    window.history.pushState(null, '', window.location.href);
+    const handleBackButton = () => {
+      window.history.pushState(null, '', window.location.href);
       setShowExitConfirmModal(true);
     };
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-      return '';
+      if (isCheckedIn) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
     };
 
-    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleBackButton);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('popstate', handleBackButton);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isCheckedIn]);
@@ -438,13 +435,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       console.warn('Firestore update off_duty error:', e);
     }
 
+    StorageService.clearPortalSession('rider');
     StorageService.updateRider({
       ...activeRider,
       isCheckedIn: false
     });
 
     onRefresh();
-    navigate('/');
+    navigate('/rider/login', { replace: true });
   };
 
   const handleSaveVehicleAndDuty = async (newType: string, newPlate: string, startShift: boolean) => {

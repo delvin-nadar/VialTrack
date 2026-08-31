@@ -18,7 +18,7 @@ import { LoadingSkeleton } from './components/common/LoadingSkeleton';
 import { MumbaiMapDashboard } from './components/common/MumbaiMapDashboard';
 
 // Auth & Route Protection
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, RiderRoute, ClientRoute } from './components/auth/ProtectedRoute';
 import { AdminLogin } from './components/auth/AdminLogin';
 import { ClientLogin } from './components/auth/ClientLogin';
 import { RiderLogin } from './components/auth/RiderLogin';
@@ -362,7 +362,7 @@ function AppContent() {
         <Route
           path="/admin/*"
           element={
-            <ProtectedRoute requiredRole="admin">
+            <AdminRoute>
               <AdminHeader
                 user={adminUser || { id: 'admin-1', email: 'delvin.nadar@secondmedic.com', name: 'Delvin', role: 'admin' }}
                 onLogout={handleAdminLogout}
@@ -472,7 +472,7 @@ function AppContent() {
                   )}
                 </div>
               </main>
-            </ProtectedRoute>
+            </AdminRoute>
           }
         />
 
@@ -500,7 +500,7 @@ function AppContent() {
         <Route
           path="/client/*"
           element={
-            <ProtectedRoute requiredRole="client">
+            <ClientRoute>
               <ClientHeader
                 user={clientUser || { id: 'client-apex', name: 'Metropolis Healthcare (Lab Ops)', email: 'labops@metropolis.in', role: 'client', clientId: 'client-bkc-metropolis' }}
                 onLogout={handleClientLogout}
@@ -519,7 +519,7 @@ function AppContent() {
                   onRefresh={reloadData}
                 />
               </main>
-            </ProtectedRoute>
+            </ClientRoute>
           }
         />
 
@@ -547,7 +547,7 @@ function AppContent() {
         <Route
           path="/rider/*"
           element={
-            <ProtectedRoute requiredRole="rider">
+            <RiderRoute>
               <RiderHeader
                 user={riderUser || { id: 'user-pb-1', name: 'Rahul Sharma', email: 'rahul.s@vialtrack.in', role: 'rider', riderId: 'pb-1' }}
                 rider={riders.find((r) => r.id === riderUser?.riderId) || riders[0]}
@@ -566,7 +566,7 @@ function AppContent() {
                   onOpenProof={handleOpenProof}
                 />
               </main>
-            </ProtectedRoute>
+            </RiderRoute>
           }
         />
 

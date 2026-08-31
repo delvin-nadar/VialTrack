@@ -18,7 +18,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 }) => {
   const displayName = user?.name || 'Delvin';
   const displayEmail = user?.email || 'delvin.nadar@secondmedic.com';
-  const roleSubtitle = 'Ops Head (Creator & System Admin)';
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
@@ -59,15 +58,15 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
           {/* User Profile info & Logout */}
           <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
-            <div className="text-right hidden sm:block">
-              <div className="flex items-center justify-end gap-1.5">
-                <span className="text-xs font-bold text-slate-900 leading-tight">{displayName}</span>
-                <span className="bg-sky-100 text-sky-800 text-[10px] font-bold px-1.5 py-0.2 rounded border border-sky-200">
+            <div className="text-right hidden sm:flex flex-col items-end justify-center">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-900 text-sm">{displayName}</span>
+                <span className="px-2 py-0.5 text-[11px] font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200">
                   Ops Head
                 </span>
               </div>
-              <div className="text-[10px] text-slate-500 font-medium">{roleSubtitle}</div>
-              <div className="text-[10px] text-slate-400 font-mono">{displayEmail}</div>
+              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Creator & System Admin</p>
+              <p className="text-[10px] text-slate-400 font-mono leading-tight mt-0.5">{displayEmail}</p>
             </div>
 
             <button

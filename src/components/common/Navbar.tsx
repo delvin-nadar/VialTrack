@@ -92,14 +92,27 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Info & Actions */}
           {user && (
             <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
-              <div className="text-right hidden sm:block">
-                <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[150px]">
-                  {displayName}
+              {user.role === 'admin' ? (
+                <div className="text-right hidden sm:flex flex-col items-end justify-center">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900 text-sm">{displayName}</span>
+                    <span className="px-2 py-0.5 text-[11px] font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+                      Ops Head
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Creator & System Admin</p>
+                  <p className="text-[10px] text-slate-400 font-mono leading-tight mt-0.5">{displayEmail}</p>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[150px]">
-                  {displayEmail}
+              ) : (
+                <div className="text-right hidden sm:block">
+                  <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[150px]">
+                    {displayName}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono truncate max-w-[150px]">
+                    {displayEmail}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {user.isPreview && onExitPreview ? (
                 <button

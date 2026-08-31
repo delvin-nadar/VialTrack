@@ -39,3 +39,77 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   return <>{children}</>;
 };
+
+/**
+ * AdminRoute:
+ * Only allows access to /admin if logged in as admin.
+ * If a phlebotomist/rider accesses this route, automatically redirects them to /rider.
+ * If a client accesses this, redirects to /client.
+ */
+export const AdminRoute: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
+  children,
+  fallback
+}) => {
+  const adminSession = StorageService.getAdminSession();
+  const riderSession = StorageService.getRiderSession();
+  const clientSession = StorageService.getClientSession();
+  const storedRole = typeof window !== 'undefined' ? localStorage.getItem('vialtrack_role') : null;
+
+  // Strict redirection if another role is logged in
+  if (!adminSession && (storedRole === 'rider' || (riderSession && !adminSession))) {
+    return <Navigate to="/rider" replace />;
+  }
+  if (!adminSession && (storedRole === 'client' || (clientSession && !adminSession))) {
+    return <Navigate to="/client" replace />;
+  }
+
+  if (!adminSession || adminSession.role !== 'admin') {
+    StorageService.clearPortalSession('admin');
+    if (fallback) return <>{fallback}</>;
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+/**
+ * RiderRoute:
+ * For phlebotomists logged into /rider.
+ * Protects rider portal and redirects unauthenticated users to /rider/login.
+ */
+export const RiderRoute: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
+  children,
+  fallback
+}) => {
+  const riderSession = StorageService.getRiderSession();
+  const isValid = Boolean(riderSession && riderSession.role === 'rider' && riderSession.riderId);
+
+  if (!isValid) {
+    StorageService.clearPortalSession('rider');
+    if (fallback) return <>{fallback}</>;
+    return <Navigate to="/rider/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+/**
+ * ClientRoute:
+ * For diagnostic labs logged into /client.
+ * Protects client portal and redirects unauthenticated users to /client/login.
+ */
+export const ClientRoute: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
+  children,
+  fallback
+}) => {
+  const clientSession = StorageService.getClientSession();
+  const isValid = Boolean(clientSession && clientSession.role === 'client' && clientSession.clientId);
+
+  if (!isValid) {
+    StorageService.clearPortalSession('client');
+    if (fallback) return <>{fallback}</>;
+    return <Navigate to="/client/login" replace />;
+  }
+
+  return <>{children}</>;
+};
