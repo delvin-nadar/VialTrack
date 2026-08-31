@@ -129,18 +129,31 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const todayStr = new Date().toISOString().split('T')[0];
   const todayClientTasks = clientTasks.filter((t) => t.date === todayStr);
 
-  // Active in-transit task to show live tracking on map
-  const activeLiveTask = todayClientTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) || todayClientTasks[0] || null;
-  const activeLiveRoute = clientRoutes.find((r) => r.id === activeLiveTask?.routeId) || clientRoutes[0] || null;
+  // Real active in-transit task to show live tracking on map (NO fallback to upcoming/delivered task)
+  const activeLiveTask = useMemo(() => {
+    return todayClientTasks.find((t) =>
+      (t.status === 'in_transit' || t.status === 'started' || t.status === 'at_stop' || t.status === 'picked_up') &&
+      Boolean((t as any).activeRiderId || t.riderId)
+    ) || null;
+  }, [todayClientTasks]);
+
+  const activeLiveRoute = useMemo(() => {
+    if (activeLiveTask?.routeId) {
+      return clientRoutes.find((r) => r.id === activeLiveTask.routeId) || null;
+    }
+    return clientRoutes[0] || null;
+  }, [clientRoutes, activeLiveTask]);
   
-  // Specific runner assigned strictly to this client route/task (never render all 7 fleet riders)
+  // Specific runner assigned strictly to this client route/task (verified online and on-duty)
   const activeLiveRider: PickupBoy | null = useMemo(() => {
-    const targetRiderId = activeLiveTask?.riderId || activeLiveRoute?.assignedRiderId;
+    const targetRiderId = (activeLiveTask as any)?.activeRiderId || activeLiveTask?.riderId;
     if (!targetRiderId) return null;
     const found = riders.find((r) => r.id === targetRiderId);
-    if (found) return found;
+    if (found && found.status === 'active' && found.isOnline !== false && found.isCheckedIn !== false) {
+      return found;
+    }
     return null;
-  }, [riders, activeLiveTask, activeLiveRoute]);
+  }, [riders, activeLiveTask]);
 
   // Filtered task list
   const filteredTasks = useMemo(() => {
@@ -356,12 +369,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1.5">
             <span>Active Collection Loop</span>
-            <Bike className="w-4 h-4 text-sky-700" />
+            <Bike className={`w-4 h-4 ${activeLiveTask && activeLiveRider ? 'text-sky-700' : 'text-slate-400'}`} />
           </div>
-          <div className="text-lg sm:text-xl font-bold text-sky-700 truncate">
-            {activeLiveRider?.name || 'On Schedule'}
+          <div className={`text-lg sm:text-xl font-bold truncate ${activeLiveTask && activeLiveRider ? 'text-sky-700' : 'text-slate-700'}`}>
+            {activeLiveTask && activeLiveRider ? activeLiveRider.name : 'Idle / Awaiting Dispatch'}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">{activeLiveRider?.phone || '+91 80 4719 3333'}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+            {activeLiveTask && activeLiveRider
+              ? (activeLiveRider.phone ? `${activeLiveRider.phone} • En Route` : 'En Route to Facility')
+              : 'Scheduled pickup cycles will appear here when dispatched'}
+          </div>
         </div>
       </div>
 
