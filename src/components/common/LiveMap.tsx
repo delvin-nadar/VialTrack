@@ -106,8 +106,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
               ...data,
               lat,
               lng,
-              name: data.name || 'Mr. Satish',
-              vehicleNumber: data.vehicleNumber || data.vehicleNo || 'MH-02',
+              name: data.name || 'Courier Partner',
+              vehicleNumber: data.vehicleNumber || data.vehicleNo || '',
               isOnline: data.isOnline !== false
             } as any;
           })
@@ -373,8 +373,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         const assignedTask = tasks.find((t) => t.riderId === activeRider.id && t.status !== 'delivered') || tasks[0];
         const nextStop = assignedTask?.stopsProgress?.find((s) => s.status === 'pending' || s.status === 'arrived');
 
-        const riderName = activeRider.name || 'Rahul Sharma';
-        const vehicleNum = activeRider.vehicleNumber || 'MH-02-DN-4921';
+        const riderName = activeRider.name || 'Courier Partner';
+        const vehicleNum = activeRider.vehicleNumber || '2-Wheeler';
         const firstName = riderName.split(' ')[0] || riderName;
 
         // Custom High-Precision Bike Icon Courier Marker with Stale/Online Badging
@@ -436,17 +436,21 @@ export const LiveMap: React.FC<LiveMapProps> = ({
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
                 <span style="color: #64748b;">Phone Battery:</span>
-                <span style="font-weight: 700; color: #0f172a; font-family: monospace;">${activeRider.batteryLevel || 91}%</span>
+                <span style="font-weight: 700; color: #0f172a; font-family: monospace;">${activeRider.batteryLevel || 90}%</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: #64748b;">Active Route:</span>
-                <span style="font-weight: 700; color: #0369a1;">${assignedTask?.routeName || 'Western Suburbs Route'}</span>
-              </div>
+              ${
+                assignedTask?.routeName
+                  ? `<div style="display: flex; justify-content: space-between;">
+                      <span style="color: #64748b;">Active Route:</span>
+                      <span style="font-weight: 700; color: #0369a1;">${assignedTask.routeName}</span>
+                    </div>`
+                  : ''
+              }
             </div>
 
             ${
               nextStop
-                ? `<div style="margin-top: 6px; font-size: 11px; color: #334155;"><b>Next Stop:</b> ${nextStop.stopName || 'Apex Diagnostic Center'}</div>`
+                ? `<div style="margin-top: 6px; font-size: 11px; color: #334155;"><b>Next Stop:</b> ${nextStop.stopName || 'Client Stop'}</div>`
                 : ''
             }
           </div>
@@ -544,10 +548,10 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     }
 
     // 3. RENDER DESTINATION CENTRAL INTAKE LAB
-    if (showDestination && resolvedDestination) {
+    if (showDestination && resolvedDestination && resolvedDestination.lat && resolvedDestination.lng) {
       const dest = resolvedDestination;
-      const destName = dest.name || 'SecondMedic Central Laboratory';
-      const destAddress = dest.address || 'BKC, Mumbai';
+      const destName = dest.name || 'Central Diagnostic Intake Lab';
+      const destAddress = dest.address || '';
       const destIcon = L.divIcon({
         className: 'custom-dest-icon',
         html: `
@@ -574,8 +578,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 200px; padding: 4px;">
           <div style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Central Diagnostics Lab</div>
           <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${destName}</div>
-          <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${destAddress}</div>
-          <div style="font-size: 11px; color: #334155; margin-top: 5px;"><b>Intake Lead:</b> ${(dest as any).contactPerson || 'Dr. Anita Desai'}</div>
+          ${destAddress ? `<div style="font-size: 11px; color: #64748b; margin-top: 3px;">${destAddress}</div>` : ''}
+          ${(dest as any).contactPerson ? `<div style="font-size: 11px; color: #334155; margin-top: 5px;"><b>Intake Lead:</b> ${(dest as any).contactPerson}</div>` : ''}
         </div>
       `);
 

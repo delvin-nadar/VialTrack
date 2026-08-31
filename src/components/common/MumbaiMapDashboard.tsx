@@ -12,9 +12,6 @@ import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import {
-  MUMBAI_LANDMARKS
-} from '../../types/mumbaiLandmarks';
-import {
   MapPin,
   Bike,
   Navigation,
@@ -220,17 +217,16 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
     });
   }, [cloudTasks, selectedArea, taskStatusFilter, searchQuery]);
 
-  // Filtered landmarks
-  const filteredLandmarks = useMemo(() => {
-    return Object.values(MUMBAI_LANDMARKS).filter((lm) => {
-      if (selectedArea !== 'All Areas' && lm.area !== selectedArea) return false;
+  // Filtered clients from Firestore
+  const filteredClients = useMemo(() => {
+    return cloudClients.filter((c) => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        return lm.name.toLowerCase().includes(q) || lm.address.toLowerCase().includes(q);
+        return (c.name || '').toLowerCase().includes(q) || (c.address || '').toLowerCase().includes(q);
       }
       return true;
     });
-  }, [selectedArea, searchQuery]);
+  }, [cloudClients, searchQuery]);
 
   // 2. Initialize Leaflet Map Centered on Mumbai
   useEffect(() => {
@@ -562,21 +558,25 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
       });
     }
 
-    // C. RENDER MUMBAI CLIENT LANDMARKS
+    // C. RENDER REGISTERED CLIENT DIAGNOSTIC CENTERS FROM FIRESTORE
     if (showClientsLayer) {
-      filteredLandmarks.forEach((lm) => {
-        const landmarkName = lm.name || 'Landmark';
-        const shortLandmarkName = landmarkName.split(' ')[0] || landmarkName;
+      filteredClients.forEach((client) => {
+        const clientName = client.name || 'Client Diagnostic Center';
+        const shortClientName = clientName.split(' ')[0] || clientName;
+        const lat = client.lat;
+        const lng = client.lng;
 
-        const landmarkIcon = L.divIcon({
-          className: 'custom-mumbai-landmark',
+        if (typeof lat !== 'number' || typeof lng !== 'number') return;
+
+        const clientIcon = L.divIcon({
+          className: 'custom-client-hub-marker',
           html: `
             <div class="relative group cursor-pointer">
               <div class="w-6 h-6 rounded-md bg-amber-600 ring-2 ring-amber-300 text-white flex items-center justify-center shadow-md">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
               </div>
               <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-amber-950 text-amber-200 text-[8px] font-bold px-1 rounded whitespace-nowrap">
-                ${shortLandmarkName}
+                ${shortClientName}
               </div>
             </div>
           `,
@@ -584,22 +584,21 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
           iconAnchor: [12, 12]
         });
 
-        const lmMarker = L.marker([lm.lat, lm.lng], {
-          icon: landmarkIcon,
+        const lmMarker = L.marker([lat, lng], {
+          icon: clientIcon,
           zIndexOffset: 600
         }).addTo(markersLayer);
 
         lmMarker.bindPopup(`
           <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 220px; padding: 4px;">
-            <span style="font-size: 10px; font-weight: 800; color: #d97706; text-transform: uppercase;">Mumbai Landmark Hub</span>
-            <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">${landmarkName}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${lm.address}</div>
-            <div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 3px;">📍 ${lm.area}</div>
-            <p style="font-size: 11px; color: #475569; margin-top: 5px; line-height: 1.4;">${lm.description}</p>
+            <span style="font-size: 10px; font-weight: 800; color: #d97706; text-transform: uppercase;">Registered Client Center</span>
+            <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">${clientName}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${client.address || ''}</div>
+            ${client.contactPerson ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 3px;">👤 ${client.contactPerson} (${client.phone || ''})</div>` : ''}
           </div>
         `);
 
-        markersMapRef.current.set(`landmark-${lm.key}`, lmMarker);
+        markersMapRef.current.set(`client-${client.id}`, lmMarker);
       });
     }
 
@@ -625,7 +624,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
   }, [
     filteredRiders,
     filteredTasks,
-    filteredLandmarks,
+    filteredClients,
     cloudTasks,
     cloudPings,
     selectedRiderId,
@@ -766,7 +765,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               }`}
             >
               <Building2 className="w-3 h-3 inline mr-1" />
-              Landmarks ({filteredLandmarks.length})
+              Clients ({filteredClients.length})
             </button>
 
             <button
@@ -848,7 +847,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                   sidebarTab === 'landmarks' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Landmarks ({filteredLandmarks.length})
+                Clients ({filteredClients.length})
               </button>
             </div>
           </div>
@@ -1052,32 +1051,44 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               </div>
             )}
 
-            {/* TAB 3: MUMBAI LANDMARKS */}
+            {/* TAB 3: REGISTERED CLIENTS */}
             {sidebarTab === 'landmarks' && (
               <div className="space-y-2">
-                {filteredLandmarks.map((lm) => (
-                  <div
-                    key={lm.key}
-                    onClick={() => handleFocusPoint(lm.lat, lm.lng, 15, `landmark-${lm.key}`)}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-amber-400 bg-white hover:bg-amber-50/40 transition-all cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="font-bold text-slate-900 text-xs">{lm.name}</div>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">
-                        {lm.area}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{lm.address}</div>
-                    <p className="text-[10px] text-slate-600 mt-2 bg-slate-50 p-1.5 rounded border border-slate-100">
-                      {lm.description}
-                    </p>
-                    <div className="mt-2 text-right">
-                      <span className="text-[10px] font-bold text-amber-700 hover:underline flex items-center justify-end gap-0.5">
-                        Focus Hub <ChevronRight className="w-3 h-3" />
-                      </span>
-                    </div>
+                {filteredClients.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs">
+                    No client diagnostic centers registered in Firestore
                   </div>
-                ))}
+                ) : (
+                  filteredClients.map((c) => (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        if (typeof c.lat === 'number' && typeof c.lng === 'number') {
+                          handleFocusPoint(c.lat, c.lng, 15, `client-${c.id}`);
+                        }
+                      }}
+                      className="p-3 rounded-xl border border-slate-200 hover:border-amber-400 bg-white hover:bg-amber-50/40 transition-all cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="font-bold text-slate-900 text-xs">{c.name}</div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">
+                          CLIENT
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{c.address}</div>
+                      {c.contactPerson && (
+                        <p className="text-[10px] text-slate-600 mt-2 bg-slate-50 p-1.5 rounded border border-slate-100">
+                          Contact: {c.contactPerson} {c.phone ? `(${c.phone})` : ''}
+                        </p>
+                      )}
+                      <div className="mt-2 text-right">
+                        <span className="text-[10px] font-bold text-amber-700 hover:underline flex items-center justify-end gap-0.5">
+                          Focus Center <ChevronRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
