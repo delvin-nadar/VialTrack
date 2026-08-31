@@ -11,6 +11,7 @@ import {
 import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
+import { fetchRoadPolyline } from '../../utils/routeGeometry';
 import {
   MapPin,
   Bike,
@@ -417,36 +418,71 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
         markersMapRef.current.set(`rider-${r.id}`, marker);
 
-        // Draw active task polyline connecting rider to pickup and delivery
+        // Draw active task real road polyline connecting rider to stops and delivery lab via OSRM
         if (showRoutesLayer && assignedTask) {
           const riderPoint: [number, number] = [coords.lat, coords.lng];
-          const pickupPoint: [number, number] | null = assignedTask.pickupLocation
+          const taskStops = (assignedTask.stopsProgress || (assignedTask as any).stops || []) as any[];
+
+          const pickupPoint: [number, number] | null = taskStops.length > 0 && taskStops[0]?.lat
+            ? [Number(taskStops[0].lat), Number(taskStops[0].lng)]
+            : assignedTask.pickupLocation
             ? [assignedTask.pickupLocation.lat, assignedTask.pickupLocation.lng]
             : null;
+
           const deliveryPoint: [number, number] | null = assignedTask.deliveryLocation
             ? [assignedTask.deliveryLocation.lat, assignedTask.deliveryLocation.lng]
+            : (assignedTask as any).destination
+            ? [Number((assignedTask as any).destination.lat), Number((assignedTask as any).destination.lng)]
             : null;
 
-          // Leg 1: Rider -> Pickup
+          // Leg 1: Rider Live GPS -> Next Pickup Stop
           if (pickupPoint) {
-            L.polyline([riderPoint, pickupPoint], {
-              color: '#0284c7',
+            const riderLegCoords: [number, number][] = [riderPoint, pickupPoint];
+            const riderLegLine = L.polyline(riderLegCoords, {
+              color: '#0284c7', // Sky Blue
               weight: 4,
               opacity: 0.85,
-              dashArray: '6, 8',
-              lineCap: 'round'
+              lineCap: 'round',
+              lineJoin: 'round'
             }).addTo(polylinesLayer);
+
+            fetchRoadPolyline(riderLegCoords).then((roadCoords) => {
+              if (roadCoords.length > 0 && polylinesLayer.hasLayer(riderLegLine)) {
+                riderLegLine.setLatLngs(roadCoords);
+              }
+            }).catch(() => {});
           }
 
-          // Leg 2: Pickup -> Delivery Lab
+          // Leg 2: Stops -> Delivery Lab
           if (pickupPoint && deliveryPoint) {
-            L.polyline([pickupPoint, deliveryPoint], {
-              color: '#059669',
+            const intermediateStops: [number, number][] = taskStops.map((s) => [Number(s.lat), Number(s.lng)] as [number, number]);
+            const labRoutePoints: [number, number][] = intermediateStops.length > 0
+              ? [...intermediateStops, deliveryPoint]
+              : [pickupPoint, deliveryPoint];
+
+            const deliveryLegLine = L.polyline(labRoutePoints, {
+              color: '#059669', // Emerald Green
               weight: 3.5,
               opacity: 0.75,
               dashArray: '4, 6',
               lineCap: 'round'
             }).addTo(polylinesLayer);
+
+            fetchRoadPolyline(labRoutePoints).then((roadCoords) => {
+              if (roadCoords.length > 0 && polylinesLayer.hasLayer(deliveryLegLine)) {
+                deliveryLegLine.setLatLngs(roadCoords);
+              }
+            }).catch(() => {});
+          }
+
+          // Also resolve full continuous road loop
+          if (pickupPoint && deliveryPoint) {
+            const fullPoints: [number, number][] = [
+              riderPoint,
+              ...(taskStops.map((s) => [Number(s.lat), Number(s.lng)] as [number, number])),
+              deliveryPoint
+            ];
+            fetchRoadPolyline(fullPoints).catch(() => {});
           }
         }
       });

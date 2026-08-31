@@ -11,6 +11,7 @@ import {
   normalizeLatLng,
   DEFAULT_MUMBAI_COORDINATES
 } from '../../utils/coordinates';
+import { fetchRoadPolyline } from '../../utils/routeGeometry';
 import {
   Bike,
   Building2,
@@ -487,27 +488,48 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       }
     }
 
-    // --- Live In-Transit Polyline connecting Rider GPS to Destination Pin ---
+    // --- Live In-Transit Polyline connecting Rider GPS to Destination Pin along Real Roads ---
     // Do NOT render moving rider polyline when trip is not in transit
     if (polylineLayerRef.current) {
       map.removeLayer(polylineLayerRef.current);
       polylineLayerRef.current = null;
     }
 
+    let isEffectActive = true;
+
     if (isTripActive && riderCoords) {
-      const liveLeg: [number, number][] = [riderCoords, targetDestinationCoords];
-      const liveLine = L.polyline(liveLeg, {
+      // Build route coordinates between Rider, any remaining stops, and final Central Lab
+      const remainingStopsCoords = stopsList
+        .filter((s) => (s as any).status !== 'picked_up' && (s as any).status !== 'completed')
+        .map((s) => normalizeLatLng(s.lat, s.lng, targetDestinationCoords[0], targetDestinationCoords[1]));
+
+      const fullRoutePoints: [number, number][] = [
+        riderCoords,
+        ...remainingStopsCoords,
+        targetDestinationCoords
+      ];
+
+      // Render instant fallback polyline first
+      const liveLine = L.polyline(fullRoutePoints, {
         color: '#0284c7', // Sky blue
         weight: 4,
-        opacity: 0.9,
-        dashArray: '7, 9',
+        opacity: 0.85,
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(map);
       polylineLayerRef.current = liveLine;
+
+      // Asynchronously fetch OSRM Road Geometry along actual Mumbai streets & flyovers
+      fetchRoadPolyline(fullRoutePoints).then((roadGeometry) => {
+        if (isEffectActive && polylineLayerRef.current && roadGeometry.length > 0) {
+          polylineLayerRef.current.setLatLngs(roadGeometry);
+        }
+      }).catch((err) => {
+        console.warn('[ClientLiveTracking] OSRM Road routing error:', err);
+      });
     }
 
-    // --- Polyline connecting sequential route stops ---
+    // --- Polyline connecting sequential route stops along Real Roads ---
     if (stopsPolylineLayerRef.current) {
       map.removeLayer(stopsPolylineLayerRef.current);
       stopsPolylineLayerRef.current = null;
@@ -525,6 +547,12 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
         lineCap: 'round'
       }).addTo(map);
       stopsPolylineLayerRef.current = stopsLine;
+
+      fetchRoadPolyline(stopsPath).then((roadGeometry) => {
+        if (isEffectActive && stopsPolylineLayerRef.current && roadGeometry.length > 0) {
+          stopsPolylineLayerRef.current.setLatLngs(roadGeometry);
+        }
+      }).catch(() => {});
     }
 
     // Auto-fit bounds framing destination (and rider if active)
@@ -532,6 +560,10 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       const bounds = L.latLngBounds(boundsPoints);
       map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15, animate: true });
     }
+
+    return () => {
+      isEffectActive = false;
+    };
   }, [isTripActive, riderCoords, targetDestinationCoords, stopsList, isStale, riderName, riderVehicle, clientName, clientAddress, coldBoxTemp, distanceKm, estimatedEtaMinutes]);
 
   // Center on Rider / Destination button handler

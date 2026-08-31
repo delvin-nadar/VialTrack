@@ -25,6 +25,7 @@ import {
 import { Route, RouteStop } from '../../types';
 import { StorageService } from '../../services/storage';
 import { normalizeLatLng } from '../../utils/coordinates';
+import { fetchRoadPolyline } from '../../utils/routeGeometry';
 
 interface RouteStopsManagerProps {
   route: Route;
@@ -197,10 +198,10 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       `);
     }
 
-    // C. Draw Sequential Connected Polyline with directional arrows styling
+    // C. Draw Sequential Connected Road Polyline with directional styling along Mumbai road network
     if (polylinePath.length >= 2) {
       // Glow/Background line
-      L.polyline(polylinePath, {
+      const glowLine = L.polyline(polylinePath, {
         color: '#0284c7',
         weight: 6,
         opacity: 0.35,
@@ -209,7 +210,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       }).addTo(polylineGroup);
 
       // Core Solid/Dashed Line
-      L.polyline(polylinePath, {
+      const coreLine = L.polyline(polylinePath, {
         color: '#0369a1',
         weight: 3.5,
         opacity: 0.95,
@@ -217,6 +218,14 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(polylineGroup);
+
+      // Fetch real street road geometry via OSRM
+      fetchRoadPolyline(polylinePath).then((roadCoords) => {
+        if (roadCoords.length > 0 && polylineGroup.hasLayer(coreLine)) {
+          glowLine.setLatLngs(roadCoords);
+          coreLine.setLatLngs(roadCoords);
+        }
+      }).catch(() => {});
     }
 
     // D. Auto-fit bounds tightly framing stops to destination without panning into ocean

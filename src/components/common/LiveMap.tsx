@@ -5,6 +5,7 @@ import { RouteStop, DestinationLab, PickupBoy, LocationPing, PickupTask } from '
 import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
+import { fetchRoadPolyline } from '../../utils/routeGeometry';
 import {
   MapPin,
   Bike,
@@ -586,14 +587,14 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       boundsPoints.push([dest.lat, dest.lng]);
     }
 
-    // 4. DRAW SUBTLE POLYLINES CONNECTING STOPS ALONG THE ACTIVE ROUTE
+    // 4. DRAW ROAD/BIKE POLYLINES CONNECTING STOPS ALONG ACTUAL MUMBAI STREETS VIA OSRM
     if (showPolylines) {
       ridersToRender.forEach((activeRider) => {
         if (!activeRider.currentLocation) return;
         const riderCoords: [number, number] = [activeRider.currentLocation.lat, activeRider.currentLocation.lng];
 
         if (resolvedStops.length > 0) {
-          // Leg 1: Active In-Transit dashed polyline from Rider's GPS to Next Stop
+          // Leg 1: Active In-Transit road polyline from Rider's live GPS to Next Stop
           const nextTargetStop = resolvedStops.find((s) => (s as any).status !== 'picked_up') || resolvedStops[0];
           if (nextTargetStop) {
             const riderToStopLeg: [number, number][] = [
@@ -601,29 +602,41 @@ export const LiveMap: React.FC<LiveMapProps> = ({
               [nextTargetStop.lat, nextTargetStop.lng]
             ];
 
-            L.polyline(riderToStopLeg, {
+            const riderLine = L.polyline(riderToStopLeg, {
               color: '#0284c7', // Sky Blue
               weight: 4,
               opacity: 0.85,
-              dashArray: '6, 8',
               lineCap: 'round',
               lineJoin: 'round'
             }).addTo(polylinesLayer);
+
+            // Fetch actual road geometry along streets/flyovers and update line
+            fetchRoadPolyline(riderToStopLeg).then((roadCoords) => {
+              if (roadCoords.length > 0 && polylinesLayer.hasLayer(riderLine)) {
+                riderLine.setLatLngs(roadCoords);
+              }
+            }).catch(() => {});
           }
 
-          // Leg 2: Continuous subtle polyline connecting all sequential hospital/client stops
+          // Leg 2: Continuous road polyline connecting all sequential hospital/client stops
           const allStopsCoords: [number, number][] = resolvedStops.map((s) => [s.lat, s.lng]);
           if (allStopsCoords.length > 1) {
-            L.polyline(allStopsCoords, {
+            const stopsLine = L.polyline(allStopsCoords, {
               color: '#0369a1', // Deep Sky Blue
               weight: 3,
               opacity: 0.7,
               lineCap: 'round',
               lineJoin: 'round'
             }).addTo(polylinesLayer);
+
+            fetchRoadPolyline(allStopsCoords).then((roadCoords) => {
+              if (roadCoords.length > 0 && polylinesLayer.hasLayer(stopsLine)) {
+                stopsLine.setLatLngs(roadCoords);
+              }
+            }).catch(() => {});
           }
 
-          // Leg 3: Final Polyline from Last Stop to Central Intake Destination Lab
+          // Leg 3: Final Road Polyline from Last Stop to Central Intake Destination Lab
           if (resolvedDestination && resolvedStops.length > 0) {
             const lastStop = resolvedStops[resolvedStops.length - 1];
             const labLegCoords: [number, number][] = [
@@ -631,13 +644,31 @@ export const LiveMap: React.FC<LiveMapProps> = ({
               [resolvedDestination.lat, resolvedDestination.lng]
             ];
 
-            L.polyline(labLegCoords, {
+            const labLine = L.polyline(labLegCoords, {
               color: '#059669', // Emerald green
               weight: 3,
               opacity: 0.75,
               dashArray: '4, 6',
               lineCap: 'round'
             }).addTo(polylinesLayer);
+
+            fetchRoadPolyline(labLegCoords).then((roadCoords) => {
+              if (roadCoords.length > 0 && polylinesLayer.hasLayer(labLine)) {
+                labLine.setLatLngs(roadCoords);
+              }
+            }).catch(() => {});
+          }
+
+          // Leg 4: Full continuous road polyline covering entire round (Rider -> Stops -> Destination)
+          if (resolvedDestination) {
+            const fullLoopPoints: [number, number][] = [
+              riderCoords,
+              ...allStopsCoords,
+              [resolvedDestination.lat, resolvedDestination.lng]
+            ];
+            fetchRoadPolyline(fullLoopPoints).then((roadCoords) => {
+              // Pre-populate route cache for fast navigation
+            }).catch(() => {});
           }
         }
       });
