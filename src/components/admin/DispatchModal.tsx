@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Client, Route, PickupBoy, PickupTask } from '../../types';
 import { CloudSync, formatUnifiedTask } from '../../services/firebase';
+import { db } from '../../firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { StorageService } from '../../services/storage';
 import {
   X,
@@ -268,7 +270,39 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     });
 
     try {
-      // Direct unified dispatch to Firestore 'tasks' with status 'assigned'
+      // 1. Direct root document write to 'tasks' collection (Standardized Root Task Write)
+      const rootTaskDoc = {
+        id: taskId,
+        clientLabId: client.id,
+        clientName: client.name,
+        clientLabName: client.name,
+        clientAddress: client.address,
+        clientCoords: [Number(client.lat || 19.1287852), Number(client.lng || 72.8294183)],
+        riderId: rider.id,
+        riderName: rider.name,
+        riderPhone: rider.phone,
+        riderVehicle: rider.vehicleNumber,
+        assignedRiderId: rider.id,
+        assignedRiderName: rider.name,
+        assignedRiderPhone: rider.phone,
+        status: 'assigned' as const,
+        stops: stopsPayload,
+        stopsProgress: stopsPayload,
+        routeId: route?.id || 'custom-route',
+        routeName: route?.name || `${client.name} Collection Loop`,
+        scheduledDate: taskDate,
+        timeSlot: taskTimeSlot,
+        taskNotes,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        chillerTemp: 4.2,
+        isDelayed: false,
+        delayMinutes: 0
+      };
+
+      await setDoc(doc(db, 'tasks', taskId), rootTaskDoc);
+
+      // Direct unified dispatch to sync trips, fleet status and listeners
       const newTask = await CloudSync.dispatchTask({
         client: {
           id: client.id,
