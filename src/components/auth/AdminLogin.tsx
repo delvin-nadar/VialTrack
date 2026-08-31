@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { ShieldCheck, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { signInDemoAccount } from '../../services/firebase';
 
 interface AdminLoginProps {
   onLoginSuccess: (user: UserAuth) => void;
-  onSwitchPortal?: (path: string) => void;
+  onBackToLanding?: () => void;
 }
 
-export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
+export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
   const [email, setEmail] = useState('ops.lead@secondmedic.com');
   const [password, setPassword] = useState('••••••••••••');
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +54,17 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-xs relative">
+        {onBackToLanding && (
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Portal Selection</span>
+          </button>
+        )}
+
         {/* Brand header */}
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center mx-auto mb-3 shadow-xs">

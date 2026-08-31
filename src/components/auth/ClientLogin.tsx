@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { Building2, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2, Shield } from 'lucide-react';
+import { Building2, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2, Shield, ArrowLeft } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { signInDemoAccount } from '../../services/firebase';
 
 interface ClientLoginProps {
   onLoginSuccess: (user: UserAuth) => void;
+  onBackToLanding?: () => void;
 }
 
-export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess }) => {
+export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
   const [email, setEmail] = useState('ops@apexdiagnostics.in');
   const [password, setPassword] = useState('••••••••••••');
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,17 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-xs relative">
+        {onBackToLanding && (
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Portal Selection</span>
+          </button>
+        )}
+
         {/* Brand header */}
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto mb-3 shadow-xs">

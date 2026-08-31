@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, CheckCircle2, Bike, ShieldCheck } from 'lucide-react';
+import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, CheckCircle2, Bike, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { signInDemoAccount } from '../../services/firebase';
 
 interface RiderLoginProps {
   onLoginSuccess: (user: UserAuth) => void;
+  onBackToLanding?: () => void;
 }
 
-export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess }) => {
+export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
   const [identifier, setIdentifier] = useState('rahul.sharma@vialtrack.in');
   const [pin, setPin] = useState('1234');
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +59,17 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-8 max-w-md mx-auto">
       <div className="w-full bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-xs relative">
+        {onBackToLanding && (
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Portal Selection</span>
+          </button>
+        )}
+
         {/* Brand header */}
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center mx-auto mb-3 shadow-xs">
