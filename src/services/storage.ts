@@ -469,9 +469,9 @@ export const StorageService = {
       const s = this.getAdminSession();
       if (!s) return null;
       return {
-        id: s.id || 'admin-user',
-        email: s.email,
-        name: s.name || 'Ops Dispatch Lead',
+        id: s.id || 'admin-1',
+        email: s.email || 'delvin.nadar@secondmedic.com',
+        name: s.name || 'Delvin',
         role: 'admin',
         phone: s.phone || '+91 98200 99887'
       };

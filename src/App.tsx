@@ -361,7 +361,7 @@ function AppContent() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminHeader
-                user={adminUser || { id: 'admin-ops', email: 'admin@secondmedic.com', name: 'Dr. Rajesh Sharma (Head of Operations)', role: 'admin' }}
+                user={adminUser || { id: 'admin-1', email: 'delvin.nadar@secondmedic.com', name: 'Delvin', role: 'admin' }}
                 onLogout={handleAdminLogout}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}

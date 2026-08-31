@@ -68,10 +68,12 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
           {/* Client Brand Logo & Lab Name */}
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <BrandLogo className="h-8 w-auto" />
+            <div className="h-8 w-auto flex items-center shrink-0">
+              <BrandLogo className="h-8 w-auto" />
+            </div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 bg-emerald-800 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-emerald-700 shadow-xs whitespace-nowrap">
-                VialTrack | Client Diagnostic Portal
+              <span className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-800 shadow-xs whitespace-nowrap">
+                VIALTRACK | CLIENT DIAGNOSTIC PORTAL
               </span>
               <span className="hidden md:inline-block px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] sm:text-xs font-bold border border-emerald-200">
                 {user.name.split('(')[0].trim()}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserAuth } from '../../types';
-import { Bell, LogOut, Activity } from 'lucide-react';
+import { Bell, LogOut, Radio, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo';
 
 interface AdminHeaderProps {
@@ -16,15 +16,21 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   unreadNotifsCount,
   onOpenNotifications
 }) => {
+  const displayName = user?.name || 'Delvin';
+  const displayEmail = user?.email || 'delvin.nadar@secondmedic.com';
+  const roleSubtitle = 'Ops Head (Creator & System Admin)';
+
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
-        {/* Brand Logo & Title */}
+        {/* Brand Logo & Pill Badge */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <BrandLogo className="h-8 w-auto" />
+          <div className="h-8 w-auto flex items-center shrink-0">
+            <BrandLogo className="h-8 w-auto" />
+          </div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-700 shadow-xs whitespace-nowrap">
-              VialTrack | Operations Console
+            <span className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-800 shadow-xs whitespace-nowrap">
+              VIALTRACK | OPERATIONS CONSOLE
             </span>
           </div>
         </div>
@@ -54,8 +60,14 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           {/* User Profile info & Logout */}
           <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
             <div className="text-right hidden sm:block">
-              <div className="text-xs font-bold text-slate-800 leading-tight">{user.name}</div>
-              <div className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{user.email}</div>
+              <div className="flex items-center justify-end gap-1.5">
+                <span className="text-xs font-bold text-slate-900 leading-tight">{displayName}</span>
+                <span className="bg-sky-100 text-sky-800 text-[10px] font-bold px-1.5 py-0.2 rounded border border-sky-200">
+                  Ops Head
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-500 font-medium">{roleSubtitle}</div>
+              <div className="text-[10px] text-slate-400 font-mono">{displayEmail}</div>
             </div>
 
             <button

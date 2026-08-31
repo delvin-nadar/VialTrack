@@ -1,6 +1,7 @@
 import React from 'react';
 import { UserAuth, PickupBoy } from '../../types';
 import { Bike, Bell, LogOut, Radio, Battery, Wifi, ShieldCheck } from 'lucide-react';
+import { BrandLogo } from '../common/BrandLogo';
 
 interface RiderHeaderProps {
   user: UserAuth;
@@ -22,8 +23,12 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
       <div className="max-w-md md:max-w-4xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Rider Identification */}
+        {/* Brand Logo & Rider Identification */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <div className="h-7 sm:h-8 w-auto flex items-center shrink-0">
+            <BrandLogo size="sm" className="h-7 w-auto hidden md:inline-flex" />
+          </div>
+
           <div className="relative">
             <div className="w-8 h-8 sm:w-9 sm:h-9 bg-sky-700 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden border border-sky-600 shadow-xs">
               {rider?.photoUrl ? (
@@ -94,7 +99,7 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
             title="Logout / End Shift"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="inline text-xs">Logout / End Shift</span>
+            <span className="inline text-xs">Exit</span>
           </button>
         </div>
       </div>

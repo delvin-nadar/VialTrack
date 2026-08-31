@@ -16,40 +16,58 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   user,
   portalType = 'admin',
-  titleBadge = 'VialTrack | Operations Console',
+  titleBadge,
   onLogout,
   unreadNotifsCount = 0,
   onOpenNotifications,
   onExitPreview
 }) => {
+  const defaultBadge =
+    portalType === 'admin'
+      ? 'VIALTRACK | OPERATIONS CONSOLE'
+      : portalType === 'client'
+      ? 'VIALTRACK | CLIENT DIAGNOSTIC PORTAL'
+      : 'VIALTRACK | RIDER PORTAL';
+
+  const badgeText = titleBadge || defaultBadge;
+
   const getBadgeStyle = () => {
     switch (portalType) {
       case 'client':
-        return 'bg-emerald-800 text-white border-emerald-700';
+        return 'bg-emerald-900 text-white border-emerald-700';
       case 'rider':
-        return 'bg-sky-800 text-white border-sky-700';
+        return 'bg-sky-900 text-white border-sky-700';
       default:
-        return 'bg-slate-900 text-white border-slate-700';
+        return 'bg-slate-900 text-white border-slate-800';
     }
   };
+
+  const displayName = user?.role === 'admin' ? (user.name || 'Delvin') : user?.name;
+  const displayEmail = user?.role === 'admin' ? (user.email || 'delvin.nadar@secondmedic.com') : user?.email;
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-4">
         {/* Brand Logo & Badge */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <BrandLogo className="h-8 w-auto" />
+          <div className="h-8 w-auto flex items-center shrink-0">
+            <BrandLogo className="h-8 w-auto" />
+          </div>
           <div className="flex items-center gap-2">
             <span
               className={`px-2.5 py-1 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wider border shadow-xs whitespace-nowrap ${getBadgeStyle()}`}
             >
-              {titleBadge}
+              {badgeText}
             </span>
-            {user?.name && (
+            {user?.role === 'admin' ? (
+              <span className="hidden md:inline-block px-2 py-0.5 bg-sky-50 text-sky-800 rounded text-[10px] sm:text-xs font-bold border border-sky-200">
+                Ops Head
+              </span>
+            ) : user?.name ? (
               <span className="hidden md:inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] sm:text-xs font-semibold border border-slate-200">
                 {user.name.split('(')[0].trim()}
               </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -75,11 +93,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {user && (
             <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
               <div className="text-right hidden sm:block">
-                <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[130px]">
-                  {user.name}
+                <div className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[150px]">
+                  {displayName}
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[130px]">
-                  {user.email}
+                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[150px]">
+                  {displayEmail}
                 </div>
               </div>
 
