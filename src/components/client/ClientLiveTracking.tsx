@@ -525,9 +525,10 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
 
     if (isTripActive && riderCoords) {
       // Build route coordinates between Rider, any remaining stops, and final Central Lab
-      const remainingStopsCoords = stopsList
-        .filter((s) => (s as any).status !== 'picked_up' && (s as any).status !== 'completed')
-        .map((s) => normalizeLatLng(s.lat, s.lng, targetDestinationCoords[0], targetDestinationCoords[1]));
+      const safeStops = Array.isArray(stopsList) ? stopsList : [];
+      const remainingStopsCoords = safeStops
+        .filter((s) => (s as any)?.status !== 'picked_up' && (s as any)?.status !== 'completed')
+        .map((s) => normalizeLatLng(s?.lat, s?.lng, targetDestinationCoords[0], targetDestinationCoords[1]));
 
       const fullRoutePoints: [number, number][] = [
         riderCoords,
@@ -561,8 +562,9 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       stopsPolylineLayerRef.current = null;
     }
 
-    if (stopsList.length > 0) {
-      const stopsPath: [number, number][] = stopsList.map((s) => normalizeLatLng(s.lat, s.lng, targetDestinationCoords[0], targetDestinationCoords[1]));
+    const safeStopsList = Array.isArray(stopsList) ? stopsList : [];
+    if (safeStopsList.length > 0) {
+      const stopsPath: [number, number][] = safeStopsList.map((s) => normalizeLatLng(s?.lat, s?.lng, targetDestinationCoords[0], targetDestinationCoords[1]));
       stopsPath.push(targetDestinationCoords);
 
       const stopsLine = L.polyline(stopsPath, {

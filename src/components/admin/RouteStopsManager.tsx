@@ -138,13 +138,14 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
 
     // Polyline Path & Bounds Enforcement
     // Map stops strictly as [Number(s.lat), Number(s.lng)]
-    const polylinePath: [number, number][] = route.stops.map((s) => {
+    const safeStops = Array.isArray(route.stops) ? route.stops : [];
+    const polylinePath: [number, number][] = safeStops.map((s) => {
       const [sLat, sLng] = normalizeLatLng(s.lat, s.lng, 19.1624, 72.8465);
       return [Number(sLat), Number(sLng)];
     });
 
     // A. Add Stop Markers in Sequential Order
-    route.stops.forEach((stop, idx) => {
+    safeStops.forEach((stop, idx) => {
       const [sLat, sLng] = normalizeLatLng(stop.lat, stop.lng, 19.1624, 72.8465);
       const stopPos: [number, number] = [Number(sLat), Number(sLng)];
 
@@ -428,9 +429,11 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       return;
     }
 
+    const safeStops = Array.isArray(route.stops) ? route.stops : [];
+
     if (editingStop) {
       // Edit existing stop
-      const updatedStops = route.stops.map((s) => {
+      const updatedStops = safeStops.map((s) => {
         if (s.id === editingStop.id) {
           return {
             ...s,
@@ -457,14 +460,14 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
     } else if (isAddingStop) {
       // Add new stop to end of list
       const newStop: RouteStop = {
-        id: stopForm.id || `stop-${Date.now()}-${route.stops.length + 1}`,
+        id: stopForm.id || `stop-${Date.now()}-${safeStops.length + 1}`,
         name: stopForm.name.trim(),
         address: stopForm.address.trim(),
         lat: Number(stopForm.lat),
         lng: Number(stopForm.lng),
         contactPerson: stopForm.contactPerson.trim(),
         phone: stopForm.phone.trim(),
-        order: route.stops.length + 1,
+        order: safeStops.length + 1,
         avgPickupDurationMinutes: Number(stopForm.avgPickupDurationMinutes) || 10
       };
 
@@ -540,7 +543,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
           Fixed Daily Pickup Time Slots:
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          {route.timeSlots.map((slot) => (
+          {(route.timeSlots || []).map((slot) => (
             <span
               key={slot}
               className="bg-slate-100 border border-slate-200 text-slate-800 font-mono font-bold text-xs px-2.5 py-0.5 rounded-md flex items-center gap-1"
@@ -559,7 +562,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
               <Navigation className="w-3.5 h-3.5 text-sky-700" />
-              <span>Ordered Stop Sequence ({route.stops.length})</span>
+              <span>Ordered Stop Sequence ({(route.stops || []).length})</span>
             </span>
             <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
               Use ↑ ↓ arrows or drag handle to rearrange
@@ -567,7 +570,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
           </div>
 
           <div className="space-y-2">
-            {route.stops.map((stop, sIdx) => {
+            {(route.stops || []).map((stop, sIdx) => {
               const isFirst = sIdx === 0;
               const isLast = sIdx === route.stops.length - 1;
               const isDragging = draggedIndex === sIdx;

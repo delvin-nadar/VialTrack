@@ -78,11 +78,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     if (!activeClientId && !user.email) return;
 
     const unsubTrips = CloudSync.subscribeToClientTrips(activeClientId, user.email, (cloudTrips) => {
-      if (cloudTrips && cloudTrips.length > 0) {
+      if (cloudTrips && Array.isArray(cloudTrips) && cloudTrips.length > 0) {
         const formatted = cloudTrips.map((t) => formatUnifiedTask(t.id, t));
         setLiveClientTasks((prev) => {
           const map = new Map<string, PickupTask>();
-          prev.forEach((item) => map.set(item.id, item));
+          (prev || []).forEach((item) => map.set(item.id, item));
           formatted.forEach((item) => map.set(item.id, item));
           return Array.from(map.values());
         });
@@ -90,10 +90,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     });
 
     const unsubTasks = CloudSync.subscribeToClientTasks(activeClientId, user.name, (fetchedTasks) => {
-      if (fetchedTasks) {
+      if (fetchedTasks && Array.isArray(fetchedTasks)) {
         setLiveClientTasks((prev) => {
           const map = new Map<string, PickupTask>();
-          prev.forEach((item) => map.set(item.id, item));
+          (prev || []).forEach((item) => map.set(item.id, item));
           fetchedTasks.forEach((item) => map.set(item.id, item));
           return Array.from(map.values());
         });
@@ -101,7 +101,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     });
 
     const unsubRoutes = CloudSync.subscribeToClientRoutes(activeClientId, (fetchedRoutes) => {
-      if (fetchedRoutes) {
+      if (fetchedRoutes && Array.isArray(fetchedRoutes)) {
         setLiveClientRoutes(fetchedRoutes);
       }
     });
@@ -196,9 +196,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesRoute = t.routeName.toLowerCase().includes(q);
-        const matchesRider = t.riderName.toLowerCase().includes(q);
-        const matchesStop = t.stopsProgress.some((s) => s.stopName.toLowerCase().includes(q) || (s.sampleCount && s.sampleCount.toString().includes(q)));
+        const matchesRoute = (t.routeName || '').toLowerCase().includes(q);
+        const matchesRider = (t.riderName || '').toLowerCase().includes(q);
+        const safeStops = t?.stopsProgress || t?.stops || [];
+        const matchesStop = safeStops.some((s: any) => 
+          (s?.stopName || s?.name || '').toLowerCase().includes(q) || 
+          (s?.sampleCount != null && s.sampleCount.toString().includes(q)) ||
+          (s?.specimenCount != null && s.specimenCount.toString().includes(q))
+        );
         if (!matchesRoute && !matchesRider && !matchesStop) return false;
       }
 
@@ -238,7 +243,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
     const newTaskId = `task-${todayStr.replace(/-/g, '')}-stat-${Date.now().toString().slice(-4)}`;
     const stopNameFinal = pickupStopName || `${user.name} (On-Demand OPD)`;
-    const addressFinal = pickupAddress || selectedRoute?.stops[0]?.address || 'Hospital OPD Wing B, Malad West, Mumbai';
+    const safeRouteStops = selectedRoute?.stops || [];
+    const addressFinal = pickupAddress || safeRouteStops[0]?.address || 'Hospital OPD Wing B, Malad West, Mumbai';
 
     const stop: StopProgress = {
       stopId: `stop-stat-${Date.now()}`,
@@ -473,19 +479,27 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
                     {/* Stops progress */}
                     <div className="text-[11px] text-slate-600 space-y-1 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
-                      {task.stopsProgress.map((stop, sIdx) => (
-                        <div key={stop.stopId || sIdx} className="flex items-center justify-between">
-                          <span className="truncate max-w-[190px] text-slate-700">{stop.stopName}</span>
-                          <span className="font-mono text-emerald-700 font-medium">
-                            {stop.status === 'picked_up' ? `${stop.sampleCount || (stop as any).specimenCount || 0} Vials` : 'Pending'}
-                          </span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const safeStops = task?.stopsProgress || (task as any)?.stops || [];
+                        if (safeStops.length === 0) {
+                          return (
+                            <div className="text-slate-400 italic text-[10px]">No collection points specified</div>
+                          );
+                        }
+                        return safeStops.map((stop: any, sIdx: number) => (
+                          <div key={stop.stopId || stop.id || sIdx} className="flex items-center justify-between">
+                            <span className="truncate max-w-[190px] text-slate-700">{stop.stopName || stop.name || `Point ${sIdx + 1}`}</span>
+                            <span className="font-mono text-emerald-700 font-medium">
+                              {stop.status === 'picked_up' ? `${stop.sampleCount || stop.specimenCount || 0} Vials` : 'Pending'}
+                            </span>
+                          </div>
+                        ));
+                      })()}
                     </div>
 
                     {/* Proof button */}
                     <div className="flex items-center justify-between pt-1 text-xs">
-                      <span className="text-slate-500 text-[11px]">Rider: {task.riderName}</span>
+                      <span className="text-slate-500 text-[11px]">Rider: {task.riderName || 'Assigned Rider'}</span>
                       <button
                         onClick={() => onOpenProof(task)}
                         className="px-2.5 py-1 bg-white hover:bg-slate-50 text-sky-700 font-semibold rounded-md text-xs border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
@@ -497,7 +511,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                   </div>
                 );
               })
-            ) : activeLiveRoute && activeLiveRoute.stops && activeLiveRoute.stops.length > 0 ? (
+            ) : activeLiveRoute && Array.isArray(activeLiveRoute.stops) && activeLiveRoute.stops.length > 0 ? (
               <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -514,7 +528,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
                 {/* Route stops in transit */}
                 <div className="text-[11px] text-slate-600 space-y-1.5 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
-                  {activeLiveRoute.stops.map((stop: any, sIdx: number) => (
+                  {(activeLiveRoute.stops || []).map((stop: any, sIdx: number) => (
                     <div key={stop.id || sIdx} className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 truncate max-w-[200px]">
                         <span className="w-4 h-4 rounded-full bg-sky-100 text-sky-700 font-bold text-[10px] flex items-center justify-center shrink-0">
