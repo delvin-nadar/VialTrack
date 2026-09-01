@@ -13,8 +13,7 @@ import {
   Briefcase,
   SlidersHorizontal,
   Sun,
-  Sunset,
-  CheckCircle2
+  Sunset
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { compressImageToBase64 } from '../../services/imageWatermark';
@@ -157,7 +156,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
   const photoFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Live Firestore routes state
   const [dbRoutes, setDbRoutes] = useState<Route[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState<boolean>(true);
 
@@ -202,7 +200,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     name: string;
     phone: string;
     email: string;
-    password: string; // Only set when explicitly entered by admin
+    password: string;
     plateNumber: string;
     vehicleNumber: string;
     vehicleType: string;
@@ -236,10 +234,8 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
   useEffect(() => {
     if (rider) {
-      // Editing existing rider
       const initialAssignedRoutes = Array.isArray(rider.assignedRouteIds) ? rider.assignedRouteIds : [];
       
-      // Determine initial employment type
       let empType: EmploymentType = rider.employmentType || 'full_time';
       if (!rider.employmentType && rider.shiftTimings) {
         const lower = rider.shiftTimings.toLowerCase();
@@ -251,7 +247,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
       const sEnd = rider.shiftEnd || '04:00 PM';
       const sType = rider.shiftType || 'morning';
       
-      // Find matching preset
       const matchedPreset = SHIFT_PRESETS.find(
         (p) => p.employmentType === empType && p.start === sStart && p.end === sEnd
       );
@@ -262,7 +257,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         name: rider.name || '',
         phone: rider.phone || '',
         email: rider.email || '',
-        password: '', // Blank so existing password is never overwritten accidentally
+        password: '',
         plateNumber: rider.plateNumber || rider.vehicleNumber || '',
         vehicleNumber: rider.vehicleNumber || rider.plateNumber || '',
         vehicleType: rider.vehicleType || 'Motorcycle / Bike',
@@ -277,7 +272,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         photoUrl: rider.photoUrl || ''
       });
     } else {
-      // New rider creation: default to Full-Time Morning preset
       setForm({
         name: '',
         phone: '',
@@ -326,7 +320,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
   };
 
   const handleEmploymentTypeChange = (newEmpType: EmploymentType) => {
-    // Find first preset matching the new employment type
     const matchingPreset = SHIFT_PRESETS.find((p) => p.employmentType === newEmpType);
     if (matchingPreset) {
       setForm((prev) => ({
@@ -389,7 +382,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     });
   };
 
-  // Helper to auto-generate live task document if no active task exists
   const ensureLiveTaskGenerated = async (
     riderData: {
       id: string;
@@ -402,7 +394,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     if (!routeIds || routeIds.length === 0) return;
 
     try {
-      // Check if an active task already exists for this rider in 'tasks'
       let existingTasks: any[] = [];
       try {
         const q = query(collection(db, 'tasks'), where('riderId', '==', riderData.id));
@@ -431,7 +422,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
               ? selectedRouteDetails.stops.map((stop: any, index: number) => ({
                   id: stop.id || `stop_${index + 1}`,
                   name: stop.name || `Collection Stop ${index + 1}`,
-                  address: stop.address || 'Mumbai, Maharashtra',
+                  address: stop.address || '',
                   lat: Number(stop.lat || 19.1287852),
                   lng: Number(stop.lng || 72.8294183),
                   status: 'pending' as const,
@@ -490,13 +481,11 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
       return;
     }
 
-    // For new riders, password is required (minimum 4 chars or 8 chars)
     if (!rider && (!form.password || form.password.length < 4)) {
       setFormError('Please enter a password/PIN of at least 4 characters for the new rider.');
       return;
     }
 
-    // If an existing rider is edited and admin typed a password, ensure it's at least 4 chars
     if (rider && form.password.trim() && form.password.trim().length < 4) {
       setFormError('New password must be at least 4 characters long.');
       return;
@@ -506,8 +495,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     const effectiveVehicleType = form.vehicleType || 'Motorcycle / Bike';
 
     if (rider) {
-      // EDIT EXISTING RIDER
-      // Only overwrite password if admin explicitly typed a new non-empty password
       const newPasswordTyped = form.password.trim();
       const preservedPassword = newPasswordTyped ? newPasswordTyped : (rider.password || '');
 
@@ -533,7 +520,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
       StorageService.updateRider(updatedRider);
 
-      // Save to Firestore: ONLY update password field if explicitly changed by admin
       try {
         const firestorePayload: any = {
           id: updatedRider.id,
@@ -563,7 +549,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
         await setDoc(doc(db, 'riders', updatedRider.id), firestorePayload, { merge: true });
 
-        // Auto-instantiate live task document if rider has assigned routes and no active task exists
         await ensureLiveTaskGenerated(
           {
             id: updatedRider.id,
@@ -577,14 +562,13 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
           console.warn('Firestore quota exceeded; updated rider locally.');
         } else {
-          console.error("Firestore Write Error:", err);
+          console.error('Firestore Write Error:', err);
         }
       }
 
       onSaved();
       onClose();
     } else {
-      // CREATE NEW RIDER
       const riderId = `rider-${cleanPhone.replace(/\D/g, '') || Date.now()}`;
       const riderEmail = form.email.trim() || `${cleanName.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`;
       const effectivePassword = form.password.trim() || generateStrongPassword(8);
@@ -616,7 +600,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           timestamp: new Date().toISOString(),
           accuracy: 5
         },
-        batteryLevel: 95,
+        batteryLevel: 100,
         isOnline: true,
         isCheckedIn: true
       };
@@ -641,7 +625,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             shiftStart: newRider.shiftStart,
             shiftEnd: newRider.shiftEnd,
             shiftTimings: newRider.shiftTimings,
-            battery: 95,
+            battery: 100,
             isOnline: true,
             isCheckedIn: true,
             status: 'active',
@@ -652,7 +636,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           { merge: true }
         );
 
-        // Auto-instantiate live task document if rider has assigned routes
         await ensureLiveTaskGenerated(
           {
             id: newRider.id,
@@ -666,7 +649,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
           console.warn('Firestore quota exceeded; saved rider locally.');
         } else {
-          console.error("Firestore Write Error:", err);
+          console.error('Firestore Write Error:', err);
         }
       }
 
@@ -685,7 +668,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn overflow-y-auto">
       <div className="w-full max-w-xl bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden my-6">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center">
@@ -708,7 +690,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           </button>
         </div>
 
-        {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
           {formError && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg flex items-center gap-2">
@@ -717,7 +698,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </div>
           )}
 
-          {/* Photo & Basic Details */}
           <div className="flex items-start gap-4">
             <div className="relative shrink-0">
               <div className="w-16 h-16 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center">
@@ -757,7 +737,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ramesh K. Yadav"
+                  placeholder="e.g. Ramesh Yadav"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-semibold focus:outline-hidden focus:border-sky-600"
@@ -794,7 +774,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </div>
           </div>
 
-          {/* Password / PIN Section */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
             <div className="flex items-center justify-between">
               <label className="block text-slate-700 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -824,7 +803,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </p>
           </div>
 
-          {/* Vehicle Information */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px] flex items-center gap-1">
@@ -834,7 +812,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
               <input
                 type="text"
                 required
-                placeholder="MH-02-DN-4821"
+                placeholder="e.g. MH02AB1234"
                 value={form.plateNumber || form.vehicleNumber}
                 onChange={(e) => setForm({ ...form, plateNumber: e.target.value, vehicleNumber: e.target.value })}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono uppercase focus:outline-hidden focus:border-sky-600"
@@ -857,7 +835,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </div>
           </div>
 
-          {/* Shift & Employment Classification */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <label className="text-slate-800 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -869,7 +846,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
               </span>
             </div>
 
-            {/* a) Employment Type Toggle / Select */}
             <div>
               <label className="block text-slate-600 font-semibold mb-1.5 text-[11px]">
                 1. Employment Model *
@@ -925,7 +901,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
               </div>
             </div>
 
-            {/* b) Shift Slot Presets & Custom Range Picker */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-slate-600 font-semibold text-[11px] flex items-center gap-1">
@@ -939,7 +914,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                 )}
               </div>
 
-              {/* Preset Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2.5">
                 {filteredPresets.map((preset) => {
                   const isSelected = form.selectedPresetId === preset.id;
@@ -968,7 +942,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                   );
                 })}
 
-                {/* Custom Time Range Button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -996,7 +969,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                 </button>
               </div>
 
-              {/* Time Pickers (Start and End Time) */}
               <div className="grid grid-cols-2 gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1 text-[10px] uppercase tracking-wider">
@@ -1031,7 +1003,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </div>
           </div>
 
-          {/* Assign Routes */}
           <div>
             <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1.5 text-[11px]">
               Assign Collection Routes ({form.assignedRouteIds.length} Selected)
@@ -1073,7 +1044,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             </div>
           </div>
 
-          {/* Status */}
           <div>
             <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
               Rider Operational Status

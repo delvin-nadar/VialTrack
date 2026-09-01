@@ -16,8 +16,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   unreadNotifsCount,
   onOpenNotifications
 }) => {
-  const displayName = user?.name || 'Delvin';
-  const displayEmail = user?.email || 'delvin.nadar@secondmedic.com';
+  const displayName = user?.name || 'Administrator';
+  const displayEmail = user?.email || '';
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">

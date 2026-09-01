@@ -548,7 +548,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
                 <div className="flex items-center justify-between pt-1 text-xs">
                   <span className="text-slate-500 text-[11px]">
-                    Assigned: {activeLiveRider?.name || 'Asif (Bike MH-02-DN-4821)'}
+                    Assigned: {activeLiveRider?.name ? `${activeLiveRider.name}${activeLiveRider.vehicleNumber ? ` (${activeLiveRider.vehicleNumber})` : ''}` : 'Pending assignment'}
                   </span>
                   <span className="text-[11px] font-semibold text-sky-700">Live GPS Active</span>
                 </div>

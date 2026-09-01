@@ -569,10 +569,10 @@ export const LiveMap: React.FC<LiveMapProps> = ({
             <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${stopName}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${stopAddress}</div>
             <div style="font-size: 11px; color: #334155; margin-top: 5px;">
-              <b>Contact:</b> ${stop.contactPerson || 'Lab Coordinator'} (${stop.phone || '+91 98200 33445'})
+              <b>Contact:</b> ${stop.contactPerson || 'Coordinator'} ${stop.phone ? `(${stop.phone})` : ''}
             </div>
             <div style="margin-top: 4px; font-size: 11px; font-weight: 700; color: #0369a1;">
-              Specimen Count: ${(stop as any).sampleCount || 10} Vials
+              Specimen Count: ${Number((stop as any).sampleCount ?? (stop as any).specimenCount ?? 0)} Vials
             </div>
           </div>
         `);

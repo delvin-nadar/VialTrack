@@ -65,7 +65,7 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-slate-500 font-mono">
-              {rider?.vehicleNumber || 'MH-02-DN-4921'} • Courier
+              {rider?.vehicleNumber || rider?.plateNumber || 'Courier Partner'}
             </p>
           </div>
         </div>

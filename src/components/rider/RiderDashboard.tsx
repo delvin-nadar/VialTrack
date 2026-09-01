@@ -92,15 +92,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   const activeRider: PickupBoy = rider || {
     id: session?.riderId || user?.riderId || '',
-    name: session?.name || user?.name || 'Rider',
+    name: session?.name || user?.name || 'Courier Partner',
     email: session?.email || user?.email || '',
     phone: session?.phone || user?.phone || '',
-    photoUrl: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
-    vehicleNumber: 'MH-02',
-    vehicleType: 'Cold-box Mounted Two-Wheeler',
+    photoUrl: user?.avatar || '',
+    vehicleNumber: '',
+    vehicleType: 'Motorcycle / Bike',
     assignedRouteIds: [],
     status: 'active',
-    joiningDate: '2026-01-01',
+    joiningDate: new Date().toISOString().split('T')[0],
     isOnline: true,
     isCheckedIn: true
   };
@@ -198,7 +198,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     (session as any)?.vehicleType || activeRider.vehicleType || 'Motorcycle / Bike'
   );
   const [selectedVehicleNumber, setSelectedVehicleNumber] = useState<string>(
-    (session as any)?.vehicleNo || (session as any)?.vehicleNumber || activeRider.vehicleNumber || 'MH02TN0897'
+    (session as any)?.vehicleNo || (session as any)?.vehicleNumber || activeRider.vehicleNumber || ''
   );
   const [showVehicleDutyModal, setShowVehicleDutyModal] = useState<boolean>(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState<boolean>(false);
@@ -447,7 +447,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   };
 
   const handleSaveVehicleAndDuty = async (newType: string, newPlate: string, startShift: boolean) => {
-    const cleanPlate = (newPlate || selectedVehicleNumber || 'MH02TN0897').toUpperCase().trim();
+    const cleanPlate = (newPlate || selectedVehicleNumber || '').toUpperCase().trim();
     const cleanType = newType || selectedVehicleType || 'Motorcycle / Bike';
 
     setSelectedVehicleType(cleanType);
@@ -1935,7 +1935,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 type="text"
                 value={selectedVehicleNumber}
                 onChange={(e) => setSelectedVehicleNumber(e.target.value.toUpperCase())}
-                placeholder="MH02TN0897"
+                placeholder="e.g. MH02AB1234"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono font-bold text-sm tracking-wider uppercase focus:outline-hidden focus:border-sky-600 focus:bg-white"
               />
             </div>

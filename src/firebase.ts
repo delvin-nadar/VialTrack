@@ -6,7 +6,8 @@ import {
   resolvedFirebaseConfig,
   resolvedFirestoreDatabaseId,
   CloudSync,
-  seedCoreCollectionsIfEmpty
+  seedCoreCollectionsIfEmpty,
+  cleanupFirestoreCollections
 } from './services/firebase';
 
 const app = !getApps().length ? initializeApp(firebaseConfig || resolvedFirebaseConfig) : getApp();
@@ -19,7 +20,8 @@ export {
   resolvedFirestoreDatabaseId,
   app,
   CloudSync,
-  seedCoreCollectionsIfEmpty
+  seedCoreCollectionsIfEmpty,
+  cleanupFirestoreCollections
 };
 
 export default db;

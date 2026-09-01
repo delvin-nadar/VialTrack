@@ -151,7 +151,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
               </label>
               <input
                 type="email"
-                placeholder="lab.lifecare@secondmedic.com"
+                placeholder="ops@clientfacility.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:bg-white focus:border-sky-700"

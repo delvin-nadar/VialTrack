@@ -42,8 +42,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const displayName = user?.role === 'admin' ? (user.name || 'Delvin') : user?.name;
-  const displayEmail = user?.role === 'admin' ? (user.email || 'delvin.nadar@secondmedic.com') : user?.email;
+  const displayName = user?.role === 'admin' ? (user.name || 'Administrator') : user?.name;
+  const displayEmail = user?.email || '';
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">

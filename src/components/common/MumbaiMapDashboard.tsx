@@ -120,7 +120,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               lat,
               lng,
               name: data.name || 'Courier',
-              vehicleNumber: data.vehicleNumber || data.vehicleNo || 'MH-02-BIKE',
+              vehicleNumber: data.vehicleNumber || data.vehicleNo || '',
               isOnline: data.isOnline !== false,
               currentLocation: {
                 lat,
@@ -338,9 +338,9 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         const assignedTask = cloudTasks.find((t) => t.riderId === r.id || t.assignedRiderId === r.id);
 
         const riderName = r.name || 'Courier';
-        const vehicleNum = r.vehicleNumber || 'MH-02-BIKE';
+        const vehicleNum = r.vehicleNumber || '';
         const firstName = riderName.split(' ')[0] || riderName;
-        const vehicleSuffix = vehicleNum.includes('-') ? vehicleNum.split('-').pop() : vehicleNum;
+        const vehicleSuffix = vehicleNum ? (vehicleNum.includes('-') ? vehicleNum.split('-').pop() : vehicleNum) : '';
 
         const riderIcon = L.divIcon({
           className: 'custom-mumbai-rider',

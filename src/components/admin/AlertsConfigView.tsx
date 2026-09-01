@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Bell, ShieldAlert, Sliders, MessageSquare, Send, CheckCircle2, AlertTriangle, Thermometer, MapPin } from 'lucide-react';
+import { Bell, ShieldAlert, Sliders, MessageSquare, Send, CheckCircle2, AlertTriangle, Thermometer, MapPin, Trash2, RefreshCw } from 'lucide-react';
 import { NotificationService } from '../../services/notificationService';
+import { cleanupFirestoreCollections } from '../../services/firebase';
 
 interface AlertsConfigViewProps {
   onRefresh: () => void;
@@ -15,6 +16,8 @@ export const AlertsConfigView: React.FC<AlertsConfigViewProps> = ({ onRefresh })
   const [enableInApp, setEnableInApp] = useState(true);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [testSent, setTestSent] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanupMessage, setCleanupMessage] = useState<string | null>(null);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,13 +29,34 @@ export const AlertsConfigView: React.FC<AlertsConfigViewProps> = ({ onRefresh })
     NotificationService.sendAlert({
       type: 'delay',
       title: 'TEST ALERT: Pickup Delayed (+15m)',
-      message: 'Automated test simulation: Rider Rahul Sharma delayed on Western Suburbs Loop (Slot 14:00).',
+      message: 'Automated test simulation: Courier partner delayed on scheduled route (Slot 14:00).',
       recipientRole: 'admin',
       channel: 'both'
     });
     setTestSent(true);
     onRefresh();
     setTimeout(() => setTestSent(false), 3000);
+  };
+
+  const handleCleanDatabase = async () => {
+    if (!window.confirm('Are you sure you want to clean up all Firestore collections (clients, locations, riders, routes, tasks)? This will leave the database completely empty so you can create new production records.')) {
+      return;
+    }
+
+    setIsCleaning(true);
+    setCleanupMessage(null);
+    try {
+      const res = await cleanupFirestoreCollections();
+      setCleanupMessage(res.message);
+      onRefresh();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    } catch (err: any) {
+      setCleanupMessage(`Error: ${err?.message || 'Failed to cleanup database'}`);
+    } finally {
+      setIsCleaning(false);
+    }
   };
 
   return (
@@ -211,6 +235,42 @@ export const AlertsConfigView: React.FC<AlertsConfigViewProps> = ({ onRefresh })
           </button>
         </div>
       </form>
+
+      {/* Database Maintenance & Production Cleanup */}
+      <div className="bg-white border border-rose-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3 mt-8">
+        <div className="flex items-center justify-between pb-3 border-b border-rose-100">
+          <div>
+            <h3 className="font-bold text-rose-900 text-sm sm:text-base flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>Strict Production Database Cleanup</span>
+            </h3>
+            <p className="text-xs text-rose-600 mt-0.5">
+              Purge all collections (clients, locations, riders, routes, tasks) to start with a pure empty database.
+            </p>
+          </div>
+        </div>
+
+        {cleanupMessage && (
+          <div className="p-3 bg-slate-900 text-white rounded-lg text-xs font-mono">
+            {cleanupMessage}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-1">
+          <p className="text-xs text-slate-500">
+            Use this action when switching to production or preparing to register clean client accounts and pickup boy profiles from scratch.
+          </p>
+          <button
+            type="button"
+            onClick={handleCleanDatabase}
+            disabled={isCleaning}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shrink-0 shadow-xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isCleaning ? 'animate-spin' : ''}`} />
+            <span>{isCleaning ? 'Cleaning Database...' : 'Wipe All Collections'}</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

@@ -346,7 +346,7 @@ function AppContent() {
           element={
             <AdminRoute>
               <AdminHeader
-                user={adminUser || { id: 'admin-1', email: 'delvin.nadar@secondmedic.com', name: 'Delvin', role: 'admin' }}
+                user={adminUser || { id: 'admin-1', email: '', name: 'Administrator', role: 'admin' }}
                 onLogout={handleAdminLogout}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}

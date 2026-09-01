@@ -203,64 +203,50 @@ export function toFirestoreGeoPoint(lat: number, lng: number): GeoPoint {
   return new GeoPoint(lat, lng);
 }
 
-// Operational Accounts Configuration with Matching Roles and Doc IDs
-export const OPERATIONAL_ACCOUNTS = {
-  admin: {
-    email: 'admin@secondmedic.com',
-    password: 'SecondMedicOps@2026',
-    role: 'admin' as const,
-    displayName: 'SecondMedic Logistics Lead',
-    claims: { role: 'admin' }
-  },
-  client: {
-    email: 'client.ops@secondmedic.com',
-    password: 'SecondMedicOps@2026',
-    role: 'client' as const,
-    clientId: 'client-bkc-metropolis',
-    displayName: 'Metropolis Healthcare (Lab Ops)',
-    claims: { role: 'client', clientId: 'client-bkc-metropolis' }
-  },
-  rider: {
-    email: 'rahul.rider@secondmedic.com',
-    password: 'SecondMedicOps@2026',
-    role: 'rider' as const,
-    riderId: 'rider-rahul',
-    displayName: 'Rahul Sharma (Courier)',
-    claims: { role: 'rider', riderId: 'rider-rahul' }
-  }
-};
-
-export const DEMO_ACCOUNTS = OPERATIONAL_ACCOUNTS;
-
-/**
- * Ensures standard operational test accounts are provisioned in Firebase Auth
- * so valid credentials authenticate strictly via signInWithEmailAndPassword.
- */
-export async function seedOperationalAuthAccounts(): Promise<void> {
-  const accounts = Object.values(OPERATIONAL_ACCOUNTS);
-  for (const acc of accounts) {
-    try {
-      await createUserWithEmailAndPassword(auth, acc.email, acc.password);
-      console.log(`[FirebaseAuth] Initialized operational account: ${acc.email}`);
-    } catch (err: any) {
-      if (err?.code === 'auth/email-already-in-use') {
-        // Account exists
-      } else {
-        // Non-blocking log
-      }
-    }
-  }
-}
-
-// Auto-seed operational accounts at startup
-seedOperationalAuthAccounts().catch(() => {});
-
 // Throttle cache for trip and rider cloud location writes
 const locationWriteThrottleMap = new Map<string, { timestamp: number; lat: number; lng: number }>();
 
 /**
- * Database Auto-Seeder:
- * Disabled to maintain strict single source of truth with live Firestore documents.
+ * Strict Production Mode:
+ * No demo accounts or mock seeders. Database starts pure and empty.
+ */
+export async function cleanupFirestoreCollections(): Promise<{ success: boolean; deletedCount: number; message: string }> {
+  const collectionsToClean = ['clients', 'locations', 'riders', 'routes', 'tasks', 'trips', 'attendance', 'pings'];
+  let totalDeleted = 0;
+  for (const colName of collectionsToClean) {
+    try {
+      const snap = await getDocs(collection(db, colName));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => {
+          batch.delete(d.ref);
+          totalDeleted++;
+        });
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn(`[FirestoreCleanup] Error clearing collection ${colName}:`, e);
+    }
+  }
+
+  // Clear local storage cache
+  try {
+    const keysToPurge = [
+      'smvt_clients', 'smvt_riders', 'smvt_routes', 'smvt_tasks',
+      'smvt_attendance', 'smvt_pings', 'smvt_locations',
+      'vialtrack_mock_fleet', 'vialtrack_demo_tasks', 'vialtrack_mock_riders',
+      'vialtrack_mock_tasks', 'vialtrack_demo_rounds', 'vialtrack_initial_feed'
+    ];
+    keysToPurge.forEach((k) => localStorage.removeItem(k));
+  } catch (err) {
+    console.warn('Could not clear local storage during cleanup:', err);
+  }
+
+  return { success: true, deletedCount: totalDeleted, message: `Cleaned ${totalDeleted} documents across collections.` };
+}
+
+/**
+ * Strict production mode: returns pure empty state
  */
 export async function seedCoreCollectionsIfEmpty(): Promise<{ clientsSeeded: boolean; ridersSeeded: boolean }> {
   return { clientsSeeded: false, ridersSeeded: false };
@@ -434,7 +420,7 @@ export const CloudSync = {
       routeName: payload.route?.name || `${payload.client.name} Collection Loop`,
       timeSlot: payload.timeSlot || '09:00',
       date: todayStr,
-      riderVehicle: payload.rider.vehicleNumber || 'MH02TN0897',
+      riderVehicle: payload.rider.vehicleNumber || '',
       isDelayed: false,
       delayMinutes: 0,
       issueFlags: []
