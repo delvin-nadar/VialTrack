@@ -20,7 +20,7 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({
   onOpenNotifications,
   onExitPreview
 }) => {
-  const [opsHotline, setOpsHotline] = useState<string>('+91 80 4719 3333');
+  const [opsHotline, setOpsHotline] = useState<string>('+91 93216 40508');
 
   // Pull Ops Hotline dynamically from the organization settings Firestore doc
   useEffect(() => {
@@ -84,10 +84,14 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({
           {/* Right Actions */}
           <div className="flex items-center gap-2.5 sm:gap-4">
             {/* Ops Support Hotline */}
-            <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+            <a
+              href={`tel:${opsHotline.replace(/\D/g, '')}`}
+              className="hidden md:flex items-center gap-1.5 text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 hover:text-emerald-700 px-2.5 py-1 rounded-lg border border-slate-200 transition-colors shadow-2xs"
+              title={`Call Ops Hotline: ${opsHotline}`}
+            >
               <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
               <span>Ops Hotline: <strong className="font-mono">{opsHotline}</strong></span>
-            </div>
+            </a>
 
             {/* Notifications Button */}
             <button

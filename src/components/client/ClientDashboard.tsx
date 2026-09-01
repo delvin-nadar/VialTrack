@@ -187,6 +187,19 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     return null;
   }, [riders, activeLiveTask]);
 
+  // Fallback assigned rider from route definition
+  const assignedRiderForRoute: PickupBoy | null = useMemo(() => {
+    if (activeLiveRider) return activeLiveRider;
+    if (!activeLiveRoute) return null;
+    const directRiderId = activeLiveRoute.assignedRiderId;
+    if (directRiderId) {
+      const found = riders.find((r) => r.id === directRiderId);
+      if (found) return found;
+    }
+    const foundByList = riders.find((r) => Array.isArray(r.assignedRouteIds) && r.assignedRouteIds.includes(activeLiveRoute.id));
+    return foundByList || null;
+  }, [activeLiveRider, activeLiveRoute, riders]);
+
   // Filtered task list
   const filteredTasks = useMemo(() => {
     return clientTasks.filter((t) => {
@@ -431,7 +444,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             clientLocation={clientRecord?.location || { lat: 19.1287852, lng: 72.8294183 }}
             activeTask={activeLiveTask}
             activeRoute={activeLiveRoute}
-            assignedRiderId={activeLiveRider?.id}
+            assignedRiderId={activeLiveRider?.id || assignedRiderForRoute?.id}
             onOpenProof={onOpenProof}
             height="360px"
           />
@@ -562,9 +575,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
                 <div className="flex items-center justify-between pt-1 text-xs">
                   <span className="text-slate-500 text-[11px]">
-                    Assigned: {activeLiveRider?.name ? `${activeLiveRider.name}${activeLiveRider.vehicleNumber ? ` (${activeLiveRider.vehicleNumber})` : ''}` : 'Pending assignment'}
+                    Assigned: {assignedRiderForRoute?.name ? `${assignedRiderForRoute.name}${assignedRiderForRoute.vehicleNumber ? ` (${assignedRiderForRoute.vehicleNumber})` : ''} • Awaiting Start` : 'Pending assignment'}
                   </span>
-                  <span className="text-[11px] font-semibold text-sky-700">Live GPS Active</span>
+                  <span className="text-[11px] font-semibold text-sky-700">Scheduled Route</span>
                 </div>
               </div>
             ) : (

@@ -272,7 +272,7 @@ export function generateRiderWhatsAppAlertUrl(rider: PickupBoy, messageType: 'pu
   if (messageType === 'punch_in_reminder') {
     text = `🚨 *SecondMedic Operations Alert*\n\nHi ${rider.name},\nYour scheduled route *${routeName || 'Daily Round'}* (${slot || 'Upcoming Slot'}) is starting soon.\n\nPlease open the VialTrack Rider App, confirm your vehicle, and *Punch In* now to begin GPS tracking.\n\nPortal: https://delvin-nadar.github.io/VialTrack/#/rider`;
   } else if (messageType === 'overdue_alert') {
-    text = `⚠️ *URGENT - SECONDMEDIC OPS NOTICE*\n\nHi ${rider.name},\nYour route *${routeName || 'Daily Round'}* (${slot || 'Slot'}) is *OVERDUE FOR PUNCH-IN*.\n\nPlease open the app immediately or reply with your status.\n\nCall Ops Head: +91 98200 00000`;
+    text = `⚠️ *URGENT - SECONDMEDIC OPS NOTICE*\n\nHi ${rider.name},\nYour route *${routeName || 'Daily Round'}* (${slot || 'Slot'}) is *OVERDUE FOR PUNCH-IN*.\n\nPlease open the app immediately or reply with your status.\n\nCall Ops Head: +91 93216 40508`;
   } else {
     text = `📦 *SecondMedic Dispatch Notice*\n\nHi ${rider.name},\nYour pickup task for *${routeName || 'Assigned Route'}* is ready. Please open the app and start navigation.`;
   }

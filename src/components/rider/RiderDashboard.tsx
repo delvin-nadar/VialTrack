@@ -181,7 +181,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
   }, [sessionRiderId, sessionPhone]);
 
-  const [opsHotline, setOpsHotline] = useState<string>('+91 80 4719 3333');
+  const [opsHotline, setOpsHotline] = useState<string>('+91 93216 40508');
   const [isCheckedIn, setIsCheckedIn] = useState<boolean>(activeRider.isCheckedIn ?? true);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [currentStopIndex, setCurrentStopIndex] = useState<number>(0);
