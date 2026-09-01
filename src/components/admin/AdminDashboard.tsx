@@ -239,7 +239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           contactPhone: ''
         },
         frequency: 'Daily',
-        timeSlots: [activeTask.timeSlot || '09:00 AM'],
+        timeSlots: activeTask.timeSlot ? [activeTask.timeSlot] : [],
         bufferTimeMinutes: 15
       }
     : undefined;
@@ -606,9 +606,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span className="font-bold text-slate-900 text-xs sm:text-sm">
                               {task.clientName || task.clientLabName || 'Diagnostic Client'}
                             </span>
-                            <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200">
-                              {task.timeSlot || '09:00 AM'}
-                            </span>
+                            {task.timeSlot && (
+                              <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200">
+                                {task.timeSlot}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[10px] text-slate-500 mt-0.5">
                             {task.routeName || 'Diagnostic Collection Loop'}

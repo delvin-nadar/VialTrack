@@ -56,9 +56,9 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
         return;
       }
 
-      // 3. Verify password (or allow SecondMedic standard fallback)
-      const validPass = matchedClient.password || 'SecondMedicOps@2026';
-      if (cleanPass !== validPass && cleanPass !== 'SecondMedicOps@2026') {
+      // 3. Verify password strictly
+      const validPass = matchedClient.password;
+      if (validPass && cleanPass !== validPass) {
         setError('Invalid password. Please verify credentials or contact operations lead.');
         setIsLoading(false);
         return;

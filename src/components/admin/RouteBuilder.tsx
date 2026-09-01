@@ -32,35 +32,12 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
     lng: 72.8294183,
     address: 'SV Road / Link Road Junction, Andheri West, Mumbai'
   },
-  initialStops = [
-    {
-      id: 'stop-kandivali-oscar',
-      name: 'Oscar Hospital (Kandivali West)',
-      address: 'Mathuradas Road, Kandivali West, Mumbai',
-      lat: 19.2082,
-      lng: 72.8398,
-      contactPerson: 'Sister In-charge OPD',
-      phone: '+91 98201 11223',
-      order: 1,
-      avgPickupDurationMinutes: 10
-    },
-    {
-      id: 'stop-goregaon-oscar',
-      name: 'Oscar Hospital (Goregaon West)',
-      address: 'Station Road, Jawahar Nagar, Goregaon West, Mumbai',
-      lat: 19.1624,
-      lng: 72.8465,
-      contactPerson: 'Pathology Head',
-      phone: '+91 98202 22334',
-      order: 2,
-      avgPickupDurationMinutes: 10
-    }
-  ],
+  initialStops = [],
   destinationLocation,
   onStopsChange,
   onSave
 }) => {
-  const [routeName, setRouteName] = useState('Western Suburbs Specimen Intake Loop');
+  const [routeName, setRouteName] = useState('');
   const [stops, setStops] = useState<RouteStop[]>(initialStops);
   const [isFullscreen, setIsFullscreen] = useState(false);
 

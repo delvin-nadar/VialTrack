@@ -389,7 +389,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
             
             <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${riderName}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 1px;">${r.vehicleType || 'Motorcycle'} • <span style="font-family: monospace; font-weight: 600;">${vehicleNum}</span></div>
-            <div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 2px;">📍 Area: ${r.area || 'Mumbai Central'}</div>
+            ${r.area ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 2px;">📍 Area: ${r.area}</div>` : ''}
             
             <div style="margin-top: 8px; padding: 6px 8px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
@@ -402,7 +402,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               </div>
               <div style="display: flex; justify-content: space-between;">
                 <span style="color: #64748b;">Assigned Task:</span>
-                <span style="font-weight: 700; color: #0369a1;">${assignedTask?.title || assignedTask?.routeName || 'Western Suburbs Loop'}</span>
+                <span style="font-weight: 700; color: #0369a1;">${assignedTask?.title || assignedTask?.routeName || 'Active Collection Run'}</span>
               </div>
             </div>
             
@@ -1045,7 +1045,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                         </div>
 
                         <div className="text-[11px] text-slate-500 mt-1">
-                          <b>Area:</b> {t.area || 'Mumbai Central'} • <b>Slot:</b> {t.timeSlot || '14:00'}
+                          {t.area && <span><b>Area:</b> {t.area} • </span>}<b>Slot:</b> {t.timeSlot || 'Scheduled'}
                         </div>
 
                         <div className="mt-2 text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100 space-y-1">

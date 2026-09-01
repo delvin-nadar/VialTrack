@@ -516,7 +516,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900 shadow-xs">
-                      {activeLiveRoute.timeSlots?.[0] || '10:30 AM'}
+                      {activeLiveRoute.timeSlots?.[0] || 'Scheduled'}
                     </span>
                     <span className="font-bold text-slate-900 text-xs">{activeLiveRoute.name}</span>
                   </div>

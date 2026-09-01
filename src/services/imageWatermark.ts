@@ -168,7 +168,8 @@ export async function addWatermarkToImage(
         textY += baseFontSize * 1.4;
         ctx.fillStyle = '#94a3b8';
         ctx.font = `500 ${baseFontSize * 0.9}px 'Plus Jakarta Sans', sans-serif`;
-        ctx.fillText(`Rider: ${data.riderName} | Client: ${data.clientName || 'Diagnostic Partner'}`, padding, textY);
+        const clientText = data.clientName ? ` | Client: ${data.clientName}` : '';
+        ctx.fillText(`Rider: ${data.riderName}${clientText}`, padding, textY);
 
         textY += baseFontSize * 1.3;
         ctx.fillStyle = '#38bdf8';

@@ -290,8 +290,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     assignedRoutes.forEach((route) => {
       // Strictly use the route's configured time slots. If none configured, show single scheduled daily run
-      const timeSlots = route.timeSlots && route.timeSlots.length > 0 ? route.timeSlots : ['09:00 AM'];
-      const client = StorageService.getClientById(route.clientId) || { name: 'Diagnostic Partner' };
+      const timeSlots = route.timeSlots && route.timeSlots.length > 0 ? route.timeSlots : ['Scheduled Slot'];
+      const client = StorageService.getClientById(route.clientId) || { 
+        name: (route as any).clientName || route.destinationLab?.name || route.name 
+      };
 
       timeSlots.forEach((slot) => {
         // Find existing task for this slot today
@@ -573,10 +575,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         lng: 72.8398,
         address:
           photoType === 'drop'
-            ? activeTask?.destination.name || 'Diagnostic Lab'
-            : currentStop?.stopName || 'Hospital Stop',
+            ? activeTask?.destination.name || activeTask?.destination.address || 'Processing Facility'
+            : currentStop?.stopName || currentStop?.address || 'Collection Stop',
         riderName: activeRider.name,
-        clientName: activeTask?.clientName || 'Diagnostic Partner',
+        clientName: activeTask?.clientName || (activeTask as any)?.destination?.name || '',
         vialCount: vialCount,
         temperature: coldBoxTemp,
         isDrop: photoType === 'drop',
@@ -591,7 +593,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         setStopPhoto(watermarked);
       }
     } catch (err) {
-      console.warn('Watermark generation fallback:', err);
+      console.warn('Watermark generation error:', err);
       try {
         const fallbackBase64 = await compressImageToBase64(file, 800, 0.6);
         if (photoType === 'photo1') setStopPhoto(fallbackBase64);
@@ -610,10 +612,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const generated = generateSampleVialPhoto(
       photoType === 'drop' ? 'drop' : photoType === 'photo2' ? 'drop' : 'vial',
       photoType === 'drop'
-        ? `Diagnostic Lab Handover • ${activeTask?.destination.name}`
+        ? `Diagnostic Lab Handover • ${activeTask?.destination.name || 'Lab'}`
         : photoType === 'photo2'
-        ? `Hospital Handover Slip • ${currentStop?.stopName || 'Hospital Stop'}`
-        : `${vialCount} Blood Vials • ${currentStop?.stopName || 'Hospital Stop'}`
+        ? `Hospital Handover Slip • ${currentStop?.stopName || 'Stop'}`
+        : `${vialCount} Blood Vials • ${currentStop?.stopName || 'Stop'}`
     );
 
     try {
@@ -623,10 +625,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         lng: 72.8398,
         address:
           photoType === 'drop'
-            ? activeTask?.destination.name || 'Diagnostic Lab'
-            : currentStop?.stopName || 'Hospital Stop',
+            ? activeTask?.destination.name || activeTask?.destination.address || 'Processing Facility'
+            : currentStop?.stopName || currentStop?.address || 'Collection Stop',
         riderName: activeRider.name,
-        clientName: activeTask?.clientName || 'Diagnostic Partner',
+        clientName: activeTask?.clientName || (activeTask as any)?.destination?.name || '',
         vialCount: vialCount,
         temperature: coldBoxTemp,
         isDrop: photoType === 'drop',
@@ -666,7 +668,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
       const client = StorageService.getClientById(matchingRoute?.clientId || '') || {
         id: matchingRoute?.clientId || '',
-        name: matchingRoute?.destinationLab?.name || 'Diagnostic Processing Facility',
+        name: matchingRoute?.destinationLab?.name || (matchingRoute as any)?.clientName || 'Destination Lab',
         address: matchingRoute?.destinationLab?.address || ''
       };
 
@@ -689,19 +691,19 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           address: matchingRoute?.stops[0]?.address || client.address,
           lat: matchingRoute?.stops[0]?.lat || 19.1363,
           lng: matchingRoute?.stops[0]?.lng || 72.8277,
-          area: 'Mumbai'
+          area: ''
         },
         deliveryLocation: {
-          name: matchingRoute?.destinationLab?.name || 'Central Diagnostic Processing Lab',
-          address: matchingRoute?.destinationLab?.address || 'Mumbai Central Facility',
+          name: matchingRoute?.destinationLab?.name || client.name,
+          address: matchingRoute?.destinationLab?.address || client.address,
           lat: matchingRoute?.destinationLab?.lat || 19.1860,
           lng: matchingRoute?.destinationLab?.lng || 72.8485,
-          area: 'Mumbai'
+          area: ''
         },
         stopsProgress,
         destination: {
-          name: matchingRoute?.destinationLab?.name || 'Central Diagnostic Processing Lab',
-          address: matchingRoute?.destinationLab?.address || 'Mumbai Central Facility',
+          name: matchingRoute?.destinationLab?.name || client.name,
+          address: matchingRoute?.destinationLab?.address || client.address,
           lat: matchingRoute?.destinationLab?.lat || 19.1860,
           lng: matchingRoute?.destinationLab?.lng || 72.8485,
           notes: 'Specimen cold-chain transport'
@@ -1083,7 +1085,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Loops</span>
           <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">{assignedRoutes.length}</span>
           <span className="text-[10px] text-slate-500 truncate block mt-0.5">
-            {assignedRoutes.map((r) => r.name).join(', ') || 'Western Suburbs'}
+            {assignedRoutes.map((r) => r.name).join(', ') || 'No Assigned Routes'}
           </span>
         </div>
 
