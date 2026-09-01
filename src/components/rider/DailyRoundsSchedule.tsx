@@ -19,7 +19,11 @@ import {
   Filter,
   Check,
   Send,
-  Building
+  Building,
+  Lock,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export interface ScheduleStopItem {
@@ -59,6 +63,19 @@ interface DailyRoundsScheduleProps {
   onStartDrop?: (task: PickupTask | undefined, route: Route, slot: string) => void;
 }
 
+// Parse slot string (e.g. "10:00", "14:00", "10:00 AM - 12:00 PM") to total minutes from midnight
+const parseSlotToMinutes = (slot: string): number => {
+  if (!slot) return 0;
+  const match = slot.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+  if (!match) return 0;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const meridiem = match[3]?.toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+};
+
 export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
   scheduleStops,
   assignedRoutes,
@@ -71,6 +88,7 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
   const [selectedRouteFilter, setSelectedRouteFilter] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'pending' | 'in_transit' | 'collected'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showCompletedAccordion, setShowCompletedAccordion] = useState<boolean>(true);
 
   // Extract unique routes present in assigned stops
   const uniqueRouteNames = useMemo(() => {
@@ -120,7 +138,7 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
     });
   }, [scheduleStops, selectedRouteFilter, selectedStatusFilter, searchQuery]);
 
-  // Group stops by (Route + Time Slot)
+  // Group stops by (Route + Time Slot) and sort chronologically
   const slotGroups = useMemo(() => {
     const groupsMap = new Map<string, {
       key: string;
@@ -155,8 +173,64 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
       }
     });
 
-    return Array.from(groupsMap.values());
+    const list = Array.from(groupsMap.values());
+    // Sort chronologically by timeSlot
+    list.sort((a, b) => parseSlotToMinutes(a.timeSlot) - parseSlotToMinutes(b.timeSlot));
+    return list;
   }, [filteredStops, assignedRoutes]);
+
+  // Identify sequential active, completed, and queued rounds per route
+  const annotatedGroups = useMemo(() => {
+    // Determine the active slot index for each route
+    // The first slot that is NOT delivered is the active round
+    const routeStatusMap = new Map<string, number>(); // routeId -> activeIndex
+
+    // Group list by route to calculate sequence
+    const routeToGroups = new Map<string, typeof slotGroups>();
+    slotGroups.forEach((g) => {
+      const rId = g.routeId || g.routeName;
+      if (!routeToGroups.has(rId)) routeToGroups.set(rId, []);
+      routeToGroups.get(rId)!.push(g);
+    });
+
+    // For each route, find first non-delivered slot
+    routeToGroups.forEach((groups, rId) => {
+      let activeIdx = groups.findIndex((g) => {
+        const isDelivered = g.matchedTask?.status === 'delivered' || g.matchedTask?.destination?.status === 'delivered';
+        return !isDelivered;
+      });
+      routeStatusMap.set(rId, activeIdx);
+    });
+
+    return slotGroups.map((group) => {
+      const rId = group.routeId || group.routeName;
+      const groupsForRoute = routeToGroups.get(rId) || [group];
+      const groupIndexInRoute = groupsForRoute.findIndex((g) => g.key === group.key);
+      const activeIdx = routeStatusMap.get(rId) ?? 0;
+
+      const isDelivered = group.matchedTask?.status === 'delivered' || group.matchedTask?.destination?.status === 'delivered';
+      
+      let roundState: 'completed' | 'active' | 'queued' = 'active';
+      let prevSlotName = '';
+
+      if (isDelivered) {
+        roundState = 'completed';
+      } else if (activeIdx !== -1 && groupIndexInRoute > activeIdx) {
+        roundState = 'queued';
+        prevSlotName = groupsForRoute[groupIndexInRoute - 1]?.timeSlot || '';
+      } else {
+        roundState = 'active';
+      }
+
+      return {
+        ...group,
+        roundState,
+        groupIndexInRoute,
+        totalInRoute: groupsForRoute.length,
+        prevSlotName
+      };
+    });
+  }, [slotGroups]);
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
@@ -170,11 +244,11 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
             <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
               <span>My Daily Rounds Schedule</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 font-mono">
-                {scheduleStops.length} Stops
+                {annotatedGroups.length} Scheduled Rounds
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Pickup stops followed by mandatory final sample delivery to client lab
+              Sequential dispatch: Complete pickup stops & drop at client lab to unlock the next scheduled round
             </p>
           </div>
         </div>
@@ -190,7 +264,7 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            All ({counts.all})
+            All Stops ({counts.all})
           </button>
           <button
             type="button"
@@ -231,6 +305,66 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
         </div>
       </div>
 
+      {/* Sequential Round Progression Timeline Bar */}
+      {annotatedGroups.length > 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-3.5 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-700 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-sky-600" />
+              <span>Today's Round Timeline & Progression</span>
+            </span>
+            <span className="text-slate-500 font-medium text-[11px]">
+              {annotatedGroups.filter(g => g.roundState === 'completed').length} / {annotatedGroups.length} Handover Cycles Finished
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+            {annotatedGroups.map((g, idx) => {
+              const isCompleted = g.roundState === 'completed';
+              const isActive = g.roundState === 'active';
+              const isQueued = g.roundState === 'queued';
+
+              return (
+                <div
+                  key={g.key}
+                  className={`p-2.5 rounded-lg border text-xs transition-all ${
+                    isActive
+                      ? 'bg-sky-50 border-sky-300 ring-2 ring-sky-400 shadow-xs'
+                      : isCompleted
+                      ? 'bg-emerald-50/80 border-emerald-300'
+                      : 'bg-white border-slate-200 text-slate-400 opacity-80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-mono font-bold text-slate-900 text-[11px]">
+                      {g.timeSlot}
+                    </span>
+                    {isCompleted && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                        <Check className="w-2.5 h-2.5" /> Done
+                      </span>
+                    )}
+                    {isActive && (
+                      <span className="text-[10px] font-bold text-sky-800 bg-sky-200 px-1.5 py-0.2 rounded animate-pulse">
+                        Active
+                      </span>
+                    )}
+                    {isQueued && (
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5 text-slate-400" /> Queued
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate mt-1">
+                    {g.routeName}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filter / Search Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
         {/* Search Input */}
@@ -266,7 +400,7 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
       </div>
 
       {/* Empty State */}
-      {slotGroups.length === 0 && (
+      {annotatedGroups.length === 0 && (
         <div className="py-12 px-4 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
           <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
             <Building2 className="w-6 h-6" />
@@ -297,7 +431,7 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
 
       {/* Structured Rounds List Grouped by Route Run & Time Slot */}
       <div className="space-y-6">
-        {slotGroups.map((group) => {
+        {annotatedGroups.map((group) => {
           const routeObj = group.route;
           const destLab = routeObj?.destinationLab || {
             id: 'dest-lab',
@@ -310,27 +444,91 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
           };
 
           const matchedTask = group.matchedTask;
-          const isDelivered = matchedTask?.status === 'delivered' || matchedTask?.destination?.status === 'delivered';
+          const isDelivered = group.roundState === 'completed';
+          const isActive = group.roundState === 'active';
+          const isQueued = group.roundState === 'queued';
           const allStopsCollected = group.stops.every((s) => s.status === 'collected');
           const totalVialsInRun = group.stops.reduce((sum, s) => sum + Number(s.vialCount || 0), 0);
           const cleanDestPhone = (destLab.phone || '').replace(/\D/g, '');
 
+          // If this round is queued (future route), render the clean locked card
+          if (isQueued) {
+            return (
+              <div
+                key={group.key}
+                className="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50/60 p-4 space-y-3 opacity-90 transition-all"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-md font-mono font-bold text-xs bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Slot: {group.timeSlot}</span>
+                    </span>
+                    <h4 className="font-bold text-slate-700 text-xs sm:text-sm flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{group.routeName}</span>
+                    </h4>
+                  </div>
+
+                  <span className="text-[11px] font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-full flex items-center gap-1.5 self-start sm:self-auto">
+                    <Lock className="w-3 h-3 text-slate-500" />
+                    <span>Unlocks after {group.prevSlotName || 'previous'} handover to {destLab.name} is complete</span>
+                  </span>
+                </div>
+
+                <div className="p-3 bg-white border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{group.stops.length} Collection Stops Queued for {group.timeSlot}:</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {group.stops.map((s, idx) => `Stop ${idx + 1}: ${s.stopName}`).join(' → ')} → Drop Destination: <strong>{destLab.name}</strong>
+                    </p>
+                  </div>
+
+                  <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-md flex items-center gap-1.5 shrink-0">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Pending current round completion</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div
               key={group.key}
-              className="border border-slate-200 rounded-xl bg-slate-50/50 p-3 sm:p-4.5 space-y-3.5 shadow-2xs"
+              className={`border rounded-xl p-3 sm:p-4.5 space-y-3.5 shadow-2xs transition-all ${
+                isActive
+                  ? 'border-sky-300 bg-white ring-2 ring-sky-200/60 shadow-sm'
+                  : 'border-slate-200 bg-slate-50/50'
+              }`}
             >
               {/* Slot Run Header */}
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 rounded-md font-mono font-bold text-xs bg-sky-100 text-sky-900 border border-sky-300 flex items-center gap-1.5 shadow-2xs">
-                    <Clock className="w-3.5 h-3.5 text-sky-700" />
+                  <span
+                    className={`px-2.5 py-1 rounded-md font-mono font-bold text-xs flex items-center gap-1.5 shadow-2xs ${
+                      isActive
+                        ? 'bg-sky-600 text-white'
+                        : isDelivered
+                        ? 'bg-emerald-700 text-white'
+                        : 'bg-slate-800 text-white'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
                     <span>Slot: {group.timeSlot}</span>
                   </span>
                   <h4 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-slate-500" />
                     <span>{group.routeName}</span>
                   </h4>
+                  {isActive && (
+                    <span className="text-[10px] font-bold text-sky-800 bg-sky-100 border border-sky-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                      ● Active Round
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 text-xs">

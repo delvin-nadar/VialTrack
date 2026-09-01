@@ -295,7 +295,22 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     tasks.filter(filterTask).forEach((t) => combinedTasks.set(t.id, t));
     liveTasks.filter(filterTask).forEach((t) => combinedTasks.set(t.id, t));
-    return Array.from(combinedTasks.values());
+    
+    const parseSlotMinutes = (slot?: string): number => {
+      if (!slot) return 0;
+      const match = slot.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+      if (!match) return 0;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const meridiem = match[3]?.toUpperCase();
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+      return hours * 60 + minutes;
+    };
+
+    const taskList = Array.from(combinedTasks.values());
+    taskList.sort((a, b) => parseSlotMinutes(a.timeSlot) - parseSlotMinutes(b.timeSlot));
+    return taskList;
   }, [tasks, liveTasks, todayStr, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName]);
 
   // Build sequential scheduled stops for "My Daily Rounds Schedule"
@@ -478,12 +493,25 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   // Find currently active task strictly from this rider's tasks
   const activeTask = useMemo(() => {
-    return (
-      todayRiderTasks.find((t) => t.id === activeTaskId) ||
-      todayRiderTasks.find((t) => ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)) ||
-      todayRiderTasks[0] ||
-      null
+    // 1. Explicitly selected task if not delivered
+    const explicit = todayRiderTasks.find((t) => t.id === activeTaskId);
+    if (explicit && explicit.status !== 'delivered' && (explicit.destination as any)?.status !== 'delivered') {
+      return explicit;
+    }
+    // 2. Any active in-progress task (started, at_stop, picked_up, in_transit)
+    const inProgress = todayRiderTasks.find((t) =>
+      ['started', 'at_stop', 'picked_up', 'in_transit'].includes(t.status)
     );
+    if (inProgress) return inProgress;
+
+    // 3. First non-delivered pending task chronologically
+    const nextPending = todayRiderTasks.find(
+      (t) => t.status !== 'delivered' && t.status !== 'completed' && (t.destination as any)?.status !== 'delivered'
+    );
+    if (nextPending) return nextPending;
+
+    // 4. Fallback to first task if all are delivered
+    return todayRiderTasks[0] || null;
   }, [todayRiderTasks, activeTaskId]);
 
   const activeRoute = useMemo(() => {
