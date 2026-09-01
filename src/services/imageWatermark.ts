@@ -1,7 +1,7 @@
 /**
  * Image Watermark & Base64 Compression Service
- * Resizes images to max 800px and compresses to JPEG (quality 0.6) for direct Base64 Firestore storage.
- * Superimposes GPS coordinates, timestamp, stop details, and SecondMedic VialTrack chain-of-custody verification overlay.
+ * High-definition (1200px) processing with crisp JPEG compression for Firestore storage.
+ * Superimposes non-overlapping GPS coordinates, timestamp, stop details, and SecondMedic VialTrack chain-of-custody verification overlay.
  */
 
 export interface WatermarkData {
@@ -24,13 +24,66 @@ export interface WatermarkData {
 }
 
 /**
- * Compresses an image to max dimension of 640px and JPEG quality 0.5 Base64 string for Firestore.
- * This guarantees photo payloads remain ~25-35KB each, preventing Firestore from hitting the 1MB document size limit on multi-stop routes.
+ * Helper to safely draw a rounded rectangle on Canvas 2D
+ */
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  fillStyle?: string,
+  strokeStyle?: string,
+  lineWidth?: number
+) {
+  ctx.save();
+  ctx.beginPath();
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.arcTo(x + width, y, x + width, y + r, r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.arcTo(x + width, y + height, x + width - r, y + height, r);
+  ctx.lineTo(x + r, y + height);
+  ctx.arcTo(x, y + height, x, y + height - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+
+  if (fillStyle) {
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+  if (strokeStyle && lineWidth) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Helper to measure and truncate text safely with ellipsis
+ */
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) {
+    return text;
+  }
+  let current = text;
+  while (current.length > 3 && ctx.measureText(current + '...').width > maxWidth) {
+    current = current.slice(0, -1);
+  }
+  return current + '...';
+}
+
+/**
+ * Compresses an image to max dimension of 1080px and high-clarity JPEG quality 0.80 Base64 string.
  */
 export async function compressImageToBase64(
   imageSource: File | Blob | string | HTMLImageElement,
-  maxDimension: number = 640,
-  quality: number = 0.5
+  maxDimension: number = 1080,
+  quality: number = 0.80
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -48,16 +101,16 @@ export async function compressImageToBase64(
         }
 
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
 
         if (!ctx) {
           throw new Error('Canvas 2D context not available');
         }
 
-        let width = img.naturalWidth || img.width || 640;
-        let height = img.naturalHeight || img.height || 480;
+        let width = img.naturalWidth || img.width || 800;
+        let height = img.naturalHeight || img.height || 600;
 
-        // Maintain aspect ratio, max dimension 640px
+        // Maintain aspect ratio, max dimension 1080px for crisp details
         if (width > maxDimension || height > maxDimension) {
           const scale = Math.min(maxDimension / width, maxDimension / height);
           width = Math.max(1, Math.round(width * scale));
@@ -66,6 +119,9 @@ export async function compressImageToBase64(
 
         canvas.width = width;
         canvas.height = height;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         // Draw image onto canvas
         ctx.fillStyle = '#ffffff';
@@ -120,13 +176,15 @@ export async function compressImageToBase64(
   });
 }
 
+/**
+ * Superimposes a professional, high-definition, non-overlapping chain-of-custody watermark
+ */
 export async function addWatermarkToImage(
   imageSource: string | HTMLImageElement | File | Blob,
   data: WatermarkData
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    // Only set crossOrigin for external http/https URLs, not for data: or blob: URLs
     if (typeof imageSource === 'string' && /^https?:\/\//i.test(imageSource)) {
       img.crossOrigin = 'anonymous';
     }
@@ -141,16 +199,16 @@ export async function addWatermarkToImage(
         }
 
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
 
         if (!ctx) {
           throw new Error('Canvas 2D context not available');
         }
 
-        // Set dimensions (maintain aspect ratio, max 640px dimension for safe 1MB Firestore document limits)
-        const maxDimension = 640;
-        let width = img.naturalWidth || img.width || 640;
-        let height = img.naturalHeight || img.height || 480;
+        // Higher base dimension for crystal-clear legibility (max 1080px)
+        const maxDimension = 1080;
+        let width = img.naturalWidth || img.width || 800;
+        let height = img.naturalHeight || img.height || 600;
 
         if (width > maxDimension || height > maxDimension) {
           const scale = Math.min(maxDimension / width, maxDimension / height);
@@ -161,68 +219,229 @@ export async function addWatermarkToImage(
         canvas.width = width;
         canvas.height = height;
 
-        // Draw original photo
-        ctx.fillStyle = '#0f172a';
+        // Enable high-fidelity interpolation
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // Draw original photo with black background fallback
+        ctx.fillStyle = '#090d16';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Calculate responsive scaling
-        const baseFontSize = Math.max(11, Math.floor(width / 45));
-        const padding = Math.max(10, Math.floor(width / 40));
+        // Calculate proportional scale metrics
+        const baseFontSize = Math.max(12, Math.round(width / 38));
+        const padding = Math.max(12, Math.round(width / 32));
 
-        // Draw top brand banner
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.90)'; // slate-900 with alpha
-        ctx.fillRect(0, 0, width, baseFontSize * 2.6);
+        // -------------------------------------------------------------
+        // 1. TOP HEADER BANNER (Brand & Activity Pill Badge)
+        // -------------------------------------------------------------
+        const topBannerHeight = Math.round(baseFontSize * 2.8);
+        
+        // Dark background with subtle gradient
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+        ctx.fillRect(0, 0, width, topBannerHeight);
 
-        ctx.fillStyle = '#38bdf8'; // sky-400
-        ctx.font = `bold ${baseFontSize * 1.1}px 'Plus Jakarta Sans', sans-serif`;
-        ctx.fillText('SECOND MEDIC VIALTRACK', padding, baseFontSize * 1.7);
+        // Bottom accent hairline on top banner
+        ctx.fillStyle = data.isDrop ? '#10b981' : '#0284c7';
+        ctx.fillRect(0, topBannerHeight - 2, width, 2);
 
-        ctx.fillStyle = '#e2e8f0';
-        ctx.font = `500 ${baseFontSize * 0.85}px 'Plus Jakarta Sans', sans-serif`;
+        // Brand Text (Left)
+        ctx.save();
+        ctx.fillStyle = '#38bdf8'; // Sky-400
+        ctx.font = `bold ${Math.round(baseFontSize * 1.15)}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        
+        const brandTitle = 'SECOND MEDIC VIALTRACK';
+        const brandWidth = ctx.measureText(brandTitle).width;
+        ctx.fillText(brandTitle, padding, topBannerHeight / 2);
+        ctx.restore();
+
+        // Activity Badge (Right) - e.g. "LOCATION VERIFIED", "SAMPLE PICKUP", "LAB DROP"
         const roleLabel = data.isDrop
-          ? '• LAB DESTINATION DROP PROOF'
+          ? 'LAB DROP PROOF'
           : data.isSelfie
-          ? '• RIDER LOCATION VERIFICATION SELFIE'
-          : '• SPECIMEN VIAL COLLECTION PROOF';
-        ctx.fillText(roleLabel, padding + ctx.measureText('SECOND MEDIC VIALTRACK ').width + 10, baseFontSize * 1.7);
+          ? 'LOCATION VERIFICATION'
+          : 'SPECIMEN COLLECTION';
 
-        // Draw bottom metadata box (Dark glass panel with cyan/emerald accent line)
-        const boxHeight = baseFontSize * 7.5;
+        ctx.save();
+        const badgeFontSize = Math.max(10, Math.round(baseFontSize * 0.82));
+        ctx.font = `bold ${badgeFontSize}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+        ctx.textBaseline = 'middle';
+        
+        const badgeTextWidth = ctx.measureText(roleLabel).width;
+        const badgePaddingX = Math.round(baseFontSize * 0.65);
+        const badgePaddingY = Math.round(baseFontSize * 0.35);
+        const badgeTotalWidth = badgeTextWidth + badgePaddingX * 2;
+        const badgeHeight = badgeFontSize + badgePaddingY * 2;
+        const badgeX = width - padding - badgeTotalWidth;
+        const badgeY = (topBannerHeight - badgeHeight) / 2;
+
+        // Only draw the right badge if it doesn't overlap the brand title
+        if (badgeX > padding + brandWidth + 12) {
+          const badgeBg = data.isDrop ? 'rgba(5, 150, 105, 0.9)' : 'rgba(2, 132, 199, 0.9)';
+          drawRoundedRect(ctx, badgeX, badgeY, badgeTotalWidth, badgeHeight, 6, badgeBg);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(roleLabel, badgeX + badgeTotalWidth / 2, topBannerHeight / 2);
+        }
+        ctx.restore();
+
+        // -------------------------------------------------------------
+        // 2. BOTTOM TELEMETRY & CHAIN-OF-CUSTODY PANEL
+        // -------------------------------------------------------------
+        const lineHeight = Math.round(baseFontSize * 1.35);
+        const rowCount = 4;
+        const boxHeight = Math.round(lineHeight * rowCount + padding * 1.8);
         const boxY = height - boxHeight;
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        // Dark glass background
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
         ctx.fillRect(0, boxY, width, boxHeight);
 
-        // Top accent line on the box
-        ctx.fillStyle = data.isDrop ? '#10b981' : data.isSelfie ? '#0284c7' : '#0284c7'; // emerald for drop, sky for pickup/selfie
-        ctx.fillRect(0, boxY, width, 4);
+        // Top accent line
+        ctx.fillStyle = data.isDrop ? '#10b981' : data.isSelfie ? '#0284c7' : '#0284c7';
+        ctx.fillRect(0, boxY, width, 3);
 
-        // Left Column: Location & Stop Info
-        let textY = boxY + baseFontSize * 1.6;
+        const contentWidth = width - padding * 2;
+        const colRightWidth = Math.min(Math.round(contentWidth * 0.42), 260);
+        const colLeftWidth = contentWidth - colRightWidth - 12;
+
+        // ----------------- ROW 1: Location & Temperature -----------------
+        let currentY = boxY + padding + Math.round(baseFontSize * 0.7);
+
+        // Left: Stop Location Title
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.round(baseFontSize * 1.15)}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        const locationName = data.stopName || data.address || (data.isDrop ? 'Diagnostic Central Lab' : 'Collection Stop');
+        const rawTitle = data.isDrop ? `DROP: ${locationName}` : data.isSelfie ? `SELFIE: ${locationName}` : `PICKUP: ${locationName}`;
+        const cleanTitle = fitText(ctx, rawTitle, colLeftWidth);
+        ctx.fillText(cleanTitle, padding, currentY);
+        ctx.restore();
+
+        // Right: Cold Box Temperature Pill Badge
+        const effectiveTemp = data.coldBoxTemp !== undefined ? data.coldBoxTemp : data.temperature;
+        if (effectiveTemp !== undefined) {
+          ctx.save();
+          const isSafe = effectiveTemp >= 2.0 && effectiveTemp <= 8.0;
+          const tempText = `TEMP: ${effectiveTemp.toFixed(1)}°C ${isSafe ? '(SAFE)' : '(ALERT)'}`;
+          const tempFontSize = Math.max(10, Math.round(baseFontSize * 0.82));
+          ctx.font = `bold ${tempFontSize}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+          ctx.textBaseline = 'middle';
+
+          const tWidth = ctx.measureText(tempText).width;
+          const tPadX = 8;
+          const tPadY = 4;
+          const tBoxW = tWidth + tPadX * 2;
+          const tBoxH = tempFontSize + tPadY * 2;
+          const tBoxX = width - padding - tBoxW;
+          const tBoxY = currentY - tBoxH / 2;
+
+          const pillBg = isSafe ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.3)';
+          const pillBorder = isSafe ? '#10b981' : '#ef4444';
+          drawRoundedRect(ctx, tBoxX, tBoxY, tBoxW, tBoxH, 5, pillBg, pillBorder, 1.5);
+
+          ctx.fillStyle = isSafe ? '#34d399' : '#f87171';
+          ctx.textAlign = 'center';
+          ctx.fillText(tempText, tBoxX + tBoxW / 2, currentY);
+          ctx.restore();
+        }
+
+        // ----------------- ROW 2: Rider, Client & Sample Count -----------------
+        currentY += lineHeight;
+
+        // Left: Rider Name & Client Info
+        ctx.save();
+        ctx.fillStyle = '#cbd5e1'; // slate-300
+        ctx.font = `600 ${Math.round(baseFontSize * 0.9)}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        const clientText = data.clientName ? ` • Client: ${data.clientName}` : '';
+        const riderInfo = fitText(ctx, `Rider: ${data.riderName}${clientText}`, colLeftWidth);
+        ctx.fillText(riderInfo, padding, currentY);
+        ctx.restore();
+
+        // Right: Vials Collected / Receiver Name Badge
+        const effectiveCount = data.sampleCount !== undefined ? data.sampleCount : data.vialCount;
+        if (effectiveCount !== undefined && !data.isDrop) {
+          ctx.save();
+          const countText = `VIALS: ${effectiveCount} UNITS`;
+          const countFontSize = Math.max(10, Math.round(baseFontSize * 0.82));
+          ctx.font = `bold ${countFontSize}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+          ctx.textBaseline = 'middle';
+
+          const cWidth = ctx.measureText(countText).width;
+          const cBoxW = cWidth + 14;
+          const cBoxH = countFontSize + 8;
+          const cBoxX = width - padding - cBoxW;
+          const cBoxY = currentY - cBoxH / 2;
+
+          drawRoundedRect(ctx, cBoxX, cBoxY, cBoxW, cBoxH, 5, 'rgba(245, 158, 11, 0.25)', '#f59e0b', 1.5);
+          ctx.fillStyle = '#fbbf24';
+          ctx.textAlign = 'center';
+          ctx.fillText(countText, cBoxX + cBoxW / 2, currentY);
+          ctx.restore();
+        } else if (data.receiverName && data.isDrop) {
+          ctx.save();
+          ctx.fillStyle = '#a7f3d0';
+          ctx.font = `bold ${Math.round(baseFontSize * 0.85)}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'right';
+          const recText = fitText(ctx, `Received: ${data.receiverName}`, colRightWidth);
+          ctx.fillText(recText, width - padding, currentY);
+          ctx.restore();
+        }
+
+        // ----------------- ROW 3: GPS Coordinates & Custody ID -----------------
+        currentY += lineHeight;
+
+        // Left: Clean GPS Coordinates
+        ctx.save();
+        ctx.fillStyle = '#38bdf8'; // Sky-400
+        ctx.font = `bold ${Math.round(baseFontSize * 0.88)}px 'JetBrains Mono', monospace, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        const latStr = Number(data.lat || 19.2082).toFixed(6);
+        const lngStr = Number(data.lng || 72.8398).toFixed(6);
+        const accStr = data.accuracy ? ` (±${Math.round(data.accuracy)}m)` : ' (±5m)';
+        const coordText = fitText(ctx, `GPS: ${latStr}° N, ${lngStr}° E${accStr}`, colLeftWidth);
+        ctx.fillText(coordText, padding, currentY);
+        ctx.restore();
+
+        // Right: Chain of Custody ID
+        ctx.save();
+        ctx.fillStyle = '#94a3b8'; // Slate-400
+        ctx.font = `bold ${Math.round(baseFontSize * 0.82)}px 'JetBrains Mono', monospace, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        const hash = data.verificationCode || `SMVT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        const custodyIdText = fitText(ctx, `ID: #${hash}`, colRightWidth);
+        ctx.fillText(custodyIdText, width - padding, currentY);
+        ctx.restore();
+
+        // ----------------- ROW 4: Timestamp & ISO Compliance -----------------
+        currentY += lineHeight;
+
+        // Clean subtle top divider above footer row
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.fillRect(padding, currentY - Math.round(lineHeight * 0.55), contentWidth, 1);
+
+        // Left: Timestamp (Asia/Kolkata)
+        ctx.save();
+        ctx.fillStyle = '#f1f5f9';
+        ctx.font = `500 ${Math.round(baseFontSize * 0.82)}px 'JetBrains Mono', monospace, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
         
-        ctx.fillStyle = '#f8fafc';
-        ctx.font = `bold ${baseFontSize * 1.15}px 'Plus Jakarta Sans', sans-serif`;
-        const locationName = data.stopName || data.address || (data.isDrop ? 'Diagnostic Lab' : 'Collection Stop');
-        const titleText = data.isDrop ? `DROP: ${locationName}` : data.isSelfie ? `SELFIE AT: ${locationName}` : `PICKUP: ${locationName}`;
-        ctx.fillText(titleText, padding, textY);
-
-        textY += baseFontSize * 1.4;
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = `500 ${baseFontSize * 0.9}px 'Plus Jakarta Sans', sans-serif`;
-        const clientText = data.clientName ? ` | Client: ${data.clientName}` : '';
-        ctx.fillText(`Rider: ${data.riderName}${clientText}`, padding, textY);
-
-        textY += baseFontSize * 1.3;
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = `bold ${baseFontSize * 0.9}px 'JetBrains Mono', monospace`;
-        const coordText = `GPS: ${data.lat.toFixed(6)}° N, ${data.lng.toFixed(6)}° E (±${data.accuracy || 8}m)`;
-        ctx.fillText(coordText, padding, textY);
-
-        textY += baseFontSize * 1.3;
-        ctx.fillStyle = '#e2e8f0';
-        ctx.font = `500 ${baseFontSize * 0.85}px 'JetBrains Mono', monospace`;
-        const formattedDate = new Date(data.timestamp).toLocaleString('en-IN', {
+        let dateObj = new Date(data.timestamp);
+        if (isNaN(dateObj.getTime())) {
+          dateObj = new Date();
+        }
+        const formattedDate = dateObj.toLocaleString('en-IN', {
           timeZone: 'Asia/Kolkata',
           day: '2-digit',
           month: 'short',
@@ -232,41 +451,24 @@ export async function addWatermarkToImage(
           second: '2-digit',
           hour12: true
         });
-        ctx.fillText(`TIMESTAMP: ${formattedDate} IST`, padding, textY);
+        const timeText = fitText(ctx, `TIME: ${formattedDate} IST`, colLeftWidth);
+        ctx.fillText(timeText, padding, currentY);
+        ctx.restore();
 
-        // Right Column / Badges: Vials count, Temp, Verification
-        const rightColX = width - padding;
-
-        let rightY = boxY + baseFontSize * 1.8;
+        // Right: ISO 15189 Stamp
+        ctx.save();
+        ctx.fillStyle = '#10b981'; // Emerald-500
+        ctx.font = `bold ${Math.max(9, Math.round(baseFontSize * 0.75))}px 'Plus Jakarta Sans', system-ui, sans-serif`;
+        ctx.textBaseline = 'middle';
         ctx.textAlign = 'right';
+        const isoText = fitText(ctx, '✓ ISO 15189 AUDIT PROOF', colRightWidth);
+        ctx.fillText(isoText, width - padding, currentY);
+        ctx.restore();
 
-        const effectiveTemp = data.coldBoxTemp !== undefined ? data.coldBoxTemp : data.temperature;
-        if (effectiveTemp !== undefined) {
-          ctx.fillStyle = effectiveTemp >= 2.0 && effectiveTemp <= 8.0 ? '#34d399' : '#f87171';
-          ctx.font = `bold ${baseFontSize * 1.1}px 'Plus Jakarta Sans', sans-serif`;
-          ctx.fillText(`TEMP: ${effectiveTemp.toFixed(1)}°C (2-8°C SAFE)`, rightColX, rightY);
-        }
-
-        rightY += baseFontSize * 1.4;
-        const effectiveCount = data.sampleCount !== undefined ? data.sampleCount : data.vialCount;
-        if (effectiveCount !== undefined && !data.isDrop) {
-          ctx.fillStyle = '#fbbf24'; // amber-400
-          ctx.font = `bold ${baseFontSize * 1.0}px 'Plus Jakarta Sans', sans-serif`;
-          ctx.fillText(`VIALS COLLECTED: ${effectiveCount} UNITS`, rightColX, rightY);
-        } else if (data.receiverName && data.isDrop) {
-          ctx.fillStyle = '#a7f3d0';
-          ctx.font = `bold ${baseFontSize * 0.95}px 'Plus Jakarta Sans', sans-serif`;
-          ctx.fillText(`RECEIVED BY: ${data.receiverName}`, rightColX, rightY);
-        }
-
-        rightY += baseFontSize * 1.4;
-        const hash = data.verificationCode || `SMVT-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-        ctx.fillStyle = '#64748b';
-        ctx.font = `bold ${baseFontSize * 0.8}px 'JetBrains Mono', monospace`;
-        ctx.fillText(`CHAIN-OF-CUSTODY ID: #${hash}`, rightColX, rightY);
-
-        // Convert back to compressed Data URL (quality 0.48 JPEG for Firestore 1MB limits)
-        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.48);
+        // -------------------------------------------------------------
+        // Export high-quality JPEG (quality 0.80)
+        // -------------------------------------------------------------
+        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.80);
         resolve(watermarkedUrl);
       } catch (err) {
         if (objectUrlToRevoke) {

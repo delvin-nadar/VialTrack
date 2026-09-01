@@ -673,12 +673,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       e.target.value = '';
     }
 
+    const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
+    const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
+
     try {
-      // Single-pass direct file watermark and compression (640px max, quality 0.48 JPEG)
+      // High-definition watermark with dynamic sizing & zero overlap
       const watermarked = await addWatermarkToImage(file, {
         timestamp: new Date().toISOString(),
-        lat: 19.2082,
-        lng: 72.8398,
+        lat: stopLat,
+        lng: stopLng,
         address:
           photoType === 'drop'
             ? activeTask?.destination?.name || activeTask?.destination?.address || 'Processing Facility'
@@ -702,7 +705,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     } catch (err) {
       console.warn('Watermark generation error, applying fallback compression:', err);
       try {
-        const fallbackBase64 = await compressImageToBase64(file, 640, 0.5);
+        const fallbackBase64 = await compressImageToBase64(file, 1080, 0.80);
         if (photoType === 'photo1') setStopPhoto(fallbackBase64);
         else if (photoType === 'photo2') setStopPhoto2(fallbackBase64);
         else setStopPhoto(fallbackBase64);
@@ -727,11 +730,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         : `${vialCount} Specimen Vials • ${currentStop?.stopName || 'Stop'}`
     );
 
+    const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
+    const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
+
     try {
       const watermarked = await addWatermarkToImage(generated, {
         timestamp: new Date().toISOString(),
-        lat: 19.2082,
-        lng: 72.8398,
+        lat: stopLat,
+        lng: stopLng,
         address:
           photoType === 'drop'
             ? activeTask?.destination.name || activeTask?.destination.address || 'Processing Facility'
