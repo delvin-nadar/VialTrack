@@ -22,21 +22,32 @@ export async function fetchRoadPolyline(
     return coordinates || [];
   }
 
-  // Filter and sanitize coordinates to valid numeric lat/lng
-  const validCoords = coordinates.filter(
-    (c) =>
-      Array.isArray(c) &&
-      c.length === 2 &&
-      typeof c[0] === 'number' &&
-      typeof c[1] === 'number' &&
-      !isNaN(c[0]) &&
-      !isNaN(c[1]) &&
-      isFinite(c[0]) &&
-      isFinite(c[1])
-  );
+  // Filter and sanitize coordinates to valid numeric lat/lng and eliminate (0,0) or uninitialized coords
+  const validCoords = (coordinates || [])
+    .filter(
+      (c) =>
+        Array.isArray(c) &&
+        c.length === 2 &&
+        typeof c[0] === 'number' &&
+        typeof c[1] === 'number' &&
+        !isNaN(c[0]) &&
+        !isNaN(c[1]) &&
+        isFinite(c[0]) &&
+        isFinite(c[1]) &&
+        !(c[0] === 0 && c[1] === 0) &&
+        Math.abs(c[0]) > 0.01 &&
+        Math.abs(c[1]) > 0.01
+    )
+    .map(([lat, lng]) => {
+      // Auto-fix inverted coordinates (e.g., GeoJSON [lng, lat] vs Leaflet [lat, lng])
+      if (lat > 50 && lng < 40) {
+        return [lng, lat] as [number, number];
+      }
+      return [lat, lng] as [number, number];
+    });
 
   if (validCoords.length < 2) {
-    return coordinates;
+    return validCoords;
   }
 
   // Cache key based on rounded coordinate precision (~6 decimal places)

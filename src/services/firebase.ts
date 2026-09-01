@@ -74,8 +74,7 @@ export const resolvedFirebaseConfig = {
     '',
   projectId:
     getEnv(['VITE_FIREBASE_PROJECT_ID', 'FIREBASE_PROJECT_ID', 'VITE_PROJECT_ID', 'PROJECT_ID']) ||
-    fallbackConfig.projectId ||
-    '',
+    'secondmedic-vialtrack',
   storageBucket:
     getEnv(['VITE_FIREBASE_STORAGE_BUCKET', 'FIREBASE_STORAGE_BUCKET', 'VITE_STORAGE_BUCKET', 'STORAGE_BUCKET']) ||
     fallbackConfig.storageBucket ||
@@ -101,13 +100,16 @@ export const resolvedFirestoreDatabaseId: string =
     'VITE_FIREBASE_FIRESTORE_DATABASE_ID',
     'FIREBASE_FIRESTORE_DATABASE_ID',
     'VITE_FIRESTORE_DATABASE_ID'
-  ]) || fallbackConfig.firestoreDatabaseId || 'ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829';
+  ]) || '(default)';
 
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
-// Connect explicitly to the active named instance
-export const db = getFirestore(app, "ai-studio-secondmedicvialt-672ab7fa-5c2a-4a7b-9439-899ee4ab7829");
+// Connect to Firestore instance for secondmedic-vialtrack
+export const db =
+  resolvedFirestoreDatabaseId && resolvedFirestoreDatabaseId !== '(default)'
+    ? getFirestore(app, resolvedFirestoreDatabaseId)
+    : getFirestore(app);
 export const auth = getAuth(app);
 
 export { GeoPoint };

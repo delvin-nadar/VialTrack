@@ -135,18 +135,46 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   // Construct Road Waypoints
   const waypoints = useMemo(() => {
     const pts: [number, number][] = [];
-    if (riderCoords) {
+    const isValidCoord = (lat: any, lng: any): boolean => {
+      const numLat = Number(lat);
+      const numLng = Number(lng);
+      return (
+        !isNaN(numLat) &&
+        !isNaN(numLng) &&
+        isFinite(numLat) &&
+        isFinite(numLng) &&
+        !(numLat === 0 && numLng === 0) &&
+        Math.abs(numLat) > 0.01 &&
+        Math.abs(numLng) > 0.01
+      );
+    };
+
+    if (riderCoords && isValidCoord(riderCoords[0], riderCoords[1])) {
       pts.push(riderCoords);
     }
-    stops.forEach((s) => {
-      const lat = s.lat ?? s.latitude;
-      const lng = s.lng ?? s.longitude;
-      if (typeof lat === 'number' && typeof lng === 'number') {
-        pts.push([lat, lng]);
+    (stops || []).forEach((s) => {
+      const lat = s?.lat ?? (s as any)?.latitude;
+      const lng = s?.lng ?? (s as any)?.longitude;
+      if (isValidCoord(lat, lng)) {
+        let numLat = Number(lat);
+        let numLng = Number(lng);
+        if (numLat > 50 && numLng < 40) {
+          const temp = numLat;
+          numLat = numLng;
+          numLng = temp;
+        }
+        pts.push([numLat, numLng]);
       }
     });
-    if (destination && typeof destination.lat === 'number' && typeof destination.lng === 'number') {
-      pts.push([destination.lat, destination.lng]);
+    if (destination && isValidCoord(destination.lat, destination.lng)) {
+      let destLat = Number(destination.lat);
+      let destLng = Number(destination.lng);
+      if (destLat > 50 && destLng < 40) {
+        const temp = destLat;
+        destLat = destLng;
+        destLng = temp;
+      }
+      pts.push([destLat, destLng]);
     }
     return pts;
   }, [riderCoords, stops, destination]);
@@ -290,65 +318,78 @@ export const LiveMap: React.FC<LiveMapProps> = ({
     let isCancelled = false;
 
     if (waypoints.length >= 2) {
-      const coordString = waypoints.map((pt) => `${pt[1]},${pt[0]}`).join(';');
-      const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson`;
+      const cleanWaypoints = waypoints.filter(
+        (pt) =>
+          Array.isArray(pt) &&
+          pt.length === 2 &&
+          !isNaN(pt[0]) &&
+          !isNaN(pt[1]) &&
+          !(pt[0] === 0 && pt[1] === 0) &&
+          Math.abs(pt[0]) > 0.01 &&
+          Math.abs(pt[1]) > 0.01
+      );
 
-      fetch(url)
-        .then((res) => {
-          if (!res.ok) throw new Error('OSRM routing network error');
-          return res.json();
-        })
-        .then((data) => {
-          if (isCancelled || !polylinesLayer) return;
+      if (cleanWaypoints.length >= 2) {
+        const coordString = cleanWaypoints.map((pt) => `${pt[1]},${pt[0]}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson`;
 
-          let roadPoints: [number, number][] = [];
-          if (data?.routes && data.routes.length > 0) {
-            const route = data.routes[0];
-            roadPoints = route.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+        fetch(url)
+          .then((res) => {
+            if (!res.ok) throw new Error('OSRM routing network error');
+            return res.json();
+          })
+          .then((data) => {
+            if (isCancelled || !polylinesLayer) return;
 
-            const distanceKm = (route.distance / 1000).toFixed(1);
-            const durationMin = Math.round(route.duration / 60);
+            let roadPoints: [number, number][] = [];
+            if (data?.routes && data.routes.length > 0) {
+              const route = data.routes[0];
+              roadPoints = route.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
 
-            const now = new Date();
-            now.setMinutes(now.getMinutes() + durationMin);
-            const etaTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+              const distanceKm = (route.distance / 1000).toFixed(1);
+              const durationMin = Math.round(route.duration / 60);
 
-            setRouteStats({ distanceKm, durationMin, etaTime });
-          } else {
-            roadPoints = waypoints;
-          }
+              const now = new Date();
+              now.setMinutes(now.getMinutes() + durationMin);
+              const etaTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
-          if (roadPoints.length > 0) {
-            // Glow border polyline
-            L.polyline(roadPoints, {
-              color: '#0284c7',
-              weight: 6,
-              opacity: 0.3,
-              lineCap: 'round',
-              lineJoin: 'round'
-            }).addTo(polylinesLayer);
+              setRouteStats({ distanceKm, durationMin, etaTime });
+            } else {
+              roadPoints = cleanWaypoints;
+            }
 
-            // Main sharp road route
-            L.polyline(roadPoints, {
+            if (roadPoints.length > 0) {
+              // Glow border polyline
+              L.polyline(roadPoints, {
+                color: '#0284c7',
+                weight: 6,
+                opacity: 0.3,
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(polylinesLayer);
+
+              // Main sharp road route
+              L.polyline(roadPoints, {
+                color: '#0369a1',
+                weight: 3.5,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(polylinesLayer);
+            }
+          })
+          .catch(() => {
+            if (isCancelled || !polylinesLayer) return;
+            // Fallback direct waypoints line if offline or OSRM unavailable
+            L.polyline(cleanWaypoints, {
               color: '#0369a1',
               weight: 3.5,
-              opacity: 0.95,
+              opacity: 0.85,
               lineCap: 'round',
               lineJoin: 'round'
             }).addTo(polylinesLayer);
-          }
-        })
-        .catch(() => {
-          if (isCancelled || !polylinesLayer) return;
-          // Fallback direct waypoints line if offline
-          L.polyline(waypoints, {
-            color: '#0369a1',
-            weight: 3.5,
-            opacity: 0.85,
-            lineCap: 'round',
-            lineJoin: 'round'
-          }).addTo(polylinesLayer);
-        });
+          });
+      }
     } else {
       setRouteStats(null);
     }

@@ -473,7 +473,9 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
           // Leg 2: Stops -> Delivery Lab
           if (pickupPoint && deliveryPoint) {
-            const intermediateStops: [number, number][] = taskStops.map((s) => [Number(s.lat), Number(s.lng)] as [number, number]);
+            const intermediateStops: [number, number][] = (taskStops || [])
+              .filter((s) => s && s.lat && s.lng && Number(s.lat) !== 0 && Number(s.lng) !== 0 && !isNaN(Number(s.lat)) && !isNaN(Number(s.lng)))
+              .map((s) => [Number(s.lat), Number(s.lng)] as [number, number]);
             const labRoutePoints: [number, number][] = intermediateStops.length > 0
               ? [...intermediateStops, deliveryPoint]
               : [pickupPoint, deliveryPoint];
@@ -495,12 +497,19 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
           // Also resolve full continuous road loop
           if (pickupPoint && deliveryPoint) {
+            const validStops: [number, number][] = (taskStops || [])
+              .filter((s) => s && s.lat && s.lng && Number(s.lat) !== 0 && Number(s.lng) !== 0 && !isNaN(Number(s.lat)) && !isNaN(Number(s.lng)))
+              .map((s) => [Number(s.lat), Number(s.lng)] as [number, number]);
+
             const fullPoints: [number, number][] = [
               riderPoint,
-              ...(taskStops.map((s) => [Number(s.lat), Number(s.lng)] as [number, number])),
+              ...validStops,
               deliveryPoint
-            ];
-            fetchRoadPolyline(fullPoints).catch(() => {});
+            ].filter((pt) => pt && pt[0] !== 0 && pt[1] !== 0 && !isNaN(pt[0]) && !isNaN(pt[1]));
+
+            if (fullPoints.length >= 2) {
+              fetchRoadPolyline(fullPoints).catch(() => {});
+            }
           }
         }
       });
