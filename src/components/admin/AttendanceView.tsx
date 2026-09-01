@@ -110,60 +110,70 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ attendance, ride
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {attendance.map((rec) => (
-                <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-5 py-3.5 font-bold text-slate-900 flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center font-bold text-xs">
-                      {rec.riderName[0]}
-                    </div>
-                    <span>{rec.riderName}</span>
-                  </td>
-                  <td className="px-5 py-3.5 font-mono text-slate-700">{rec.date}</td>
-                  <td className="px-5 py-3.5">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        rec.status === 'on_duty' || rec.status === 'present'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : rec.status === 'completed'
-                          ? 'bg-sky-100 text-sky-800 border border-sky-200'
-                          : 'bg-amber-100 text-amber-800 border border-amber-200'
-                      }`}
-                    >
-                      {rec.status === 'on_duty' ? 'On Duty (Active)' : rec.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {rec.checkInTime ? (
-                      <div>
-                        <div className="font-mono text-slate-800 font-medium">
-                          {new Date(rec.checkInTime).toLocaleTimeString('en-IN')}
-                        </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 text-sky-700" />
-                          <span>{rec.checkInLocation?.address || 'Kandivali Hub, Mumbai'}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-slate-400 italic">N/A (Leave)</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 font-mono text-slate-700">
-                    {rec.checkOutTime ? (
-                      new Date(rec.checkOutTime).toLocaleTimeString('en-IN')
-                    ) : rec.status === 'on_duty' ? (
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        Active In Field
-                      </span>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 font-bold text-slate-900 font-mono">
-                    {rec.totalHours ? `${rec.totalHours.toFixed(1)} hrs` : '0.0 hrs'}
+              {attendance.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-slate-400">
+                    <UserCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-600">No attendance logs found.</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Rider check-in logs will appear in real time.</p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                attendance.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3.5 font-bold text-slate-900 flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center font-bold text-xs">
+                        {rec.riderName[0]}
+                      </div>
+                      <span>{rec.riderName}</span>
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-slate-700">{rec.date}</td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          rec.status === 'on_duty' || rec.status === 'present'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : rec.status === 'completed'
+                            ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {rec.status === 'on_duty' ? 'On Duty (Active)' : rec.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {rec.checkInTime ? (
+                        <div>
+                          <div className="font-mono text-slate-800 font-medium">
+                            {new Date(rec.checkInTime).toLocaleTimeString('en-IN')}
+                          </div>
+                          <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-sky-700" />
+                            <span>{rec.checkInLocation?.address || 'Kandivali Hub, Mumbai'}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic">N/A (Leave)</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-slate-700">
+                      {rec.checkOutTime ? (
+                        new Date(rec.checkOutTime).toLocaleTimeString('en-IN')
+                      ) : rec.status === 'on_duty' ? (
+                        <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Active In Field
+                        </span>
+                      ) : (
+                        'N/A'
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 font-bold text-slate-900 font-mono">
+                      {rec.totalHours ? `${rec.totalHours.toFixed(1)} hrs` : '0.0 hrs'}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

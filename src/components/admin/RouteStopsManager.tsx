@@ -26,6 +26,7 @@ import { Route, RouteStop } from '../../types';
 import { StorageService } from '../../services/storage';
 import { normalizeLatLng } from '../../utils/coordinates';
 import { fetchRoadPolyline } from '../../utils/routeGeometry';
+import { geocodeAddress } from '../../utils/geocoding';
 
 interface RouteStopsManagerProps {
   route: Route;
@@ -48,8 +49,8 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
     id: '',
     name: '',
     address: '',
-    lat: 19.1624,
-    lng: 72.8465,
+    lat: '' as any,
+    lng: '' as any,
     contactPerson: '',
     phone: '',
     avgPickupDurationMinutes: 10
@@ -59,6 +60,32 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
   // Drag and Drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState<boolean>(false);
+
+  const handleGeocodeStopAddress = async () => {
+    if (!stopForm.address && !stopForm.name) {
+      setFormError('Please enter a stop name or address to geocode.');
+      return;
+    }
+    setIsGeocoding(true);
+    setFormError(null);
+    try {
+      const coords = await geocodeAddress(`${stopForm.name}, ${stopForm.address}`);
+      if (coords) {
+        setStopForm(prev => ({
+          ...prev,
+          lat: coords.lat,
+          lng: coords.lng
+        }));
+      } else {
+        setFormError('Could not auto-resolve coordinates. Please enter latitude & longitude manually.');
+      }
+    } catch {
+      setFormError('Geocoding service unavailable. Please enter coordinates manually.');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
 
   // Leaflet map refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -359,8 +386,8 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       id: stop.id,
       name: stop.name,
       address: stop.address,
-      lat: stop.lat || 19.1624,
-      lng: stop.lng || 72.8465,
+      lat: stop.lat ?? '',
+      lng: stop.lng ?? '',
       contactPerson: stop.contactPerson || '',
       phone: stop.phone || '',
       avgPickupDurationMinutes: stop.avgPickupDurationMinutes || 10
@@ -373,12 +400,12 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
     setIsAddingStop(true);
     setStopForm({
       id: `stop-${Date.now()}-${route.stops.length + 1}`,
-      name: `Collection Center ${route.stops.length + 1}`,
-      address: 'Station Road, Western Suburbs, Mumbai',
-      lat: 19.1624,
-      lng: 72.8465,
-      contactPerson: 'OPD In-Charge',
-      phone: '+91 98200 00000',
+      name: '',
+      address: '',
+      lat: '' as any,
+      lng: '' as any,
+      contactPerson: '',
+      phone: '',
       avgPickupDurationMinutes: 10
     });
     setFormError(null);
@@ -809,51 +836,70 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
               </div>
 
               {/* Coordinates (Lat, Lng) & Duration */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Latitude *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    required
-                    value={stopForm.lat}
-                    onChange={(e) => setStopForm({ ...stopForm, lat: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono focus:bg-white focus:border-sky-700 focus:outline-hidden"
-                  />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Geographical Coordinates
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleGeocodeStopAddress}
+                    disabled={isGeocoding}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                  >
+                    <MapPin className="w-3 h-3 text-sky-600" />
+                    <span>{isGeocoding ? 'Pinning...' : 'Pin Coordinates from Address'}</span>
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Longitude *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    required
-                    value={stopForm.lng}
-                    onChange={(e) => setStopForm({ ...stopForm, lng: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono focus:bg-white focus:border-sky-700 focus:outline-hidden"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Est. Duration
-                  </label>
-                  <div className="relative">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Latitude *
+                    </label>
                     <input
                       type="number"
-                      min="2"
-                      max="60"
-                      value={stopForm.avgPickupDurationMinutes}
-                      onChange={(e) => setStopForm({ ...stopForm, avgPickupDurationMinutes: parseInt(e.target.value) || 10 })}
+                      step="any"
+                      required
+                      placeholder="e.g. 19.2082"
+                      value={stopForm.lat}
+                      onChange={(e) => setStopForm({ ...stopForm, lat: parseFloat(e.target.value) || 0 })}
                       className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono focus:bg-white focus:border-sky-700 focus:outline-hidden"
                     />
-                    <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 pointer-events-none">
-                      min
-                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Longitude *
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      placeholder="e.g. 72.8398"
+                      value={stopForm.lng}
+                      onChange={(e) => setStopForm({ ...stopForm, lng: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono focus:bg-white focus:border-sky-700 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Est. Duration
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="2"
+                        max="60"
+                        value={stopForm.avgPickupDurationMinutes}
+                        onChange={(e) => setStopForm({ ...stopForm, avgPickupDurationMinutes: parseInt(e.target.value) || 10 })}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono focus:bg-white focus:border-sky-700 focus:outline-hidden"
+                      />
+                      <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 pointer-events-none">
+                        min
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

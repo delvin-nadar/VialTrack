@@ -20,7 +20,8 @@ import {
   Search,
   Trash2,
   Clock,
-  Car
+  Car,
+  Briefcase
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { db } from '../../services/firebase';
@@ -47,6 +48,50 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
     password: string;
     portalUrl: string;
   } | null>(null);
+
+  const getEmploymentBadge = (rider: PickupBoy) => {
+    let empType = rider.employmentType;
+    if (!empType && rider.shiftTimings) {
+      const lower = rider.shiftTimings.toLowerCase();
+      if (lower.includes('part-time') || lower.includes('part time')) empType = 'part_time';
+      else if (lower.includes('stat') || lower.includes('demand')) empType = 'stat_on_demand';
+      else empType = 'full_time';
+    }
+    if (!empType) empType = 'full_time';
+
+    if (empType === 'part_time') {
+      return (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1">
+          <Briefcase className="w-3 h-3 text-purple-600" /> Part-Time
+        </span>
+      );
+    }
+    if (empType === 'stat_on_demand') {
+      return (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+          <Briefcase className="w-3 h-3 text-amber-600" /> STAT / On-Demand
+        </span>
+      );
+    }
+    return (
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 flex items-center gap-1">
+        <Briefcase className="w-3 h-3 text-sky-600" /> Full-Time
+      </span>
+    );
+  };
+
+  const getShiftPill = (rider: PickupBoy) => {
+    const timeText = (rider.shiftStart && rider.shiftEnd)
+      ? `${rider.shiftStart} - ${rider.shiftEnd}`
+      : (rider.shiftTimings || '08:00 AM - 04:00 PM');
+
+    return (
+      <span className="text-[10px] font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+        <Clock className="w-3 h-3 text-slate-500" />
+        <span>{timeText}</span>
+      </span>
+    );
+  };
 
   const handleDeleteRider = async (riderId: string, riderName: string) => {
     if (window.confirm(`Are you sure you want to remove rider "${riderName}" from the fleet?`)) {
@@ -174,6 +219,10 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                     <div>
                       <h4 className="font-bold text-slate-900 text-sm">{rider.name}</h4>
                       <p className="text-xs text-sky-700 font-mono font-medium">{rider.vehicleNumber}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        {getEmploymentBadge(rider)}
+                        {getShiftPill(rider)}
+                      </div>
                     </div>
                   </div>
 

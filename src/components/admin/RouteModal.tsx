@@ -3,17 +3,19 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Route, RouteStop, Client } from '../../types';
 import { normalizeLatLng } from '../../utils/coordinates';
+import { geocodeAddress } from '../../utils/geocoding';
+import { RouteStopItem } from './RouteStopItem';
 import {
   X,
   MapPin,
   Clock,
   Plus,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
   Building2,
   Compass,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles,
+  RefreshCw,
+  Navigation
 } from 'lucide-react';
 
 interface RouteModalProps {
@@ -31,53 +33,47 @@ export const RouteModal: React.FC<RouteModalProps> = ({
   client,
   initialRoute
 }) => {
-  const [name, setName] = useState(initialRoute?.name || 'Western Suburbs Specimen Loop');
-  const [description, setDescription] = useState(initialRoute?.description || 'Daily fixed-schedule cold-chain specimen intake');
-  const [timeSlots, setTimeSlots] = useState<string[]>(initialRoute?.timeSlots || ['10:00', '14:00', '18:00', '22:00']);
-  const [newSlotInput, setNewSlotInput] = useState('09:00');
+  const [name, setName] = useState(initialRoute?.name || '');
+  const [description, setDescription] = useState(initialRoute?.description || '');
+  const [timeSlots, setTimeSlots] = useState<string[]>(initialRoute?.timeSlots || []);
+  const [newSlotInput, setNewSlotInput] = useState('');
 
   const [destinationName, setDestinationName] = useState(
-    initialRoute?.destinationLab?.name || client.name || 'Lifecare Diagnostic Hub (Andheri West)'
+    initialRoute?.destinationLab?.name || client?.name || ''
   );
   const [destinationAddress, setDestinationAddress] = useState(
-    initialRoute?.destinationLab?.address || client.address || 'SV Road, Andheri West, Mumbai'
+    initialRoute?.destinationLab?.address || client?.address || ''
   );
   const [destinationLat, setDestinationLat] = useState<number | string>(
-    initialRoute?.destinationLab?.lat ?? client.lat ?? 19.1287852
+    initialRoute?.destinationLab?.lat ?? client?.lat ?? ''
   );
   const [destinationLng, setDestinationLng] = useState<number | string>(
-    initialRoute?.destinationLab?.lng ?? client.lng ?? 72.8294183
+    initialRoute?.destinationLab?.lng ?? client?.lng ?? ''
   );
   const [destinationContact, setDestinationContact] = useState(
-    initialRoute?.destinationLab?.contactPerson || client.contactPerson || 'Dr. Lab Coordinator'
+    initialRoute?.destinationLab?.contactPerson || client?.contactPerson || ''
   );
   const [destinationPhone, setDestinationPhone] = useState(
-    initialRoute?.destinationLab?.phone || client.phone || '+91 98200 33445'
+    initialRoute?.destinationLab?.phone || client?.phone || ''
   );
+  const [isGeocodingDest, setIsGeocodingDest] = useState(false);
+  const [destGeocodeMsg, setDestGeocodeMsg] = useState<string | null>(null);
 
   const [stops, setStops] = useState<RouteStop[]>(
     initialRoute?.stops || [
       {
-        id: `stop-${Date.now()}-1`,
-        name: 'Oscar Hospital (Kandivali West)',
-        address: 'Mathuradas Road, Kandivali West, Mumbai',
-        lat: 19.2082,
-        lng: 72.8398,
-        contactPerson: 'OPD Nurse Station',
-        phone: '+91 98201 11223',
+        id: `stop_${Date.now()}_0`,
+        stopIndex: 1,
         order: 1,
-        avgPickupDurationMinutes: 10
-      },
-      {
-        id: `stop-${Date.now()}-2`,
-        name: 'Oscar Hospital (Goregaon West)',
-        address: 'Station Road, Jawahar Nagar, Goregaon West, Mumbai',
-        lat: 19.1624,
-        lng: 72.8465,
-        contactPerson: 'Sample Collection Desk',
-        phone: '+91 98202 22334',
-        order: 2,
-        avgPickupDurationMinutes: 10
+        name: '',
+        address: '',
+        lat: '' as any,
+        lng: '' as any,
+        contactPerson: '',
+        phone: '',
+        estDurationMin: 10,
+        avgPickupDurationMinutes: 10,
+        status: 'pending'
       }
     ]
   );
@@ -237,18 +233,28 @@ export const RouteModal: React.FC<RouteModalProps> = ({
   };
 
   const handleAddStop = () => {
+    const nextIdx = stops.length;
     const newStop: RouteStop = {
-      id: `stop-${Date.now()}`,
-      name: `Collection Center ${stops.length + 1}`,
-      address: 'Mumbai, Maharashtra',
-      lat: 19.1624,
-      lng: 72.8465,
+      id: `stop_${Date.now()}_${nextIdx}`,
+      stopIndex: nextIdx + 1,
+      order: nextIdx + 1,
+      name: `Hospital Collection Center ${nextIdx + 1}`,
+      address: 'Station Road, Western Suburbs, Mumbai',
+      lat: 19.1860,
+      lng: 72.8485,
       contactPerson: 'OPD Lead',
       phone: '+91 98200 00000',
-      order: stops.length + 1,
-      avgPickupDurationMinutes: 10
+      estDurationMin: 10,
+      avgPickupDurationMinutes: 10,
+      status: 'pending'
     };
     setStops([...stops, newStop]);
+  };
+
+  const handleUpdateStop = (index: number, updated: Partial<RouteStop>) => {
+    const copy = [...stops];
+    copy[index] = { ...copy[index], ...updated };
+    setStops(copy);
   };
 
   const handleMoveStop = (index: number, dir: 'up' | 'down') => {
@@ -257,33 +263,73 @@ export const RouteModal: React.FC<RouteModalProps> = ({
     const copy = [...stops];
     const [moved] = copy.splice(index, 1);
     copy.splice(target, 0, moved);
-    setStops(copy.map((s, idx) => ({ ...s, order: idx + 1 })));
+    setStops(copy.map((s, idx) => ({ ...s, stopIndex: idx + 1, order: idx + 1 })));
   };
 
-  const handleDeleteStop = (id: string) => {
-    setStops(stops.filter((s) => s.id !== id).map((s, idx) => ({ ...s, order: idx + 1 })));
+  const handleDeleteStop = (index: number) => {
+    if (stops.length <= 1) return;
+    const filtered = stops.filter((_, idx) => idx !== index);
+    setStops(filtered.map((s, idx) => ({ ...s, stopIndex: idx + 1, order: idx + 1 })));
+  };
+
+  const handleGeocodeDestination = async () => {
+    const query = destinationAddress || destinationName;
+    if (!query) return;
+    setIsGeocodingDest(true);
+    try {
+      const res = await geocodeAddress(query, 99);
+      setDestinationLat(res.lat);
+      setDestinationLng(res.lng);
+      setDestGeocodeMsg(`Pinned: ${res.lat.toFixed(4)}, ${res.lng.toFixed(4)}`);
+      setTimeout(() => setDestGeocodeMsg(null), 3000);
+    } catch (e) {
+      setDestGeocodeMsg('Lookup failed');
+      setTimeout(() => setDestGeocodeMsg(null), 2500);
+    } finally {
+      setIsGeocodingDest(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const [dLat, dLng] = normalizeLatLng(destinationLat, destinationLng, 19.1287852, 72.8294183);
+    const [dLat, dLng] = normalizeLatLng(
+      destinationLat || client.lat,
+      destinationLng || client.lng,
+      19.1287852,
+      72.8294183
+    );
+
+    const processedStops: RouteStop[] = stops.map((stop, index) => ({
+      id: stop.id || `stop_${Date.now()}_${index}`,
+      stopIndex: index + 1,
+      order: index + 1,
+      name: stop.name,
+      address: stop.address,
+      contactPerson: stop.contactPerson || '',
+      phone: stop.phone || '',
+      lat: parseFloat(stop.lat as any) || 0,
+      lng: parseFloat(stop.lng as any) || 0,
+      estDurationMin: parseInt((stop.estDurationMin ?? stop.avgPickupDurationMinutes ?? 10) as any, 10) || 10,
+      avgPickupDurationMinutes: parseInt((stop.estDurationMin ?? stop.avgPickupDurationMinutes ?? 10) as any, 10) || 10,
+      status: 'pending' as const
+    }));
 
     onSaveRoute({
       id: initialRoute?.id || `route-${Date.now()}`,
       clientId: client.id,
-      name,
-      description,
-      timeSlots,
+      name: name.trim(),
+      description: description.trim(),
+      timeSlots: timeSlots,
       destinationLab: {
         id: initialRoute?.destinationLab?.id || `dest-${Date.now()}`,
-        name: destinationName,
-        address: destinationAddress,
+        name: destinationName.trim(),
+        address: destinationAddress.trim(),
         lat: Number(dLat),
         lng: Number(dLng),
-        contactPerson: destinationContact,
-        phone: destinationPhone
+        contactPerson: destinationContact.trim(),
+        phone: destinationPhone.trim()
       },
-      stops,
+      stops: processedStops,
       active: true
     });
     onClose();
@@ -371,8 +417,9 @@ export const RouteModal: React.FC<RouteModalProps> = ({
               {/* Ordered Stops */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                    Ordered Collection Stops ({stops.length})
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-sky-700" />
+                    <span>HOSPITAL / LAB COLLECTION STOPS ({stops.length})</span>
                   </label>
                   <button
                     type="button"
@@ -383,153 +430,117 @@ export const RouteModal: React.FC<RouteModalProps> = ({
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
                   {stops.map((stop, idx) => (
-                    <div
-                      key={stop.id}
-                      className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-sky-700 text-white font-bold text-[10px] flex items-center justify-center">
-                            {idx + 1}
-                          </span>
-                          Stop #{idx + 1}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveStop(idx, 'up')}
-                            className="p-0.5 text-slate-500 hover:text-sky-700 disabled:opacity-30 cursor-pointer"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === stops.length - 1}
-                            onClick={() => handleMoveStop(idx, 'down')}
-                            className="p-0.5 text-slate-500 hover:text-sky-700 disabled:opacity-30 cursor-pointer"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          {stops.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStop(stop.id)}
-                              className="p-0.5 text-rose-500 hover:text-rose-700 cursor-pointer ml-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Hospital Name"
-                          value={stop.name}
-                          onChange={(e) => {
-                            const copy = [...stops];
-                            copy[idx].name = e.target.value;
-                            setStops(copy);
-                          }}
-                          className="px-2 py-1 bg-white border border-slate-300 rounded text-slate-900 text-xs font-semibold"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Address"
-                          value={stop.address}
-                          onChange={(e) => {
-                            const copy = [...stops];
-                            copy[idx].address = e.target.value;
-                            setStops(copy);
-                          }}
-                          className="px-2 py-1 bg-white border border-slate-300 rounded text-slate-900 text-xs"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[9px] font-bold text-slate-500">Lat (e.g. 19.2082)</label>
-                          <input
-                            type="number"
-                            step="any"
-                            value={stop.lat}
-                            onChange={(e) => {
-                              const copy = [...stops];
-                              copy[idx].lat = parseFloat(e.target.value) || 0;
-                              setStops(copy);
-                            }}
-                            className="w-full px-2 py-0.5 bg-white border border-slate-300 rounded text-slate-900 font-mono text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold text-slate-500">Lng (e.g. 72.8398)</label>
-                          <input
-                            type="number"
-                            step="any"
-                            value={stop.lng}
-                            onChange={(e) => {
-                              const copy = [...stops];
-                              copy[idx].lng = parseFloat(e.target.value) || 0;
-                              setStops(copy);
-                            }}
-                            className="w-full px-2 py-0.5 bg-white border border-slate-300 rounded text-slate-900 font-mono text-xs"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    <RouteStopItem
+                      key={stop.id || idx}
+                      stop={stop}
+                      index={idx}
+                      totalStops={stops.length}
+                      onChange={(updated) => handleUpdateStop(idx, updated)}
+                      onRemove={() => handleDeleteStop(idx)}
+                      onMoveUp={() => handleMoveStop(idx, 'up')}
+                      onMoveDown={() => handleMoveStop(idx, 'down')}
+                      canRemove={stops.length > 1}
+                    />
                   ))}
                 </div>
               </div>
 
               {/* Destination Lab */}
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2">
-                <label className="block text-[11px] font-bold text-emerald-800 uppercase flex items-center gap-1">
-                  <Building2 className="w-3.5 h-3.5" />
-                  Destination Lab Handover
-                </label>
-                <div className="grid grid-cols-2 gap-2">
+              <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-emerald-800 uppercase flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Destination Lab Handover</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {destGeocodeMsg && (
+                      <span className="text-[10px] bg-emerald-200 text-emerald-900 font-semibold px-2 py-0.5 rounded flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                        {destGeocodeMsg}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleGeocodeDestination}
+                      disabled={isGeocodingDest}
+                      className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 cursor-pointer bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-300"
+                    >
+                      {isGeocodingDest ? (
+                        <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-2.5 h-2.5" />
+                      )}
+                      <span>Pin Lab Coordinates</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"
                     required
                     placeholder="Lab Name"
                     value={destinationName}
                     onChange={(e) => setDestinationName(e.target.value)}
-                    className="px-2 py-1 bg-white border border-slate-300 rounded text-slate-900 text-xs font-semibold"
+                    className="px-2 py-1.5 bg-white border border-emerald-300 rounded-lg text-slate-900 text-xs font-semibold"
                   />
                   <input
                     type="text"
                     placeholder="Lab Address"
                     value={destinationAddress}
                     onChange={(e) => setDestinationAddress(e.target.value)}
-                    className="px-2 py-1 bg-white border border-slate-300 rounded text-slate-900 text-xs"
+                    className="px-2 py-1.5 bg-white border border-emerald-300 rounded-lg text-slate-900 text-xs"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 bg-white rounded-lg border border-emerald-200">
                   <div>
-                    <label className="text-[9px] font-bold text-emerald-800">Destination Lat</label>
+                    <label className="text-[10px] font-bold text-emerald-800 uppercase flex items-center gap-1 mb-0.5">
+                      <Navigation className="w-3 h-3 text-emerald-700" />
+                      <span>Destination Lab Latitude</span>
+                    </label>
                     <input
                       type="number"
                       step="any"
+                      placeholder="19.1287852"
                       value={destinationLat}
                       onChange={(e) => setDestinationLat(parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-0.5 bg-white border border-slate-300 rounded text-slate-900 font-mono text-xs"
+                      className="w-full px-2 py-1 bg-emerald-50/50 border border-emerald-300 rounded-md text-slate-900 font-mono text-xs font-bold"
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-emerald-800">Destination Lng</label>
+                    <label className="text-[10px] font-bold text-emerald-800 uppercase flex items-center gap-1 mb-0.5">
+                      <Navigation className="w-3 h-3 text-emerald-700" />
+                      <span>Destination Lab Longitude</span>
+                    </label>
                     <input
                       type="number"
                       step="any"
+                      placeholder="72.8294183"
                       value={destinationLng}
                       onChange={(e) => setDestinationLng(parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-0.5 bg-white border border-slate-300 rounded text-slate-900 font-mono text-xs"
+                      className="w-full px-2 py-1 bg-emerald-50/50 border border-emerald-300 rounded-md text-slate-900 font-mono text-xs font-bold"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Lab Intake Lead"
+                    value={destinationContact}
+                    onChange={(e) => setDestinationContact(e.target.value)}
+                    className="px-2 py-1 bg-white border border-emerald-300 rounded text-slate-800 text-xs"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Lab Phone Number"
+                    value={destinationPhone}
+                    onChange={(e) => setDestinationPhone(e.target.value)}
+                    className="px-2 py-1 bg-white border border-emerald-300 rounded text-slate-800 font-mono text-xs"
+                  />
                 </div>
               </div>
             </div>

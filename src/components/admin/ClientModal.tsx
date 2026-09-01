@@ -34,9 +34,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   const [email, setEmail] = useState(client?.email || '');
   const [password, setPassword] = useState(client?.password || generateStrongPassword(9));
   const [address, setAddress] = useState(client?.address || '');
-  const [lat, setLat] = useState<number | string>(client?.lat ?? 19.1287852);
-  const [lng, setLng] = useState<number | string>(client?.lng ?? 72.8294183);
-  const [billingRate, setBillingRate] = useState<number>(client?.billingRatePerPickup || 450);
+  const [lat, setLat] = useState<number | string>(client?.lat ?? '');
+  const [lng, setLng] = useState<number | string>(client?.lng ?? '');
+  const [billingRate, setBillingRate] = useState<number | string>(client?.billingRatePerPickup || '');
   const [active, setActive] = useState<boolean>(client?.active ?? true);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -60,14 +60,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({
     onSaveClient({
       id: client?.id || `client-${Date.now()}`,
       name: name.trim(),
-      contactPerson: contactPerson.trim() || 'Laboratory In-charge',
-      phone: phone.trim() || '+91 98200 00000',
-      email: email.trim() || `lab.${name.toLowerCase().replace(/\s+/g, '')}@secondmedic.com`,
+      contactPerson: contactPerson.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
       password,
-      address: address.trim() || 'Mumbai, Maharashtra',
+      address: address.trim(),
       lat: Number(vLat),
       lng: Number(vLng),
-      billingRatePerPickup: Number(billingRate) || 450,
+      billingRatePerPickup: Number(billingRate) || 0,
       active,
       role: 'client'
     });

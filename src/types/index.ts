@@ -59,10 +59,15 @@ export interface RouteStop {
   address: string;
   lat: number;
   lng: number;
-  contactPerson: string;
-  phone: string;
-  order: number;
+  contactPerson?: string;
+  phone?: string;
+  order?: number;
+  stopIndex?: number;
+  estDurationMin?: number;
   avgPickupDurationMinutes?: number;
+  status?: 'pending' | 'in_progress' | 'collected' | 'skipped' | 'completed' | 'arrived';
+  specimenCount?: number;
+  sampleCount?: number;
 }
 
 export interface DestinationLab {
@@ -111,6 +116,8 @@ export interface Client {
 }
 
 export type RiderStatus = 'active' | 'on_leave' | 'inactive';
+export type EmploymentType = 'full_time' | 'part_time' | 'stat_on_demand';
+export type ShiftType = 'morning' | 'afternoon' | 'evening' | 'custom';
 
 export interface PickupBoy {
   id: string;
@@ -123,7 +130,11 @@ export interface PickupBoy {
   vehicleNumber: string;
   plateNumber?: string;
   vehicleType: string; // e.g., 'Hero Splendor / Motorcycle'
-  shiftTimings?: string; // e.g. '08:00 AM - 04:00 PM'
+  employmentType?: EmploymentType;
+  shiftType?: ShiftType;
+  shiftStart?: string; // e.g. '08:00 AM'
+  shiftEnd?: string; // e.g. '04:00 PM'
+  shiftTimings?: string; // e.g. 'Full-Time (08:00 AM - 04:00 PM)'
   assignedRouteIds: string[];
   status: RiderStatus;
   joiningDate: string;

@@ -31,6 +31,7 @@ import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 import { normalizeLatLng } from '../../utils/coordinates';
 import { RouteStopsManager } from './RouteStopsManager';
+import { AddRouteModal } from './AddRouteModal';
 
 interface ManageClientsProps {
   clients: Client[];
@@ -62,10 +63,10 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     email: '',
     password: '',
     address: '',
-    lat: 19.1860,
-    lng: 72.8485,
+    lat: '' as any,
+    lng: '' as any,
     active: true,
-    billingRatePerPickup: 450
+    billingRatePerPickup: '' as any
   });
 
   // Route form state
@@ -74,8 +75,8 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     description: string;
     destinationName: string;
     destinationAddress: string;
-    destinationLat: number;
-    destinationLng: number;
+    destinationLat: number | string;
+    destinationLng: number | string;
     destinationContact: string;
     destinationPhone: string;
     stops: RouteStop[];
@@ -84,26 +85,15 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   }>({
     name: '',
     description: '',
-    destinationName: 'Central Processing Diagnostic Lab',
-    destinationAddress: 'Main Diagnostic Hub, Link Road, Mumbai',
-    destinationLat: 19.1860,
-    destinationLng: 72.8485,
-    destinationContact: 'Dr. Ramesh Patil',
-    destinationPhone: '+91 98203 34567',
-    stops: [
-      {
-        id: `stop-${Date.now()}-1`,
-        name: 'Hospital Collection Center 1',
-        address: 'MG Road, Kandivali West, Mumbai',
-        lat: 19.2082,
-        lng: 72.8398,
-        contactPerson: 'Sister Sunita Rao',
-        phone: '+91 98201 12345',
-        order: 1
-      }
-    ],
-    timeSlots: ['10:00', '14:00', '18:00', '22:00'],
-    newTimeSlotInput: '08:30'
+    destinationName: '',
+    destinationAddress: '',
+    destinationLat: '',
+    destinationLng: '',
+    destinationContact: '',
+    destinationPhone: '',
+    stops: [],
+    timeSlots: [],
+    newTimeSlotInput: ''
   });
 
   const filteredClients = clients.filter(
@@ -193,20 +183,20 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       const newClient: Client = {
         id: `client-${Date.now()}`,
         name: clientForm.name.trim(),
-        contactPerson: clientForm.contactPerson?.trim() || 'Laboratory Ops Lead',
+        contactPerson: clientForm.contactPerson?.trim() || '',
         phone: effectivePhone,
         email: effectiveEmail,
         password: effectivePassword,
         role: 'client',
         status: 'active',
-        address: clientForm.address?.trim() || 'Mumbai, Maharashtra',
+        address: clientForm.address?.trim() || '',
         lat: Number(vLat),
         lng: Number(vLng),
         active: true,
         mustChangePassword: true,
         failedAttempts: 0,
         createdAt: new Date().toISOString(),
-        billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 450
+        billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 0
       };
       StorageService.addClient(newClient);
       try {
@@ -269,12 +259,12 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   const handleAddStopToForm = () => {
     const newStop: RouteStop = {
       id: `stop-${Date.now()}-${routeForm.stops.length + 1}`,
-      name: `Hospital Collection Center ${routeForm.stops.length + 1}`,
-      address: 'Station Road, Western Suburbs, Mumbai',
-      lat: 19.1624,
-      lng: 72.8465,
-      contactPerson: 'Collection Lead',
-      phone: '+91 98202 00000',
+      name: '',
+      address: '',
+      lat: '' as any,
+      lng: '' as any,
+      contactPerson: '',
+      phone: '',
       order: routeForm.stops.length + 1
     };
     setRouteForm({ ...routeForm, stops: [...routeForm.stops, newStop] });
@@ -318,45 +308,8 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   };
 
   // Save new Route
-  const handleSaveRoute = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedClient || !routeForm.name) return;
-
-    const [dLat, dLng] = normalizeLatLng(
-      routeForm.destinationLat || selectedClient.lat,
-      routeForm.destinationLng || selectedClient.lng,
-      19.1287852,
-      72.8294183
-    );
-
-    const normalizedStops = routeForm.stops.map((s, idx) => {
-      const [sLat, sLng] = normalizeLatLng(s.lat, s.lng, 19.1624, 72.8465);
-      return {
-        ...s,
-        lat: Number(sLat),
-        lng: Number(sLng),
-        order: idx + 1
-      };
-    });
-
-    const newRoute: Route = {
-      id: `route-${Date.now()}`,
-      clientId: selectedClient.id,
-      name: routeForm.name,
-      description: routeForm.description,
-      destinationLab: {
-        id: `dest-${Date.now()}`,
-        name: routeForm.destinationName || selectedClient.name,
-        address: routeForm.destinationAddress || selectedClient.address,
-        lat: Number(dLat),
-        lng: Number(dLng),
-        contactPerson: routeForm.destinationContact || selectedClient.contactPerson,
-        phone: routeForm.destinationPhone || selectedClient.phone
-      },
-      stops: normalizedStops,
-      timeSlots: routeForm.timeSlots.length > 0 ? routeForm.timeSlots : ['10:00', '14:00', '18:00', '22:00'],
-      active: true
-    };
+  const handleSaveRoute = async (newRoute: Route) => {
+    if (!selectedClient) return;
 
     StorageService.addRoute(newRoute);
     try {
@@ -377,12 +330,14 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         riderPhone: '+91 98201 22334',
         status: 'assigned' as const,
         currentStopIndex: 0,
-        stops: normalizedStops.map((stop, index) => ({
+        stops: newRoute.stops.map((stop, index) => ({
           id: stop.id,
+          stopIndex: index + 1,
           name: stop.name,
           address: stop.address || '',
           lat: Number(stop.lat),
           lng: Number(stop.lng),
+          estDurationMin: Number(stop.estDurationMin || stop.avgPickupDurationMinutes || 10),
           specimenCount: 0,
           status: index === 0 ? ('in_progress' as const) : ('pending' as const)
         })),
@@ -933,249 +888,14 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         </div>
       )}
 
-      {/* Add New Route Modal with Custom Time Slots & Multiple Stops */}
-      {isAddingRoute && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto animate-fadeIn">
-          <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-sky-700" />
-                  <span>Add Collection Route for {selectedClient?.name}</span>
-                </h3>
-                <p className="text-xs text-slate-500">Configure collection stops and any custom fixed time slots</p>
-              </div>
-              <button
-                onClick={() => setIsAddingRoute(false)}
-                className="p-1 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveRoute} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                  Route Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Western Suburbs Morning Loop"
-                  value={routeForm.name}
-                  onChange={(e) => setRouteForm({ ...routeForm, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:outline-hidden focus:border-sky-600"
-                />
-              </div>
-
-              {/* Time Slots Section */}
-              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
-                <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1 text-[11px]">
-                  Fixed Daily Pickup Time Slots (Add 1 or 10+)
-                </label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {routeForm.timeSlots.map((slot) => (
-                    <span
-                      key={slot}
-                      className="bg-white border border-slate-200 text-slate-800 font-mono font-bold text-xs px-2.5 py-1 rounded-md flex items-center gap-1.5 shadow-xs"
-                    >
-                      <Clock className="w-3 h-3 text-sky-700" />
-                      <span>{slot}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTimeSlot(slot)}
-                        className="text-slate-400 hover:text-rose-600 ml-0.5 cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1.5">
-                  <input
-                    type="time"
-                    value={routeForm.newTimeSlotInput}
-                    onChange={(e) => setRouteForm({ ...routeForm, newTimeSlotInput: e.target.value })}
-                    className="px-2.5 py-1 bg-white border border-slate-300 rounded-md text-slate-900 font-mono text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddTimeSlot}
-                    className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-md text-xs cursor-pointer"
-                  >
-                    + Add Time Slot
-                  </button>
-                </div>
-              </div>
-
-              {/* Stops Configuration */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-slate-700 font-bold uppercase tracking-wider text-[11px]">
-                    Hospital / Lab Collection Stops ({routeForm.stops.length})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAddStopToForm}
-                    className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold rounded-md border border-sky-200 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Stop
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {routeForm.stops.map((stop, idx) => (
-                    <div
-                      key={stop.id || idx}
-                      className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-sky-700 text-white font-bold text-[10px] flex items-center justify-center">
-                            {idx + 1}
-                          </span>
-                          Stop #{idx + 1}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveStopInForm(idx, 'up')}
-                            className={`p-1 rounded text-xs ${
-                              idx === 0
-                                ? 'text-slate-300 cursor-not-allowed'
-                                : 'text-slate-600 hover:text-sky-700 hover:bg-sky-50 cursor-pointer'
-                            }`}
-                            title="Move Stop Up"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === routeForm.stops.length - 1}
-                            onClick={() => handleMoveStopInForm(idx, 'down')}
-                            className={`p-1 rounded text-xs ${
-                              idx === routeForm.stops.length - 1
-                                ? 'text-slate-300 cursor-not-allowed'
-                                : 'text-slate-600 hover:text-sky-700 hover:bg-sky-50 cursor-pointer'
-                            }`}
-                            title="Move Stop Down"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          {routeForm.stops.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveStopFromForm(stop.id)}
-                              className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded cursor-pointer"
-                              title="Remove Stop"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Hospital Stop Name"
-                          value={stop.name}
-                          onChange={(e) => {
-                            const updated = [...routeForm.stops];
-                            updated[idx].name = e.target.value;
-                            setRouteForm({ ...routeForm, stops: updated });
-                          }}
-                          className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-medium text-xs"
-                        />
-                        <input
-                          type="text"
-                          required
-                          placeholder="Hospital Full Address"
-                          value={stop.address}
-                          onChange={(e) => {
-                            const updated = [...routeForm.stops];
-                            updated[idx].address = e.target.value;
-                            setRouteForm({ ...routeForm, stops: updated });
-                          }}
-                          className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          placeholder="Contact Person (e.g. Sister In-charge)"
-                          value={stop.contactPerson}
-                          onChange={(e) => {
-                            const updated = [...routeForm.stops];
-                            updated[idx].contactPerson = e.target.value;
-                            setRouteForm({ ...routeForm, stops: updated });
-                          }}
-                          className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Phone Number"
-                          value={stop.phone}
-                          onChange={(e) => {
-                            const updated = [...routeForm.stops];
-                            updated[idx].phone = e.target.value;
-                            setRouteForm({ ...routeForm, stops: updated });
-                          }}
-                          className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Destination Lab Intake */}
-              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 space-y-2">
-                <label className="block text-emerald-800 font-bold uppercase tracking-wider text-[11px]">
-                  Destination Diagnostic Lab Handover Point
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Lab Name"
-                    value={routeForm.destinationName}
-                    onChange={(e) => setRouteForm({ ...routeForm, destinationName: e.target.value })}
-                    className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Lab Address"
-                    value={routeForm.destinationAddress}
-                    onChange={(e) => setRouteForm({ ...routeForm, destinationAddress: e.target.value })}
-                    className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddingRoute(false)}
-                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-bold transition-all shadow-xs cursor-pointer"
-                >
-                  Save Route
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Add New Route Modal with Explicit Coordinates, Geocoding & Multiple Stops */}
+      {isAddingRoute && selectedClient && (
+        <AddRouteModal
+          isOpen={isAddingRoute}
+          onClose={() => setIsAddingRoute(false)}
+          client={selectedClient}
+          onSaveRoute={handleSaveRoute}
+        />
       )}
     </div>
   );

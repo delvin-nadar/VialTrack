@@ -85,13 +85,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       if (initialRoute?.stops) {
         const formattedStops = initialRoute.stops.map((s, idx) => ({
           id: s.id || `stop-${idx + 1}`,
-          name: s.name,
-          address: s.address,
-          lat: Number(s.lat || 19.1287852),
-          lng: Number(s.lng || 72.8294183),
-          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8),
-          contactPerson: s.contactPerson || 'Lab Coordinator',
-          phone: s.phone || '+91 98201 11223'
+          name: s.name || '',
+          address: s.address || '',
+          lat: Number(s.lat || 0),
+          lng: Number(s.lng || 0),
+          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 0),
+          contactPerson: s.contactPerson || '',
+          phone: s.phone || ''
         }));
         setCustomStops(formattedStops);
         // Automatically select/check ALL available pickup stops in the current collection route by default
@@ -117,13 +117,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       if (targetRoute.stops) {
         const formattedStops = targetRoute.stops.map((s, idx) => ({
           id: s.id || `stop-${idx + 1}`,
-          name: s.name,
-          address: s.address,
-          lat: Number(s.lat || 19.1287852),
-          lng: Number(s.lng || 72.8294183),
-          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8),
-          contactPerson: s.contactPerson || 'Lab Coordinator',
-          phone: s.phone || '+91 98201 11223'
+          name: s.name || '',
+          address: s.address || '',
+          lat: Number(s.lat || 0),
+          lng: Number(s.lng || 0),
+          specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 0),
+          contactPerson: s.contactPerson || '',
+          phone: s.phone || ''
         }));
         setCustomStops(formattedStops);
         setSelectedStopIds(formattedStops.map((s) => s.id));
@@ -138,13 +138,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     if (targetRoute?.stops) {
       const formattedStops = targetRoute.stops.map((s, idx) => ({
         id: s.id || `stop-${idx + 1}`,
-        name: s.name,
-        address: s.address,
-        lat: Number(s.lat || 19.1287852),
-        lng: Number(s.lng || 72.8294183),
-        specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 8),
-        contactPerson: s.contactPerson || 'Lab Coordinator',
-        phone: s.phone || '+91 98201 11223'
+        name: s.name || '',
+        address: s.address || '',
+        lat: Number(s.lat || 0),
+        lng: Number(s.lng || 0),
+        specimenCount: Number((s as any).specimenCount || (s as any).sampleCount || 0),
+        contactPerson: s.contactPerson || '',
+        phone: s.phone || ''
       }));
       setCustomStops(formattedStops);
       setSelectedStopIds(formattedStops.map((s) => s.id));
@@ -176,13 +176,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     const newStopId = `stop-custom-${Date.now()}`;
     const newStop = {
       id: newStopId,
-      name: `Collection Center OPD #${newIdx}`,
-      address: 'Diagnostic Collection Point, Mumbai',
-      lat: 19.1500,
-      lng: 72.8400,
-      specimenCount: 5,
-      contactPerson: 'Lab Coordinator',
-      phone: '+91 98201 11223'
+      name: '',
+      address: '',
+      lat: 0,
+      lng: 0,
+      specimenCount: 0,
+      contactPerson: '',
+      phone: ''
     };
     setCustomStops([...customStops, newStop]);
     // Automatically select the new stop by default
