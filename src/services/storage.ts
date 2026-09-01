@@ -583,7 +583,7 @@ export const StorageService = {
       return {
         id: s.id || 'admin-1',
         email: s.email || '',
-        name: s.name || 'Admin',
+        name: s.name && !s.name.toLowerCase().includes('vikas') ? s.name : 'Delvin Nadar',
         role: 'admin',
         phone: s.phone || ''
       };

@@ -95,13 +95,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               {user.role === 'admin' ? (
                 <div className="text-right hidden sm:flex flex-col items-end justify-center">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900 text-sm">{displayName}</span>
+                    <span className="font-semibold text-slate-900 text-sm">Delvin Nadar</span>
                     <span className="px-2 py-0.5 text-[11px] font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200">
                       Ops Head
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Creator & System Admin</p>
-                  <p className="text-[10px] text-slate-400 font-mono leading-tight mt-0.5">{displayEmail}</p>
                 </div>
               ) : (
                 <div className="text-right hidden sm:block">
