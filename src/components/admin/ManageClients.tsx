@@ -21,7 +21,8 @@ import {
   RefreshCw,
   Copy,
   AlertCircle,
-  Eye
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { db } from '../../services/firebase';
@@ -44,6 +45,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [isAddingRoute, setIsAddingRoute] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [createdCredentialsModal, setCreatedCredentialsModal] = useState<{
@@ -552,13 +554,23 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder={isEditingClient ? 'Leave blank to keep existing password' : 'Min 8 chars'}
-                    value={clientForm.password || ''}
-                    onChange={(e) => setClientForm({ ...clientForm, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-hidden focus:border-sky-600"
-                  />
+                  <div className="relative flex-1">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder={isEditingClient ? 'Leave blank to keep existing password' : 'Min 8 chars'}
+                      value={clientForm.password || ''}
+                      onChange={(e) => setClientForm({ ...clientForm, password: e.target.value })}
+                      className="w-full pl-3 pr-10 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-hidden focus:border-sky-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                   {clientForm.password && (
                     <button
                       type="button"

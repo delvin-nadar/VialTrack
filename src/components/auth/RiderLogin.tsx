@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserAuth } from '../../types';
-import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, Bike, ArrowLeft, KeyRound } from 'lucide-react';
+import { Smartphone, Phone, Lock, AlertCircle, ArrowRight, Bike, ArrowLeft, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { auth, signInWithEmailAndPassword, db } from '../../services/firebase';
 import { collection, getDocs, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -14,6 +14,7 @@ interface RiderLoginProps {
 export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
   const [mobileNumber, setMobileNumber] = useState('');
   const [pin, setPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -25,8 +26,8 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
   };
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
-    setPin(digitsOnly);
+    // Accept password or PIN string up to 32 chars
+    setPin(e.target.value);
     if (error) setError(null);
   };
 
@@ -45,7 +46,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
     }
 
     if (!cleanPin || cleanPin.length < 4) {
-      setError('Please enter your 4 to 6-digit Security PIN.');
+      setError('Please enter your password or PIN (minimum 4 characters).');
       return;
     }
 
@@ -311,24 +312,30 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                Rider Security PIN (4-6 Digits) *
+                Rider Password / PIN *
               </label>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 id="password"
                 name="password"
                 autoComplete="current-password"
-                pattern="[0-9]{4,6}"
-                maxLength={6}
-                placeholder="4 or 6-digit PIN"
+                placeholder="Enter PIN or password"
                 required
                 value={pin}
                 onChange={handlePinChange}
-                className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 font-mono tracking-widest focus:outline-hidden focus:border-sky-600 focus:ring-1 focus:ring-sky-600 transition-all placeholder:text-slate-400 placeholder:font-sans placeholder:tracking-normal"
+                className="w-full pl-9 pr-10 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 font-mono tracking-wider focus:outline-hidden focus:border-sky-600 focus:ring-1 focus:ring-sky-600 transition-all placeholder:text-slate-400 placeholder:font-sans placeholder:tracking-normal"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
             <div className="flex items-center justify-between mt-1">
               <span className="text-[10px] text-slate-400">

@@ -13,7 +13,10 @@ import {
   Briefcase,
   SlidersHorizontal,
   Sun,
-  Sunset
+  Sunset,
+  Eye,
+  EyeOff,
+  Copy
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { compressImageToBase64 } from '../../services/imageWatermark';
@@ -154,6 +157,8 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 }) => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
   const photoFileInputRef = useRef<HTMLInputElement>(null);
 
   const [dbRoutes, setDbRoutes] = useState<Route[]>([]);
@@ -257,7 +262,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         name: rider.name || '',
         phone: rider.phone || '',
         email: rider.email || '',
-        password: '',
+        password: rider.password || '',
         plateNumber: rider.plateNumber || rider.vehicleNumber || '',
         vehicleNumber: rider.vehicleNumber || rider.plateNumber || '',
         vehicleType: rider.vehicleType || 'Motorcycle / Bike',
@@ -496,7 +501,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
     if (rider) {
       const newPasswordTyped = form.password.trim();
-      const preservedPassword = newPasswordTyped ? newPasswordTyped : (rider.password || '');
+      const preservedPassword = newPasswordTyped ? newPasswordTyped : (rider.password || generateStrongPassword(8));
 
       const updatedRider: PickupBoy = {
         ...rider,
@@ -515,7 +520,9 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         assignedRouteIds: form.assignedRouteIds,
         status: form.status,
         photoUrl: form.photoUrl,
-        mustChangePassword: newPasswordTyped ? false : (rider.mustChangePassword ?? false)
+        mustChangePassword: false,
+        failedAttempts: 0,
+        lockoutUntil: undefined
       };
 
       StorageService.updateRider(updatedRider);
@@ -526,6 +533,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           name: updatedRider.name,
           phone: updatedRider.phone,
           email: updatedRider.email,
+          password: preservedPassword,
           vehicleNo: effectivePlate,
           vehicleNumber: effectivePlate,
           vehiclePlate: effectivePlate,
@@ -540,12 +548,10 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           photoUrl: updatedRider.photoUrl,
           isOnline: true,
           isCheckedIn: true,
+          failedAttempts: 0,
+          lockoutUntil: null,
           lastUpdated: serverTimestamp()
         };
-
-        if (newPasswordTyped) {
-          firestorePayload.password = newPasswordTyped;
-        }
 
         await setDoc(doc(db, 'riders', updatedRider.id), firestorePayload, { merge: true });
 
@@ -785,7 +791,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             <div className="flex items-center justify-between">
               <label className="block text-slate-700 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-sky-700" />
-                <span>{rider ? 'Reset Password / PIN (Optional)' : 'Rider Login Password / PIN *'}</span>
+                <span>{rider ? 'Rider Password / PIN' : 'Rider Login Password / PIN *'}</span>
               </label>
               <button
                 type="button"
@@ -796,17 +802,42 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                 <span>Generate Strong Password</span>
               </button>
             </div>
-            <input
-              type="text"
-              placeholder={rider ? '•••••••• (Leave blank to keep unchanged)' : 'Enter or generate password'}
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
-            />
-            <p className="text-[10px] text-slate-500">
-              {rider
-                ? 'Leave empty to preserve existing password. Only enter text if you want to reset password.'
-                : 'Enter a strong password or 4-6 digit security PIN for the rider to log into the Rider Portal.'}
+            <div className="relative flex items-center">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder={rider ? 'Enter or reset password' : 'Enter or generate password'}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full pl-3 pr-20 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-sm focus:outline-hidden focus:border-sky-600"
+              />
+              <div className="absolute right-2 flex items-center gap-1">
+                {form.password && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(form.password);
+                      setCopiedPassword(true);
+                      setTimeout(() => setCopiedPassword(false), 2000);
+                    }}
+                    className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer rounded"
+                    title="Copy password"
+                  >
+                    {copiedPassword ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer rounded"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500 flex items-center justify-between">
+              <span>{rider ? 'Visible to admin. Modify to reset rider password & immediately unlock account.' : 'Enter a strong password or 4-6 digit security PIN for the rider to log into the Rider Portal.'}</span>
+              {copiedPassword && <span className="text-emerald-700 font-semibold">Copied to clipboard!</span>}
             </p>
           </div>
 
