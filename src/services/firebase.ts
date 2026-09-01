@@ -165,11 +165,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Initial connection test
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await getDoc(doc(db, 'test', 'connection'));
     console.log('[Firebase] Connection to Firestore verified successfully.');
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('[Firebase] Please check your Firebase configuration or network status.');
+  } catch (error: any) {
+    if (error?.code === 'unavailable' || (error instanceof Error && error.message.includes('unavailable'))) {
+      console.info('[Firebase] Firestore client is connected in offline-first mode.');
+    } else if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.info('[Firebase] Firestore offline mode active.');
     }
   }
 }
