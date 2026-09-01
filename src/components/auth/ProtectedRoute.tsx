@@ -1,124 +1,101 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { UserRole } from '../../types';
 import { StorageService } from '../../services/storage';
 
-interface ProtectedRouteProps {
-  requiredRole: UserRole;
+interface RouteProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }
 
 /**
- * Strict Role-Based Route Guard:
- * Validates the portal-specific session storage (vialtrack_admin_session, vialtrack_client_session, vialtrack_rider_session).
- * If the active session does not match requiredRole, redirects immediately to /{role}/login.
+ * Protects admin portal routes.
  */
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
-  requiredRole,
-  children,
-  fallback
-}) => {
+export const ProtectedRoute: React.FC<RouteProps> = ({ children, fallback }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const location = useLocation();
-  const activeSession = StorageService.getPortalSession(requiredRole);
 
-  const isValidSession =
-    Boolean(activeSession) &&
-    activeSession?.role === requiredRole &&
-    (requiredRole !== 'client' || Boolean(activeSession?.clientId)) &&
-    (requiredRole !== 'rider' || Boolean(activeSession?.riderId));
+  useEffect(() => {
+    const checkAuth = () => {
+      const user = StorageService.getCurrentUser();
+      const adminSession = StorageService.getAdminSession();
+      setIsAuthenticated(Boolean(user || adminSession));
+    };
 
-  if (!isValidSession) {
-    // Clear potentially corrupted or incomplete session
-    StorageService.clearPortalSession(requiredRole);
-    if (fallback) {
-      return <>{fallback}</>;
-    }
-    return <Navigate to={`/${requiredRole}/login`} state={{ from: location }} replace />;
+    checkAuth();
+  }, [location.pathname]);
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-3 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return fallback ? <>{fallback}</> : <Navigate to="/admin/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
 };
 
 /**
- * AdminRoute:
- * Only allows access to /admin if logged in as admin.
- * If a phlebotomist/rider accesses this route, automatically redirects them to /rider.
- * If a client accesses this, redirects to /client.
+ * Protects rider/phlebo mobile routes.
  */
-export const AdminRoute: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
-  children,
-  fallback
-}) => {
-  const adminSession = StorageService.getAdminSession();
-  const riderSession = StorageService.getRiderSession();
-  const clientSession = StorageService.getClientSession();
-  const storedRole = typeof window !== 'undefined' ? localStorage.getItem('vialtrack_role') : null;
+export const RiderRoute: React.FC<RouteProps> = ({ children, fallback }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const location = useLocation();
 
-  // Strict redirection if another role is logged in
-  if (!adminSession && (storedRole === 'rider' || (riderSession && !adminSession))) {
-    return <Navigate to="/rider" replace />;
-  }
-  if (!adminSession && (storedRole === 'client' || (clientSession && !adminSession))) {
-    return <Navigate to="/client" replace />;
+  useEffect(() => {
+    const checkRiderAuth = () => {
+      const riderSession = StorageService.getRiderSession();
+      setIsAuthenticated(Boolean(riderSession));
+    };
+
+    checkRiderAuth();
+  }, [location.pathname]);
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
-  if (!adminSession || adminSession.role !== 'admin') {
-    StorageService.clearPortalSession('admin');
-    if (fallback) return <>{fallback}</>;
-    return <Navigate to="/admin/login" replace />;
+  if (!isAuthenticated) {
+    return fallback ? <>{fallback}</> : <Navigate to="/rider/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
 };
 
 /**
- * RiderRoute:
- * For phlebotomists logged into /rider.
- * Protects rider portal and redirects unauthenticated users to /rider/login.
+ * Protects client diagnostic lab portal routes.
  */
-export const RiderRoute: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
-  children,
-  fallback
-}) => {
-  // ✅ USE LIVE AUTH SESSION ONLY:
-useEffect(() => {
-  const currentSession = StorageService.getRiderSession();
-  if (!currentSession) {
-    navigate('/rider/login');
-    return;
+export const ClientRoute: React.FC<RouteProps> = ({ children, fallback }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const location = useLocation();
+
+  useEffect(() => {
+    const checkClientAuth = () => {
+      const clientSession = StorageService.getClientSession();
+      setIsAuthenticated(Boolean(clientSession));
+    };
+
+    checkClientAuth();
+  }, [location.pathname]);
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
-  
-  // Listen to the authenticated rider's tasks only
-  const q = query(
-    collection(db, 'tasks'),
-    where('riderId', '==', currentSession.riderId)
-  );
-  
-  const unsubscribe = onSnapshot(q, (snapshot) => {
-    const tasks = snapshot.docs.map(doc => formatUnifiedTask(doc.id, doc.data()));
-    setMyTasks(tasks);
-  });
 
-  return () => unsubscribe();
-}, []);
-
-/**
- * ClientRoute:
- * For diagnostic labs logged into /client.
- * Protects client portal and redirects unauthenticated users to /client/login.
- */
-export const ClientRoute: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
-  children,
-  fallback
-}) => {
-  const clientSession = StorageService.getClientSession();
-  const isValid = Boolean(clientSession && clientSession.role === 'client' && clientSession.clientId);
-
-  if (!isValid) {
-    StorageService.clearPortalSession('client');
-    if (fallback) return <>{fallback}</>;
-    return <Navigate to="/client/login" replace />;
+  if (!isAuthenticated) {
+    return fallback ? <>{fallback}</> : <Navigate to="/client/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
