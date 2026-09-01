@@ -81,17 +81,27 @@ export const RiderRoute: React.FC<{ children: React.ReactNode; fallback?: React.
   children,
   fallback
 }) => {
-  const riderSession = StorageService.getRiderSession();
-  const isValid = Boolean(riderSession && riderSession.role === 'rider' && riderSession.riderId);
-
-  if (!isValid) {
-    StorageService.clearPortalSession('rider');
-    if (fallback) return <>{fallback}</>;
-    return <Navigate to="/rider/login" replace />;
+  // ✅ USE LIVE AUTH SESSION ONLY:
+useEffect(() => {
+  const currentSession = StorageService.getRiderSession();
+  if (!currentSession) {
+    navigate('/rider/login');
+    return;
   }
+  
+  // Listen to the authenticated rider's tasks only
+  const q = query(
+    collection(db, 'tasks'),
+    where('riderId', '==', currentSession.riderId)
+  );
+  
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const tasks = snapshot.docs.map(doc => formatUnifiedTask(doc.id, doc.data()));
+    setMyTasks(tasks);
+  });
 
-  return <>{children}</>;
-};
+  return () => unsubscribe();
+}, []);
 
 /**
  * ClientRoute:
