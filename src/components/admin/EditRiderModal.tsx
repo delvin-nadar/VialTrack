@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PickupBoy, Route, RiderStatus } from '../../types';
 import {
   Bike,
@@ -15,7 +15,49 @@ import { StorageService } from '../../services/storage';
 import { compressImageToBase64 } from '../../services/imageWatermark';
 import { generateStrongPassword } from '../../utils/security';
 import { db } from '../../services/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+
+const defaultAvailableRoutes: Route[] = [
+  {
+    id: 'route_lifecare_loop_1',
+    clientId: 'client-1788210054008',
+    name: 'Lifecare Diagnostics - Loop 1',
+    description: 'Oscar Hospital & Oscar Superspeciality to Lifecare Hub',
+    destinationLab: {
+      id: 'dest_lifecare',
+      name: 'Lifecare Diagnostics',
+      address: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
+      lat: 19.1287852,
+      lng: 72.8294183,
+      contactPerson: 'Dr. Jayesh Joshi',
+      phone: '+91 98200 98200'
+    },
+    stops: [
+      {
+        id: 'stop_1',
+        name: 'Oscar Hospital',
+        address: 'D & E Wing, Pooja Enclave, Kandivali West',
+        lat: 19.2082,
+        lng: 72.8396,
+        contactPerson: 'Dr. Ramesh Patil',
+        phone: '+91 98201 22334',
+        order: 1
+      },
+      {
+        id: 'stop_2',
+        name: 'Oscar Superspeciality Hospital',
+        address: 'Shepherd Royal, New Link Rd, Goregaon West',
+        lat: 19.1610,
+        lng: 72.8346,
+        contactPerson: 'Sister Reena',
+        phone: '+91 98202 33445',
+        order: 2
+      }
+    ],
+    timeSlots: ['09:00', '12:00', '15:00', '18:00'],
+    active: true
+  }
+];
 
 interface EditRiderModalProps {
   isOpen: boolean;
@@ -35,6 +77,13 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
   const photoFileInputRef = useRef<HTMLInputElement>(null);
+
+  const availableRoutes = useMemo(() => {
+    const map = new Map<string, Route>();
+    defaultAvailableRoutes.forEach((r) => map.set(r.id, r));
+    routes.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [routes]);
 
   const [form, setForm] = useState<{
     name: string;
@@ -57,7 +106,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     vehicleNumber: '',
     vehicleType: 'Motorcycle / Bike',
     shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
-    assignedRouteIds: [],
+    assignedRouteIds: ['route_lifecare_loop_1'],
     status: 'active',
     photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80'
   });
@@ -66,16 +115,21 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     if (rider) {
       // Editing existing rider:
       // CRITICAL: Do NOT populate password with existing or generated password
+      const initialAssignedRoutes =
+        rider.assignedRouteIds && rider.assignedRouteIds.length > 0
+          ? rider.assignedRouteIds
+          : ['route_lifecare_loop_1'];
+
       setForm({
         name: rider.name || '',
         phone: rider.phone || '',
         email: rider.email || '',
         password: '', // Blank so existing password is never overwritten accidentally
-        plateNumber: rider.plateNumber || rider.vehicleNumber || '',
-        vehicleNumber: rider.vehicleNumber || rider.plateNumber || '',
+        plateNumber: rider.plateNumber || rider.vehicleNumber || 'MH01AV8888',
+        vehicleNumber: rider.vehicleNumber || rider.plateNumber || 'MH01AV8888',
         vehicleType: rider.vehicleType || 'Motorcycle / Bike',
         shiftTimings: rider.shiftTimings || '08:00 AM - 04:00 PM (Morning Slot)',
-        assignedRouteIds: rider.assignedRouteIds || [],
+        assignedRouteIds: initialAssignedRoutes,
         status: rider.status || 'active',
         photoUrl: rider.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80'
       });
@@ -86,11 +140,11 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         phone: '',
         email: '',
         password: generateStrongPassword(8),
-        plateNumber: '',
-        vehicleNumber: '',
+        plateNumber: 'MH01AV8888',
+        vehicleNumber: 'MH01AV8888',
         vehicleType: 'Motorcycle / Bike',
         shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
-        assignedRouteIds: [],
+        assignedRouteIds: ['route_lifecare_loop_1'],
         status: 'active',
         photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80'
       });
@@ -135,6 +189,158 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     });
   };
 
+  // Helper to auto-generate live task document if no active task exists
+  const ensureLiveTaskGenerated = async (
+    riderData: {
+      id: string;
+      name: string;
+      phone: string;
+      vehiclePlate: string;
+    },
+    routeIds: string[]
+  ) => {
+    if (!routeIds || routeIds.length === 0) return;
+
+    try {
+      // Check if an active task already exists for this rider in 'tasks'
+      let existingTasks: any[] = [];
+      try {
+        const q = query(collection(db, 'tasks'), where('riderId', '==', riderData.id));
+        const snap = await getDocs(q);
+        existingTasks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      } catch (checkErr) {
+        console.warn('[EditRiderModal] Query tasks warning:', checkErr);
+      }
+
+      for (const selectedRouteId of routeIds) {
+        const selectedRouteDetails = availableRoutes.find((r) => r.id === selectedRouteId) || {
+          id: selectedRouteId,
+          clientId: 'client-1788210054008',
+          clientName: 'Lifecare Diagnostics',
+          name: 'Lifecare Diagnostics - Loop 1',
+          stops: [
+            {
+              id: 'stop_1',
+              name: 'Oscar Hospital',
+              address: 'D & E Wing, Pooja Enclave, Kandivali West',
+              lat: 19.2082,
+              lng: 72.8396,
+              status: 'pending' as const,
+              specimenCount: 0
+            },
+            {
+              id: 'stop_2',
+              name: 'Oscar Superspeciality Hospital',
+              address: 'Shepherd Royal, New Link Rd, Goregaon West',
+              lat: 19.1610,
+              lng: 72.8346,
+              status: 'pending' as const,
+              specimenCount: 0
+            }
+          ]
+        };
+
+        const hasActiveTask = existingTasks.some(
+          (t) =>
+            (t.routeId === selectedRouteId || t.routeName === selectedRouteDetails.name) &&
+            t.status !== 'completed' &&
+            t.status !== 'delivered' &&
+            t.status !== 'cancelled'
+        );
+
+        if (!hasActiveTask) {
+          const taskId = `task_${Date.now()}`;
+          const normalizedStops =
+            selectedRouteDetails.stops && selectedRouteDetails.stops.length > 0
+              ? selectedRouteDetails.stops.map((stop: any, index: number) => ({
+                  id: stop.id || `stop_${index + 1}`,
+                  name: stop.name || `Collection Stop ${index + 1}`,
+                  address: stop.address || (index === 0 ? 'D & E Wing, Pooja Enclave, Kandivali West' : 'Shepherd Royal, New Link Rd, Goregaon West'),
+                  lat: Number(stop.lat || (index === 0 ? 19.2082 : 19.1610)),
+                  lng: Number(stop.lng || (index === 0 ? 72.8396 : 72.8346)),
+                  status: 'pending' as const,
+                  specimenCount: Number(stop.specimenCount || 0)
+                }))
+              : [
+                  {
+                    id: 'stop_1',
+                    name: 'Oscar Hospital',
+                    address: 'D & E Wing, Pooja Enclave, Kandivali West',
+                    lat: 19.2082,
+                    lng: 72.8396,
+                    status: 'pending' as const,
+                    specimenCount: 0
+                  },
+                  {
+                    id: 'stop_2',
+                    name: 'Oscar Superspeciality Hospital',
+                    address: 'Shepherd Royal, New Link Rd, Goregaon West',
+                    lat: 19.1610,
+                    lng: 72.8346,
+                    status: 'pending' as const,
+                    specimenCount: 0
+                  }
+                ];
+
+          const taskDocPayload = {
+            id: taskId,
+            taskId: taskId,
+            clientId: selectedRouteDetails.clientId || 'client-1788210054008',
+            clientName: (selectedRouteDetails as any).clientName || (selectedRouteDetails as any).destinationLab?.name || 'Lifecare Diagnostics',
+            clientEmail: (selectedRouteDetails as any).clientEmail || (selectedRouteDetails as any).destinationLab?.email || 'jayesh.joshi@lifecarediagnostics.com',
+            clientLabId: selectedRouteDetails.clientId || 'client-1788210054008',
+            clientLabName: (selectedRouteDetails as any).clientName || (selectedRouteDetails as any).destinationLab?.name || 'Lifecare Diagnostics',
+            routeName: selectedRouteDetails.name || 'Lifecare Diagnostics - Loop 1',
+            routeId: selectedRouteDetails.id || selectedRouteId,
+            riderId: riderData.id || 'rider_asif',
+            riderName: riderData.name || 'Asif',
+            riderPhone: riderData.phone || '8268826200',
+            riderVehicle: riderData.vehiclePlate || 'MH01AV8888',
+            assignedRiderId: riderData.id || 'rider_asif',
+            assignedRiderName: riderData.name || 'Asif',
+            assignedRiderPhone: riderData.phone || '8268826200',
+            status: 'assigned' as const,
+            currentStopIndex: 0,
+            stops: normalizedStops,
+            stopsProgress: normalizedStops.map((s: any) => ({
+              stopId: s.id,
+              stopName: s.name,
+              address: s.address,
+              lat: s.lat,
+              lng: s.lng,
+              status: 'pending',
+              sampleCount: s.specimenCount,
+              specimenCount: s.specimenCount
+            })),
+            date: new Date().toISOString().split('T')[0],
+            scheduledDate: new Date().toISOString().split('T')[0],
+            timeSlot: 'Morning Slot (09:00 AM - 01:00 PM)',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          };
+
+          await setDoc(doc(db, 'tasks', taskId), taskDocPayload, { merge: true });
+          console.log(`[EditRiderModal] Auto-generated live task ${taskId} in Firestore`);
+
+          // Update rider doc with activeTaskId & dutyStatus
+          await setDoc(
+            doc(db, 'riders', riderData.id),
+            {
+              activeTaskId: taskId,
+              activeTripId: taskId,
+              activeRouteId: selectedRouteDetails.id || selectedRouteId,
+              dutyStatus: 'on_trip',
+              lastUpdated: serverTimestamp()
+            },
+            { merge: true }
+          );
+        }
+      }
+    } catch (genErr) {
+      console.warn('[EditRiderModal] Live task auto-generation error:', genErr);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -162,7 +368,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
       return;
     }
 
-    const effectivePlate = form.plateNumber.trim() || form.vehicleNumber.trim() || 'MH-02-DN-4821';
+    const effectivePlate = form.plateNumber.trim() || form.vehicleNumber.trim() || 'MH01AV8888';
     const effectiveVehicleType = form.vehicleType || 'Motorcycle / Bike';
 
     if (rider) {
@@ -198,11 +404,14 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
           email: updatedRider.email,
           vehicleNo: effectivePlate,
           vehicleNumber: effectivePlate,
+          vehiclePlate: effectivePlate,
           vehicleType: effectiveVehicleType,
           status: updatedRider.status,
           shiftTimings: updatedRider.shiftTimings,
           assignedRouteIds: updatedRider.assignedRouteIds,
           photoUrl: updatedRider.photoUrl,
+          isOnline: true,
+          isCheckedIn: true,
           lastUpdated: serverTimestamp()
         };
 
@@ -211,6 +420,17 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         }
 
         await setDoc(doc(db, 'riders', updatedRider.id), firestorePayload, { merge: true });
+
+        // Auto-instantiate live task document if rider has assigned routes and no active task exists
+        await ensureLiveTaskGenerated(
+          {
+            id: updatedRider.id,
+            name: updatedRider.name,
+            phone: updatedRider.phone,
+            vehiclePlate: effectivePlate
+          },
+          form.assignedRouteIds
+        );
       } catch (err: any) {
         if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
           console.warn('Firestore quota exceeded; updated rider locally.');
@@ -268,9 +488,11 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             password: effectivePassword,
             vehicleNo: effectivePlate,
             vehicleNumber: effectivePlate,
+            vehiclePlate: effectivePlate,
             vehicleType: effectiveVehicleType,
             battery: 95,
             isOnline: true,
+            isCheckedIn: true,
             status: 'active',
             shiftTimings: newRider.shiftTimings,
             assignedRouteIds: newRider.assignedRouteIds,
@@ -278,6 +500,17 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             lastUpdated: serverTimestamp()
           },
           { merge: true }
+        );
+
+        // Auto-instantiate live task document on route assignment
+        await ensureLiveTaskGenerated(
+          {
+            id: newRider.id,
+            name: newRider.name,
+            phone: newRider.phone,
+            vehiclePlate: effectivePlate
+          },
+          form.assignedRouteIds
         );
       } catch (err: any) {
         if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
@@ -481,7 +714,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
               Assign Collection Routes ({form.assignedRouteIds.length} Selected)
             </label>
             <div className="space-y-1 max-h-32 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
-              {routes.map((r) => {
+              {availableRoutes.map((r) => {
                 const isChecked = form.assignedRouteIds.includes(r.id);
                 return (
                   <label
