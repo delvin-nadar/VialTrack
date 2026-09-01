@@ -349,9 +349,9 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   }, [waypoints, riderCoords, activeRider, stops, destination, enrouteLive]);
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 shadow-inner" style={{ height }}>
+    <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 shadow-inner z-0 isolate" style={{ height }}>
       {/* Top Enroute Live Navigation HUD Bar */}
-      <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2">
+      <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
         <button
           type="button"
           onClick={() => setEnrouteLive((prev) => !prev)}
@@ -371,7 +371,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
 
       {/* Real-Time Road ETA & Telemetry Badge */}
       {routeStats && activeRider && (
-        <div className="absolute top-3 right-3 z-[1000] bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-xl text-xs space-y-1 animate-in fade-in">
+        <div className="absolute top-3 right-3 z-20 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-xl text-xs space-y-1 animate-in fade-in">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-1.5">
             <span className="font-bold text-slate-900 flex items-center gap-1.5">
               <Navigation className="w-3.5 h-3.5 text-sky-700" />
@@ -400,7 +400,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       )}
 
       {/* Leaflet Map DOM Canvas */}
-      <div ref={containerRef} className="w-full h-full" />
+      <div ref={containerRef} className="w-full h-full z-0" />
     </div>
   );
 };

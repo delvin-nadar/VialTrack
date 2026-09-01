@@ -688,11 +688,11 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
   }, [height, isSidebarOpen]);
 
   return (
-    <div className="flex flex-col lg:flex-row w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">
+    <div className="flex flex-col lg:flex-row w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white z-0 isolate">
       {/* 1. Main Map Canvas Container */}
-      <div className="relative flex-1 bg-slate-100 flex flex-col min-h-[480px]" style={{ height }}>
+      <div className="relative flex-1 bg-slate-100 flex flex-col min-h-[480px] z-0 isolate" style={{ height }}>
         {/* Top Floating Map Control Bar */}
-        <div className="absolute top-3 left-14 z-[400] flex flex-wrap items-center gap-2 max-w-[calc(100%-160px)]">
+        <div className="absolute top-3 left-14 z-20 flex flex-wrap items-center gap-2 max-w-[calc(100%-160px)]">
           {/* Mumbai Reset Control */}
           <button
             onClick={handleResetToMumbai}
@@ -732,7 +732,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         </div>
 
         {/* Top Right Live Firestore Status Pill & Sidebar Toggle */}
-        <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
           {/* Real-time Status */}
           <div className="bg-slate-950/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-700 text-xs font-bold text-white flex items-center gap-2 shadow-md">
             <span className="relative flex h-2 w-2">
@@ -762,7 +762,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         <div ref={mapContainerRef} className="flex-1 w-full z-0" />
 
         {/* Bottom Layer Controls & Legend Bar */}
-        <div className="absolute bottom-3 left-3 right-3 z-[400] bg-white/95 backdrop-blur-xs px-3 py-2 rounded-xl border border-slate-200 shadow-md flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="absolute bottom-3 left-3 right-3 z-20 bg-white/95 backdrop-blur-xs px-3 py-2 rounded-xl border border-slate-200 shadow-md flex flex-wrap items-center justify-between gap-2 text-xs">
           {/* Layer toggles */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">

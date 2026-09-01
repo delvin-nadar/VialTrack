@@ -783,7 +783,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
             </div>
 
             {/* Interactive Leaflet Map View */}
-            <div className="relative rounded-lg overflow-hidden border border-slate-200 shadow-inner bg-slate-100 h-64 sm:h-80 md:h-96">
+            <div className="relative rounded-lg overflow-hidden border border-slate-200 shadow-inner bg-slate-100 h-64 sm:h-80 md:h-96 z-0 isolate">
               <div ref={mapContainerRef} className="w-full h-full z-0" />
 
               {/* Map Info Overlay */}

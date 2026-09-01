@@ -555,7 +555,7 @@ export const RouteModal: React.FC<RouteModalProps> = ({
                   Bounds Fit (40px)
                 </span>
               </div>
-              <div className="relative rounded-xl overflow-hidden border border-slate-300 shadow-inner bg-slate-100 h-64 lg:h-full min-h-[300px]">
+              <div className="relative rounded-xl overflow-hidden border border-slate-300 shadow-inner bg-slate-100 h-64 lg:h-full min-h-[300px] z-0 isolate">
                 <div ref={mapContainerRef} className="w-full h-full z-0" />
               </div>
             </div>

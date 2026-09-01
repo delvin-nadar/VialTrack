@@ -21,7 +21,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto animate-fadeIn">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fadeIn">
       <div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden my-6">
         {/* Header */}
         <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
@@ -299,7 +299,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
 
       {/* Full-screen Zoom Modal */}
       {zoomedImage && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
           <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700">
             <div className="px-4 py-3 bg-slate-800 text-white flex items-center justify-between border-b border-slate-700">
               <span className="font-bold text-xs sm:text-sm">{zoomedImage.title}</span>

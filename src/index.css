@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* Leaflet Map Stacking Context Isolation & Z-Index Containment */
+.leaflet-container {
+  z-index: 0 !important;
+  isolation: isolate !important;
+}
+
+.leaflet-pane {
+  z-index: 10 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 20 !important;
+}
+
 /* Professional Leaflet Map Attribution Badge */
 .leaflet-control-attribution {
   font-size: 10px !important;
@@ -24,3 +39,4 @@
 .leaflet-control-attribution a:hover {
   text-decoration: underline !important;
 }
+

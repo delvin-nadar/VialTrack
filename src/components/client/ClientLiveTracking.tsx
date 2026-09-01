@@ -781,7 +781,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
       )}
 
       {/* Interactive Leaflet Map Card */}
-      <div className={`bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs relative ${isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen' : ''}`}>
+      <div className={`bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs relative ${isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen' : 'z-0 isolate'}`}>
         <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-sky-700" />

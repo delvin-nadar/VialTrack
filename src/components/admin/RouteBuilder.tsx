@@ -474,7 +474,7 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
             </span>
           </div>
 
-          <div className="relative rounded-xl overflow-hidden border border-slate-300 shadow-inner bg-slate-100 h-80 sm:h-[480px]">
+          <div className="relative rounded-xl overflow-hidden border border-slate-300 shadow-inner bg-slate-100 h-80 sm:h-[480px] z-0 isolate">
             <div ref={mapContainerRef} className="w-full h-full z-0" />
 
             <div className="absolute top-2 left-2 z-10 bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-xs text-[10px] text-slate-800 space-y-0.5">
