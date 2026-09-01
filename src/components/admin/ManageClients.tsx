@@ -21,14 +21,12 @@ import {
   RefreshCw,
   Copy,
   AlertCircle,
-  Eye,
-  ArrowUp,
-  ArrowDown
+  Eye
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
-import { CloudSync, db } from '../../services/firebase';
+import { db } from '../../services/firebase';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { generateStrongPassword, validatePasswordStrength, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
+import { generateStrongPassword, formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
 import { normalizeLatLng } from '../../utils/coordinates';
 import { RouteStopsManager } from './RouteStopsManager';
 import { AddRouteModal } from './AddRouteModal';
@@ -55,7 +53,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     portalUrl: string;
   } | null>(null);
 
-  // Client form state
   const [clientForm, setClientForm] = useState<Partial<Client> & { password?: string }>({
     name: '',
     contactPerson: '',
@@ -69,7 +66,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     billingRatePerPickup: '' as any
   });
 
-  // Route form state
   const [routeForm, setRouteForm] = useState<{
     name: string;
     description: string;
@@ -115,7 +111,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
 
   const handleCopyClientCredentials = async (loginId: string, tempPassword: string) => {
     const text = formatCredentialsMessage({
-      portalUrl: 'https://delvin-nadar.github.io/VialTrack/#/client',
+      portalUrl: `${window.location.origin}/#/client`,
       loginId,
       tempPassword
     });
@@ -126,7 +122,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     }
   };
 
-  // Handle Save Client
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -146,8 +141,8 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     }
 
     const effectivePassword = clientForm.password || (selectedClient?.password ? selectedClient.password : generateStrongPassword(9));
-    const effectivePhone = clientForm.phone?.trim() || '+91 98200 00000';
-    const effectiveEmail = clientForm.email?.trim() || `lab.${clientForm.name.toLowerCase().replace(/\s+/g, '')}@vialtrack.in`;
+    const effectivePhone = clientForm.phone?.trim() || '';
+    const effectiveEmail = clientForm.email?.trim() || '';
 
     if (isEditingClient && selectedClient) {
       const [vLat, vLng] = normalizeLatLng(clientForm.lat, clientForm.lng, selectedClient.lat || 19.1287852, selectedClient.lng || 72.8294183);
@@ -163,7 +158,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         address: clientForm.address?.trim() || selectedClient.address,
         lat: Number(vLat),
         lng: Number(vLng),
-        billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 450,
+        billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 0,
         active: clientForm.active ?? true,
         mustChangePassword: selectedClient.mustChangePassword ?? false,
         failedAttempts: selectedClient.failedAttempts ?? 0
@@ -214,7 +209,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         name: newClient.name,
         loginId: newClient.phone || newClient.email,
         password: effectivePassword,
-        portalUrl: 'https://delvin-nadar.github.io/VialTrack/#/client'
+        portalUrl: `${window.location.origin}/#/client`
       });
     }
 
@@ -223,7 +218,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     onRefresh();
   };
 
-  // Handle Delete Client
   const handleDeleteClient = async (clientId: string, clientName: string) => {
     if (window.confirm(`Are you sure you want to remove ${clientName}? This will also remove associated routes.`)) {
       StorageService.deleteClient(clientId);
@@ -242,7 +236,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     }
   };
 
-  // Handle Delete Route
   const handleDeleteRoute = async (routeId: string, routeName: string) => {
     if (window.confirm(`Are you sure you want to delete route "${routeName}"?`)) {
       StorageService.deleteRoute(routeId);
@@ -255,107 +248,47 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     }
   };
 
-  // Add a stop to current route form
-  const handleAddStopToForm = () => {
-    const newStop: RouteStop = {
-      id: `stop-${Date.now()}-${routeForm.stops.length + 1}`,
-      name: '',
-      address: '',
-      lat: '' as any,
-      lng: '' as any,
-      contactPerson: '',
-      phone: '',
-      order: routeForm.stops.length + 1
-    };
-    setRouteForm({ ...routeForm, stops: [...routeForm.stops, newStop] });
-  };
+  const handleSaveRoute = async (newRoute: Route) => {
+    try {
+      await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)));
 
-  // Remove a stop
-  const handleRemoveStopFromForm = (stopId: string) => {
-    setRouteForm({
-      ...routeForm,
-      stops: routeForm.stops.filter((s) => s.id !== stopId)
-    });
-  };
-
-  // Move stop up or down in Add Route form
-  const handleMoveStopInForm = (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= routeForm.stops.length) return;
-    const newStops = [...routeForm.stops];
-    const [moved] = newStops.splice(index, 1);
-    newStops.splice(targetIndex, 0, moved);
-    setRouteForm({
-      ...routeForm,
-      stops: newStops.map((s, idx) => ({ ...s, order: idx + 1 }))
-    });
-  };
-
-  // Add time slot
-  const handleAddTimeSlot = () => {
-    if (!routeForm.newTimeSlotInput) return;
-    if (routeForm.timeSlots.includes(routeForm.newTimeSlotInput)) return;
-    const sorted = [...routeForm.timeSlots, routeForm.newTimeSlotInput].sort();
-    setRouteForm({ ...routeForm, timeSlots: sorted, newTimeSlotInput: '' });
-  };
-
-  // Remove time slot
-  const handleRemoveTimeSlot = (slot: string) => {
-    setRouteForm({
-      ...routeForm,
-      timeSlots: routeForm.timeSlots.filter((s) => s !== slot)
-    });
-  };
-
-  // Correct structure for handleSaveRoute:
-const handleSaveRoute = async (newRoute: Route) => {
-  try {
-    await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)));
-
-    // Automatically create root task document for active dispatch coverage
-    const taskId = `task_${Date.now()}`;
-    const taskDoc = {
-      id: taskId,
-      taskId: taskId,
-      clientId: selectedClient.id,
-      clientName: selectedClient.name,
-      clientEmail: selectedClient.email || '',
-      routeId: newRoute.id,
-      routeName: newRoute.name,
-      riderId: '',
-      riderName: 'Unassigned',
-      riderPhone: '',
-      status: 'pending' as const,
-      currentStopIndex: 0,
-      stops: newRoute.stops.map((stop, index) => ({
-        id: stop.id,
-        stopIndex: index + 1,
-        name: stop.name,
-        address: stop.address || '',
-        lat: Number(stop.lat),
-        lng: Number(stop.lng),
-        status: (index === 0 ? 'in_progress' : 'pending') as const
-      }))
-    };
-
-    await setDoc(doc(db, 'tasks', taskId), taskDoc, { merge: true });
-    console.log('[CloudSync] Auto-instantiated tasks/' + taskId);
-  } catch (err: any) {
-    console.warn('[CloudSync] Error saving route or task:', err);
-  }
-};
+      const taskId = `task_${Date.now()}`;
+      const taskDoc = {
+        id: taskId,
+        taskId: taskId,
+        clientId: selectedClient.id,
+        clientName: selectedClient.name,
+        clientEmail: selectedClient.email || '',
+        routeId: newRoute.id,
+        routeName: newRoute.name,
+        riderId: '',
+        riderName: 'Unassigned',
+        riderPhone: '',
+        status: 'pending' as const,
+        currentStopIndex: 0,
+        stops: newRoute.stops.map((stop, index) => ({
+          id: stop.id,
+          stopIndex: index + 1,
+          name: stop.name,
+          address: stop.address || '',
+          lat: Number(stop.lat),
+          lng: Number(stop.lng),
+          status: index === 0 ? ('in_progress' as const) : ('pending' as const)
+        })),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
-      await setDoc(doc(db, 'tasks', taskId), taskDoc);
-    } catch (err) {
-      console.error("Firestore Write Error:", err);
+
+      await setDoc(doc(db, 'tasks', taskId), taskDoc, { merge: true });
+      console.log('[CloudSync] Auto-instantiated tasks/' + taskId);
+    } catch (err: any) {
+      console.error('Firestore Write Error:', err);
+    } finally {
+      setIsAddingRoute(false);
+      onRefresh();
     }
-    setIsAddingRoute(false);
-    onRefresh();
   };
 
-  // Preview as Client tool
   const handlePreviewAsClient = (client: Client) => {
     const clientSession = {
       role: 'client' as const,
@@ -368,12 +301,11 @@ const handleSaveRoute = async (newRoute: Route) => {
       loginTimestamp: new Date().toISOString()
     };
     StorageService.setClientSession(clientSession);
-    navigate('/client');
+    window.open('/#/client', '_blank');
   };
 
   return (
     <div className="space-y-5">
-      {/* Top Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-4 sm:p-5 rounded-xl shadow-xs">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -393,10 +325,10 @@ const handleSaveRoute = async (newRoute: Route) => {
               phone: '',
               email: '',
               address: '',
-              lat: 19.1860,
-              lng: 72.8485,
+              lat: 19.1287852,
+              lng: 72.8294183,
               active: true,
-              billingRatePerPickup: 450
+              billingRatePerPickup: 0
             });
             setIsAddingClient(true);
             setIsEditingClient(false);
@@ -408,9 +340,7 @@ const handleSaveRoute = async (newRoute: Route) => {
         </button>
       </div>
 
-      {/* Main Layout: Client List on Left, Client & Routes details on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left Column: Client List (4 Cols) */}
         <div className="lg:col-span-4 space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -418,7 +348,6 @@ const handleSaveRoute = async (newRoute: Route) => {
             </h3>
           </div>
 
-          {/* Search bar */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -470,7 +399,7 @@ const handleSaveRoute = async (newRoute: Route) => {
                       <span className="flex items-center gap-1 text-[11px]">
                         <MapPin className="w-3 h-3 text-sky-700" /> {rCount} Route(s)
                       </span>
-                      <span className="font-mono font-semibold text-slate-800 text-[11px]">₹{client.billingRatePerPickup || 450}/pickup</span>
+                      <span className="font-mono font-semibold text-slate-800 text-[11px]">₹{client.billingRatePerPickup || 0}/pickup</span>
                     </div>
                   </div>
                 );
@@ -479,11 +408,9 @@ const handleSaveRoute = async (newRoute: Route) => {
           </div>
         </div>
 
-        {/* Right Column: Selected Client Info & Configured Routes (8 Cols) */}
         <div className="lg:col-span-8 space-y-4">
           {selectedClient ? (
             <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-xs space-y-5">
-              {/* Selected Client Card Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
                 <div>
                   <div className="flex items-center gap-2.5">
@@ -508,7 +435,7 @@ const handleSaveRoute = async (newRoute: Route) => {
 
                   <button
                     type="button"
-                    onClick={() => handleCopyClientCredentials(selectedClient.phone || selectedClient.email, selectedClient.password || 'SecondMedicOps@2026')}
+                    onClick={() => handleCopyClientCredentials(selectedClient.phone || selectedClient.email, selectedClient.password || '')}
                     className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold rounded-lg transition-colors border border-sky-200 flex items-center gap-1.5 shadow-2xs cursor-pointer"
                     title="Copy formatted credentials text to clipboard"
                   >
@@ -542,28 +469,17 @@ const handleSaveRoute = async (newRoute: Route) => {
                     onClick={() => {
                       setIsAddingRoute(true);
                       setRouteForm({
-                        name: `${selectedClient.name} - Loop ${clientRoutes.length + 1}`,
-                        description: 'Specimen pickup loop',
-                        destinationName: `${selectedClient.name} Processing Lab`,
+                        name: '',
+                        description: '',
+                        destinationName: selectedClient.name,
                         destinationAddress: selectedClient.address,
-                        destinationLat: selectedClient.lat || 19.1860,
-                        destinationLng: selectedClient.lng || 72.8485,
-                        destinationContact: selectedClient.contactPerson,
-                        destinationPhone: selectedClient.phone,
-                        stops: [
-                          {
-                            id: `stop-${Date.now()}-1`,
-                            name: 'Hospital Collection Point A',
-                            address: 'Link Road, Mumbai',
-                            lat: 19.2082,
-                            lng: 72.8398,
-                            contactPerson: 'Pathology Coord',
-                            phone: '+91 98201 00000',
-                            order: 1
-                          }
-                        ],
-                        timeSlots: ['09:00', '13:00', '17:00', '21:00'],
-                        newTimeSlotInput: '11:30'
+                        destinationLat: selectedClient.lat || 19.1287852,
+                        destinationLng: selectedClient.lng || 72.8294183,
+                        destinationContact: selectedClient.contactPerson || '',
+                        destinationPhone: selectedClient.phone || '',
+                        stops: [],
+                        timeSlots: [],
+                        newTimeSlotInput: ''
                       });
                     }}
                     className="px-3 py-1.5 bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
@@ -574,23 +490,21 @@ const handleSaveRoute = async (newRoute: Route) => {
                 </div>
               </div>
 
-              {/* Client Contacts grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-3.5 rounded-lg border border-slate-200">
                 <div>
                   <span className="text-slate-400 block text-[10px] font-semibold uppercase">Primary Contact:</span>
-                  <span className="font-semibold text-slate-800">{selectedClient.contactPerson}</span>
+                  <span className="font-semibold text-slate-800">{selectedClient.contactPerson || '—'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-semibold uppercase">Portal Login Email:</span>
-                  <span className="font-mono text-sky-700 font-semibold">{selectedClient.email}</span>
+                  <span className="font-mono text-sky-700 font-semibold">{selectedClient.email || '—'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-semibold uppercase">Direct Phone:</span>
-                  <span className="font-mono text-slate-700">{selectedClient.phone}</span>
+                  <span className="font-mono text-slate-700">{selectedClient.phone || '—'}</span>
                 </div>
               </div>
 
-              {/* Routes List for this client */}
               <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -623,7 +537,6 @@ const handleSaveRoute = async (newRoute: Route) => {
         </div>
       </div>
 
-      {/* Add / Edit Client Modal */}
       {(isAddingClient || isEditingClient) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-lg bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -658,7 +571,7 @@ const handleSaveRoute = async (newRoute: Route) => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Apex Diagnostics Hub"
+                  placeholder="e.g. Lifecare Diagnostics"
                   value={clientForm.name || ''}
                   onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:outline-hidden focus:border-sky-600"
@@ -672,7 +585,7 @@ const handleSaveRoute = async (newRoute: Route) => {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Dr. Anita Desai"
+                    placeholder="e.g. Jayesh Joshi"
                     value={clientForm.contactPerson || ''}
                     onChange={(e) => setClientForm({ ...clientForm, contactPerson: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:outline-hidden focus:border-sky-600"
@@ -684,7 +597,7 @@ const handleSaveRoute = async (newRoute: Route) => {
                   </label>
                   <input
                     type="text"
-                    placeholder="+91 98200 11223"
+                    placeholder="e.g. 9096970015"
                     value={clientForm.phone || ''}
                     onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
@@ -699,7 +612,7 @@ const handleSaveRoute = async (newRoute: Route) => {
                 <input
                   type="email"
                   required
-                  placeholder="ops@apexdiagnostics.in"
+                  placeholder="e.g. jayesh.joshi@lifecarediagnostics.com"
                   value={clientForm.email || ''}
                   onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
@@ -709,7 +622,6 @@ const handleSaveRoute = async (newRoute: Route) => {
                 </span>
               </div>
 
-              {/* Password / Access Key Field */}
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-slate-700 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -755,7 +667,7 @@ const handleSaveRoute = async (newRoute: Route) => {
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Opp. Inorbit Mall, Link Road, Malad West, Mumbai 400064"
+                  placeholder="e.g. Cosmos Plaza, 206, D.N.Nagar, Andheri West, Mumbai 400053"
                   value={clientForm.address || ''}
                   onChange={(e) => setClientForm({ ...clientForm, address: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:border-sky-600"
@@ -770,8 +682,8 @@ const handleSaveRoute = async (newRoute: Route) => {
                   <input
                     type="number"
                     step="any"
-                    placeholder="19.1860"
-                    value={clientForm.lat ?? 19.1860}
+                    placeholder="19.1287852"
+                    value={clientForm.lat ?? ''}
                     onChange={(e) => setClientForm({ ...clientForm, lat: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
                   />
@@ -783,8 +695,8 @@ const handleSaveRoute = async (newRoute: Route) => {
                   <input
                     type="number"
                     step="any"
-                    placeholder="72.8485"
-                    value={clientForm.lng ?? 72.8485}
+                    placeholder="72.8294183"
+                    value={clientForm.lng ?? ''}
                     onChange={(e) => setClientForm({ ...clientForm, lng: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
                   />
@@ -798,7 +710,8 @@ const handleSaveRoute = async (newRoute: Route) => {
                   </label>
                   <input
                     type="number"
-                    value={clientForm.billingRatePerPickup || 450}
+                    value={clientForm.billingRatePerPickup || ''}
+                    placeholder="e.g. 130"
                     onChange={(e) => setClientForm({ ...clientForm, billingRatePerPickup: Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
                   />
@@ -839,7 +752,6 @@ const handleSaveRoute = async (newRoute: Route) => {
         </div>
       )}
 
-      {/* Credentials Created Notification Modal */}
       {createdCredentialsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4">
@@ -891,7 +803,6 @@ const handleSaveRoute = async (newRoute: Route) => {
         </div>
       )}
 
-      {/* Add New Route Modal with Explicit Coordinates, Geocoding & Multiple Stops */}
       {isAddingRoute && selectedClient && (
         <AddRouteModal
           isOpen={isAddingRoute}
@@ -903,4 +814,3 @@ const handleSaveRoute = async (newRoute: Route) => {
     </div>
   );
 };
-
