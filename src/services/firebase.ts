@@ -733,7 +733,7 @@ export const CloudSync = {
             riderId: data.assignedRiderId || '',
 riderName: data.assignedRiderName || 'Unassigned',
 riderPhone: data.assignedRiderPhone || '',
-status: (data.assignedRiderId ? 'assigned' : 'pending') as const,
+status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending',
             currentStopIndex: 0,
             stops: normalizedStops,
             createdAt: serverTimestamp(),
