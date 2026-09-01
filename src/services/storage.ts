@@ -378,9 +378,7 @@ export const StorageService = {
     const tasks = this.getTasks().map((t) => (t.id === task.id ? task : t));
     safeSetItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
     CloudSync.syncDocument('tasks', task.id, task);
-    if (task.id.startsWith('trip_') || task.id.startsWith('task_')) {
-      CloudSync.syncDocument('trips', task.id, task);
-    }
+    CloudSync.syncDocument('trips', task.id, task);
   },
   deleteTask(id: string): void {
     const tasks = this.getTasks().filter((t) => t.id !== id);

@@ -159,7 +159,7 @@ function AppContent() {
     });
 
     // Subscribe to Firestore collections across all portals so changes on Laptop and Mobile sync in real time
-    const unsubCloudTasks = CloudSync.subscribeToCollection<PickupTask>('tasks', (cloudTasks) => {
+    const unsubCloudTasks = CloudSync.subscribeToTasks((cloudTasks) => {
       if (cloudTasks !== null && cloudTasks !== undefined) {
         setTasks(cloudTasks);
         try {
@@ -589,7 +589,7 @@ function AppContent() {
 
       {/* Chain of Custody Proof Modal */}
       <ProofModal
-        task={selectedProofTask}
+        task={tasks.find((t) => t.id === selectedProofTask?.id) || selectedProofTask}
         isOpen={isProofModalOpen}
         onClose={() => {
           setIsProofModalOpen(false);

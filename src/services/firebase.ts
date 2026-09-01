@@ -967,7 +967,8 @@ export const CloudSync = {
         } else {
           const list: T[] = [];
           snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
+            const rawData = (docSnap.data() as any) || {};
+            const data: any = { id: docSnap.id, ...rawData };
             if (data.location instanceof GeoPoint) {
               data.lat = data.location.latitude;
               data.lng = data.location.longitude;
@@ -1008,7 +1009,8 @@ export const CloudSync = {
             } else {
               const list: T[] = [];
               snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
+                const rawData = (docSnap.data() as any) || {};
+                const data: any = { id: docSnap.id, ...rawData };
                 // Parse GeoPoint fields if present
                 if (data.location instanceof GeoPoint) {
                   data.lat = data.location.latitude;
@@ -1094,32 +1096,10 @@ export const CloudSync = {
     });
   },
 
-  // Dedicated real-time snapshot subscription for 'tasks' collection
+  // Dedicated real-time snapshot subscription for 'tasks' collection with unified formatting
   subscribeToTasks(onUpdate: (tasks: PickupTask[]) => void): Unsubscribe {
     return this.subscribeToCollection('tasks', (items: any[]) => {
-      const formatted = items.map((t: any) => {
-        if (t.pickupGeoPoint) {
-          const coords = parseFirestoreGeoPoint(t.pickupGeoPoint);
-          if (coords) {
-            t.pickupLocation = {
-              ...(t.pickupLocation || {}),
-              lat: coords.lat,
-              lng: coords.lng
-            };
-          }
-        }
-        if (t.deliveryGeoPoint) {
-          const coords = parseFirestoreGeoPoint(t.deliveryGeoPoint);
-          if (coords) {
-            t.deliveryLocation = {
-              ...(t.deliveryLocation || {}),
-              lat: coords.lat,
-              lng: coords.lng
-            };
-          }
-        }
-        return t;
-      }) as PickupTask[];
+      const formatted = (items || []).map((t: any) => formatUnifiedTask(t.id || t.customTaskId || t.tripId, t));
       onUpdate(formatted);
     });
   },
@@ -1706,7 +1686,7 @@ export const CloudSync = {
               (cleanPhone && tPhone === cleanPhone) ||
               (riderPhone && data.riderPhone === riderPhone);
 
-            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'completed'].includes(data.status);
+            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
 
             if (isMatchRider && isMatchingStatus) {
               list.push({
@@ -1760,7 +1740,7 @@ export const CloudSync = {
               (clientId && (data.clientId === clientId || data.clientLabId === clientId)) ||
               (cleanEmail && docEmail === cleanEmail);
 
-            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'completed'].includes(data.status);
+            const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
 
             if (isMatchClient && isMatchingStatus) {
               list.push({

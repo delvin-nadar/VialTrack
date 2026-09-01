@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../../services/storage';
-import { CloudSync } from '../../services/firebase';
+import { CloudSync, formatUnifiedTask } from '../../services/firebase';
 import { RiderDashboard } from './RiderDashboard';
 import { Route, PickupTask, RiderSession, UserAuth } from '../../types';
 import { ProofModal } from '../common/ProofModal';
@@ -45,14 +45,32 @@ export const RiderApp: React.FC<RiderAppProps> = ({ onLogout, onNavigateToLogin 
       }
     });
 
+    const unsubTrips = CloudSync.subscribeToRiderTrips(session.riderId, session.phone, (cloudTrips) => {
+      if (cloudTrips && Array.isArray(cloudTrips) && cloudTrips.length > 0) {
+        const formatted = cloudTrips.map((t) => formatUnifiedTask(t.id, t));
+        setTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          (prev || []).forEach((item) => map.set(item.id, item));
+          formatted.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        });
+      }
+    });
+
     const unsubTasks = CloudSync.subscribeToRiderTasks(session.riderId, session.phone, (cloudTasks) => {
       if (cloudTasks && Array.isArray(cloudTasks)) {
-        setTasks(cloudTasks);
+        setTasks((prev) => {
+          const map = new Map<string, PickupTask>();
+          (prev || []).forEach((item) => map.set(item.id, item));
+          cloudTasks.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        });
       }
     });
 
     return () => {
       unsubRoutes();
+      unsubTrips();
       unsubTasks();
     };
   }, [session?.riderId, session?.phone, refreshTrigger]);
@@ -119,7 +137,7 @@ export const RiderApp: React.FC<RiderAppProps> = ({ onLogout, onNavigateToLogin 
         onOpenProof={handleOpenProof}
       />
       <ProofModal
-        task={selectedProofTask}
+        task={tasks.find((t) => t.id === selectedProofTask?.id) || selectedProofTask}
         isOpen={isProofModalOpen}
         onClose={handleCloseProof}
       />
