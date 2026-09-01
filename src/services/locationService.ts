@@ -2,6 +2,7 @@ import { LocationPing, PickupBoy, PickupTask } from '../types';
 import { StorageService } from './storage';
 import { CloudSync, db } from './firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getCachedBatteryLevel } from '../utils/deviceBattery';
 
 // Distance calculation (Haversine formula in km)
 export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -149,6 +150,8 @@ class LocationTrackerService {
           const currentSpeed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
           const now = Date.now();
 
+          const liveBattery = getCachedBatteryLevel();
+
           const ping: LocationPing = {
             id: `ping-${Date.now()}`,
             riderId,
@@ -158,7 +161,7 @@ class LocationTrackerService {
             lng: currentLng,
             speed: currentSpeed,
             heading: currentHeading,
-            battery: 88,
+            battery: liveBattery,
             taskId
           };
 
@@ -188,7 +191,7 @@ class LocationTrackerService {
               await CloudSync.updateTripRiderLocation(taskId, riderId, currentLat, currentLng, {
                 heading: currentHeading,
                 speed: currentSpeed,
-                battery: 88,
+                battery: liveBattery,
                 riderName
               });
             } else {
@@ -201,8 +204,8 @@ class LocationTrackerService {
                   lng: currentLng,
                   heading: currentHeading,
                   speed: currentSpeed,
-                  battery: 88,
-                  batteryLevel: 88,
+                  battery: liveBattery,
+                  batteryLevel: liveBattery,
                   lastPing: serverTimestamp(),
                   lastPingTime: new Date().toISOString(),
                   lastUpdated: serverTimestamp(),

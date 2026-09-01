@@ -49,6 +49,7 @@ import {
   parseSlotToMinutes,
   PunctualityReport
 } from '../../utils/riderTelemetry';
+import { getLiveBatteryInfo, subscribeToBatteryChanges } from '../../utils/deviceBattery';
 
 interface RiderDashboardProps {
   user: UserAuth;
@@ -258,16 +259,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   useEffect(() => {
     if (!sessionRiderId) return;
 
-    const pulseHeartbeat = async () => {
+    const pulseHeartbeat = async (overrideBattery?: number) => {
       try {
-        let batteryPct = 88;
-        if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
-          try {
-            const battery: any = await (navigator as any).getBattery();
-            if (battery && typeof battery.level === 'number') {
-              batteryPct = Math.round(battery.level * 100);
-            }
-          } catch (_) {}
+        let batteryPct = overrideBattery;
+        if (typeof batteryPct !== 'number') {
+          const battInfo = await getLiveBatteryInfo();
+          batteryPct = battInfo.level;
         }
 
         await setDoc(
@@ -281,6 +278,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             lastHeartbeatTime: new Date().toISOString(),
             lastHeartbeat: serverTimestamp(),
             lastUpdated: serverTimestamp(),
+            battery: batteryPct,
             batteryLevel: batteryPct,
             isOnline: true
           },
@@ -292,7 +290,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     };
 
     pulseHeartbeat();
-    const interval = setInterval(pulseHeartbeat, 20000);
+    const interval = setInterval(() => pulseHeartbeat(), 20000);
+
+    // Also trigger immediate sync whenever device battery changes (e.g. plugged in or dropped)
+    const unsubBattery = subscribeToBatteryChanges((info) => {
+      pulseHeartbeat(info.level);
+    });
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -303,6 +306,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     return () => {
       clearInterval(interval);
+      unsubBattery();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [sessionRiderId, activeRider.name, activeRider.phone, (activeRider as any).appOpenTime]);

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserAuth, PickupBoy } from '../../types';
-import { Bike, Bell, LogOut, Radio, Battery, Wifi, ShieldCheck } from 'lucide-react';
+import { Bike, Bell, LogOut, Radio, Battery, BatteryCharging, Zap } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo';
+import { subscribeToBatteryChanges, DeviceBatteryInfo } from '../../utils/deviceBattery';
 
 interface RiderHeaderProps {
   user: UserAuth;
@@ -19,6 +20,24 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
   onOpenNotifications
 }) => {
   const isCheckedIn = rider?.isCheckedIn ?? true;
+  const [batteryInfo, setBatteryInfo] = useState<DeviceBatteryInfo>({
+    level: rider?.batteryLevel || 90,
+    isCharging: false,
+    supported: false
+  });
+
+  useEffect(() => {
+    const unsub = subscribeToBatteryChanges((info) => {
+      setBatteryInfo(info);
+    });
+    return unsub;
+  }, []);
+
+  const getBatteryColor = (level: number) => {
+    if (level <= 20) return 'text-red-700 bg-red-50 border-red-200';
+    if (level <= 45) return 'text-amber-700 bg-amber-50 border-amber-200';
+    return 'text-slate-700 bg-slate-50 border-slate-200';
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs text-slate-900">
@@ -71,7 +90,22 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
         </div>
 
         {/* Right Status & Exit */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* Live Device Battery Indicator */}
+          <div
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-mono font-bold ${getBatteryColor(
+              batteryInfo.level
+            )}`}
+            title={`Real-Time Device Battery: ${batteryInfo.level}% ${batteryInfo.isCharging ? '(Charging)' : ''}`}
+          >
+            {batteryInfo.isCharging ? (
+              <Zap className="w-3 h-3 text-amber-500 fill-amber-500 animate-bounce" />
+            ) : (
+              <Battery className={`w-3.5 h-3.5 ${batteryInfo.level <= 20 ? 'text-red-600' : 'text-slate-600'}`} />
+            )}
+            <span>{batteryInfo.level}%</span>
+          </div>
+
           {/* Signal & GPS Status */}
           <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-medium">
             <Radio className="w-3 h-3 text-emerald-600 animate-pulse" />
@@ -99,7 +133,7 @@ export const RiderHeader: React.FC<RiderHeaderProps> = ({
             title="Logout / End Shift"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="inline text-xs">Exit</span>
+            <span className="hidden sm:inline text-xs">Exit</span>
           </button>
         </div>
       </div>

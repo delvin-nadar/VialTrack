@@ -1,6 +1,7 @@
 import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { LocationPing } from '../types';
+import { getCachedBatteryLevel } from '../utils/deviceBattery';
 
 export interface GpsCoords {
   lat: number;
@@ -117,12 +118,13 @@ class GpsTrackingManager {
     this.lastSentCoords = { lat, lng };
 
     // Update single document in-place: doc(db, 'riders', riderId)
+    const liveBatt = getCachedBatteryLevel();
     await this.updateRiderInPlace(this.currentRiderId, {
       lat,
       lng,
       speed,
       heading,
-      battery: 88,
+      battery: liveBatt,
       name: this.currentRiderName
     });
   }
@@ -145,6 +147,7 @@ class GpsTrackingManager {
 
     const nowIso = new Date().toISOString();
     const riderRef = doc(db, 'riders', riderId);
+    const batt = data.battery ?? getCachedBatteryLevel();
 
     const payload = {
       id: riderId,
@@ -152,8 +155,8 @@ class GpsTrackingManager {
       lng: data.lng,
       heading: data.heading ?? 0,
       speed: data.speed ?? 0,
-      battery: data.battery ?? 88,
-      batteryLevel: data.battery ?? 88,
+      battery: batt,
+      batteryLevel: batt,
       lastPing: serverTimestamp(),
       lastPingTime: nowIso,
       lastUpdated: serverTimestamp(),
