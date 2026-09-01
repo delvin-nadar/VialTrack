@@ -817,14 +817,22 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     const totalVials = activeTask.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
 
+    const nowStr = new Date().toISOString();
     const updatedTask: PickupTask = {
       ...activeTask,
       status: 'delivered',
-      completedAt: new Date().toISOString(),
+      completedAt: nowStr,
+      deliveryTimestamp: nowStr,
+      isHandedOver: true,
+      isCompleted: true,
+      receiverName: receiverName,
+      intakeReceiver: receiverName,
+      handoverPhotoUrl: finalLabPhoto,
+      handoverTemperature: coldBoxTemp,
       destination: {
         ...activeTask.destination,
         status: 'delivered',
-        deliveredAt: new Date().toISOString(),
+        deliveredAt: nowStr,
         receiverName: receiverName,
         dropPhotoUrl: finalLabPhoto,
         handoverPhotoUrl: finalLabPhoto,
@@ -1942,7 +1950,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 type="text"
                 value={selectedVehicleNumber}
                 onChange={(e) => setSelectedVehicleNumber(e.target.value.toUpperCase())}
-                placeholder="e.g. MH02AB1234"
+                placeholder="e.g. MH-02-AB-1234"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono font-bold text-sm tracking-wider uppercase focus:outline-hidden focus:border-sky-600 focus:bg-white"
               />
             </div>

@@ -353,6 +353,16 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     notes: data.destination?.notes || data.taskNotes || 'Specimen cold-chain transport'
   };
 
+  const isDeliveredOrCompleted =
+    data.status === 'delivered' ||
+    data.status === 'completed' ||
+    destinationObj.status === 'delivered' ||
+    data.isHandedOver === true ||
+    data.isCompleted === true;
+
+  const resolvedStatus = isDeliveredOrCompleted ? 'delivered' : (data.status || 'assigned');
+  const nowIso = new Date().toISOString();
+
   return {
     id: id || data.id,
     clientLabId,
@@ -370,7 +380,7 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     clientId: clientLabId,
     clientName: clientLabName,
     riderVehicle: data.riderVehicle || data.vehicleNumber || '',
-    status: data.status || 'assigned',
+    status: resolvedStatus,
     activeRiderId: data.activeRiderId || data.riderId,
     activeRiderName: data.activeRiderName || data.riderName,
     currentDestinationStop: data.currentDestinationStop || (stopsProgress[0]?.stopName),
@@ -381,9 +391,16 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     isDelayed: Boolean(data.isDelayed),
     delayMinutes: data.delayMinutes || 0,
     issueFlags: data.issueFlags || [],
-    createdAt: data.createdAt ? (typeof data.createdAt === 'object' ? new Date().toISOString() : data.createdAt) : new Date().toISOString(),
+    createdAt: data.createdAt ? (typeof data.createdAt === 'object' ? nowIso : data.createdAt) : nowIso,
     startedAt: data.startedAt,
-    completedAt: data.completedAt
+    completedAt: data.completedAt || (isDeliveredOrCompleted ? destinationObj.deliveredAt || nowIso : undefined),
+    deliveryTimestamp: data.deliveryTimestamp || destinationObj.deliveredAt || data.completedAt,
+    isHandedOver: Boolean(isDeliveredOrCompleted),
+    isCompleted: Boolean(isDeliveredOrCompleted),
+    receiverName: destinationObj.receiverName || data.receiverName || data.intakeReceiver || '',
+    intakeReceiver: data.intakeReceiver || destinationObj.receiverName || data.receiverName || '',
+    handoverPhotoUrl: destinationObj.handoverPhotoUrl || data.handoverPhotoUrl || '',
+    handoverTemperature: destinationObj.coldBoxTempAtDrop !== undefined ? destinationObj.coldBoxTempAtDrop : data.handoverTemperature
   };
 }
 
@@ -731,6 +748,13 @@ export const CloudSync = {
       await setDoc(tripRef, {
         status: 'completed',
         completedAt: serverTimestamp(),
+        deliveryTimestamp: nowStr,
+        isHandedOver: true,
+        isCompleted: true,
+        receiverName: dropData?.receiverName || '',
+        intakeReceiver: dropData?.receiverName || '',
+        handoverPhotoUrl: dropData?.dropPhotoUrl || '',
+        handoverTemperature: dropData?.coldBoxTemp ?? 4.0,
         updatedAt: serverTimestamp(),
         finalDrop: dropData || null,
         destination: dropObj
@@ -740,6 +764,13 @@ export const CloudSync = {
       await setDoc(doc(db, 'tasks', tripId), {
         status: 'delivered',
         completedAt: serverTimestamp(),
+        deliveryTimestamp: nowStr,
+        isHandedOver: true,
+        isCompleted: true,
+        receiverName: dropData?.receiverName || '',
+        intakeReceiver: dropData?.receiverName || '',
+        handoverPhotoUrl: dropData?.dropPhotoUrl || '',
+        handoverTemperature: dropData?.coldBoxTemp ?? 4.0,
         updatedAt: serverTimestamp(),
         destination: dropObj
       }, { merge: true });

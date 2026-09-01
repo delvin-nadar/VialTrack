@@ -744,7 +744,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ramesh Yadav"
+                  placeholder="e.g. Full Name"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-semibold focus:outline-hidden focus:border-sky-600"
@@ -819,7 +819,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
               <input
                 type="text"
                 required
-                placeholder="e.g. MH02AB1234"
+                placeholder="e.g. MH-02-AB-1234"
                 value={form.plateNumber || form.vehicleNumber}
                 onChange={(e) => setForm({ ...form, plateNumber: e.target.value, vehicleNumber: e.target.value })}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono uppercase focus:outline-hidden focus:border-sky-600"

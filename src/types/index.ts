@@ -369,6 +369,13 @@ export interface PickupTask {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+  deliveryTimestamp?: string;
+  isHandedOver?: boolean;
+  isCompleted?: boolean;
+  receiverName?: string;
+  intakeReceiver?: string;
+  handoverPhotoUrl?: string;
+  handoverTemperature?: number;
 }
 
 export interface AttendanceRecord {

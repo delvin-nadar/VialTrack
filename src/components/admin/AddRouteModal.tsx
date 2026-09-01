@@ -423,7 +423,7 @@ export const AddRouteModal: React.FC<AddRouteModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <input
                 type="text"
-                placeholder="Lab Intake Head (e.g. Dr. Ramesh)"
+                placeholder="Lab Intake In-Charge / Contact Person"
                 value={destinationContact}
                 onChange={(e) => setDestinationContact(e.target.value)}
                 className="px-2.5 py-1.5 bg-white border border-emerald-300 rounded-lg text-slate-800 text-xs"

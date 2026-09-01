@@ -204,7 +204,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                 <div className="bg-white border border-emerald-200 px-3 py-1.5 rounded-lg text-right shadow-xs">
                   <span className="text-[10px] text-emerald-700 block font-semibold">Intake Receiver</span>
                   <span className="text-xs font-bold text-slate-900">
-                    {task.destination.receiverName || 'Lab Intake Personnel'}
+                    {task.destination.receiverName || task.receiverName || task.intakeReceiver || '—'}
                   </span>
                 </div>
               </div>
@@ -213,13 +213,19 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                 <div>
                   <span className="text-slate-400 block text-[10px] font-semibold">Delivery Timestamp:</span>
                   <span className="font-mono text-slate-900 font-bold text-xs">
-                    {task.destination.deliveredAt ? new Date(task.destination.deliveredAt).toLocaleString('en-IN') : 'Completed'}
+                    {task.destination.deliveredAt
+                      ? new Date(task.destination.deliveredAt).toLocaleString('en-IN')
+                      : (task.deliveryTimestamp
+                          ? new Date(task.deliveryTimestamp).toLocaleString('en-IN')
+                          : (task.completedAt ? new Date(task.completedAt).toLocaleString('en-IN') : '—'))}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-semibold">Intake Temperature:</span>
                   <span className="font-mono text-emerald-800 font-bold text-xs">
-                    {task.destination.coldBoxTempAtDrop !== undefined ? `${task.destination.coldBoxTempAtDrop.toFixed(1)}°C` : '3.9°C'} (Cold-Chain OK)
+                    {task.destination.coldBoxTempAtDrop !== undefined
+                      ? `${task.destination.coldBoxTempAtDrop.toFixed(1)}°C (Cold-Chain OK)`
+                      : (task.handoverTemperature !== undefined ? `${task.handoverTemperature.toFixed(1)}°C (Cold-Chain OK)` : '—')}
                   </span>
                 </div>
                 <div>
