@@ -317,7 +317,7 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => handleCopyFormattedCredentials(rider.phone || rider.email, rider.password || 'SecondMedicOps@2026')}
+                    onClick={() => handleCopyFormattedCredentials(rider.phone || rider.email, rider.password || '')}
                     className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-lg font-bold flex items-center gap-1.5 transition-colors border border-sky-200 cursor-pointer"
                     title="Copy formatted credentials text to clipboard"
                   >

@@ -1408,11 +1408,11 @@ status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending
         const list: PickupTask[] = [];
         snap.forEach((docSnap) => {
           const data = docSnap.data() as any;
-          const tPhone = (data.riderPhone || '').replace(/\D/g, '');
+          const tPhone = (data.riderPhone || data.assignedRiderPhone || '').replace(/\D/g, '');
           const isMatchRider =
             data.riderId === riderId ||
             data.assignedRiderId === riderId ||
-            (cleanPhone && tPhone === cleanPhone) ||
+            (cleanPhone && cleanPhone.length >= 8 && tPhone.includes(cleanPhone.slice(-8))) ||
             (riderPhone && data.riderPhone === riderPhone);
 
           const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
@@ -1449,11 +1449,11 @@ status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending
             const list: PickupTask[] = [];
             snapshot.forEach((docSnap) => {
               const data = docSnap.data() as any;
-              const tPhone = (data.riderPhone || '').replace(/\D/g, '');
+              const tPhone = (data.riderPhone || data.assignedRiderPhone || '').replace(/\D/g, '');
               const isMatchRider =
                 data.riderId === riderId ||
                 data.assignedRiderId === riderId ||
-                (cleanPhone && tPhone === cleanPhone) ||
+                (cleanPhone && cleanPhone.length >= 8 && tPhone.includes(cleanPhone.slice(-8))) ||
                 (riderPhone && data.riderPhone === riderPhone);
 
               const isMatchingStatus = ['assigned', 'in_transit', 'started', 'at_stop', 'picked_up', 'upcoming', 'pending', 'completed', 'delivered'].includes(data.status);
@@ -1493,18 +1493,43 @@ status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending
     let unsubSnapshot: Unsubscribe = () => {};
     const cleanPhone = (riderPhone || '').replace(/\D/g, '');
 
+    const formatRouteDoc = (docSnap: any): Route | null => {
+      const data = docSnap.data() as any;
+      const rPhone = (data.assignedRiderPhone || data.riderPhone || '').replace(/\D/g, '');
+      const isMatch =
+        data.assignedRiderId === riderId ||
+        data.riderId === riderId ||
+        (cleanPhone && cleanPhone.length >= 8 && rPhone.includes(cleanPhone.slice(-8))) ||
+        (riderPhone && (data.assignedRiderPhone === riderPhone || data.riderPhone === riderPhone));
+
+      if (isMatch) {
+        if (data.destinationLab) {
+          const coords = parseFirestoreGeoPoint(data.destinationLab.location) || {
+            lat: data.destinationLab.lat,
+            lng: data.destinationLab.lng
+          };
+          data.destinationLab.lat = coords.lat;
+          data.destinationLab.lng = coords.lng;
+        }
+        if (Array.isArray(data.stops)) {
+          data.stops = data.stops.map((s: any) => {
+            const coords = parseFirestoreGeoPoint(s.location) || { lat: s.lat, lng: s.lng };
+            return { ...s, lat: coords.lat, lng: coords.lng };
+          });
+        }
+        return { id: docSnap.id, ...data } as Route;
+      }
+      return null;
+    };
+
     const fetchRiderRoutesViaPolling = async () => {
       try {
-        const q = query(collection(db, 'routes'), where('assignedRiderId', '==', riderId));
-        const snapshot = await getDocs(q);
+        const snapshot = await getDocs(collection(db, 'routes'));
         if (isCancelled) return;
         const list: Route[] = [];
         snapshot.forEach((docSnap) => {
-          const data = docSnap.data() as any;
-          const rPhone = (data.assignedRiderPhone || '').replace(/\D/g, '');
-          if (data.assignedRiderId === riderId || (cleanPhone && rPhone === cleanPhone)) {
-            list.push(data as Route);
-          }
+          const route = formatRouteDoc(docSnap);
+          if (route) list.push(route);
         });
         onUpdate(list);
       } catch (err: any) {
@@ -1521,9 +1546,8 @@ status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending
     };
 
     try {
-      const q = query(collection(db, 'routes'), where('assignedRiderId', '==', riderId));
       unsubSnapshot = onSnapshot(
-        q,
+        collection(db, 'routes'),
         {
           next: (snapshot) => {
             if (isCancelled) return;
@@ -1533,11 +1557,8 @@ status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending
             }
             const list: Route[] = [];
             snapshot.forEach((docSnap) => {
-              const data = docSnap.data() as any;
-              const rPhone = (data.assignedRiderPhone || '').replace(/\D/g, '');
-              if (data.assignedRiderId === riderId || (cleanPhone && rPhone === cleanPhone)) {
-                list.push(data as Route);
-              }
+              const route = formatRouteDoc(docSnap);
+              if (route) list.push(route);
             });
             onUpdate(list);
           },

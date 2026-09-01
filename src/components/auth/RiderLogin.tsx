@@ -154,16 +154,9 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
         }
       }
 
-      // 5. Verify PIN (Support matched password, Firebase Auth, or standard defaults)
+      // 5. Verify PIN / Password strictly against rider's assigned credentials or Firebase Auth
       let isAuthenticated = false;
-      if (
-        matchedRider.password === cleanPin ||
-        !matchedRider.password ||
-        cleanPin === '1234' ||
-        cleanPin === '123456' ||
-        cleanPin === '2026' ||
-        cleanPin === '9876'
-      ) {
+      if (matchedRider.password && matchedRider.password === cleanPin) {
         isAuthenticated = true;
       } else {
         try {
@@ -173,7 +166,7 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
             isAuthenticated = true;
           }
         } catch {
-          // If custom pin was set during session
+          // Check if custom password matches
           if (matchedRider.password === cleanPin) {
             isAuthenticated = true;
           }
@@ -338,9 +331,8 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
               />
             </div>
             <div className="flex items-center justify-between mt-1">
-              <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                <KeyRound className="w-3 h-3 text-slate-400" />
-                Default PIN: 1234 or 2026
+              <span className="text-[10px] text-slate-400">
+                Enter your configured PIN or password
               </span>
             </div>
           </div>

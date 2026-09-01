@@ -276,18 +276,30 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return Array.from(combinedRoutes.values());
   }, [routes, liveRoutes, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName, liveTasks]);
 
-  // Filter today's tasks strictly for this rider
+  // Filter active / today's tasks strictly for this rider (handles today, scheduledDate, or active ongoing status)
   const todayRiderTasks: PickupTask[] = useMemo(() => {
     const combinedTasks = new Map<string, PickupTask>();
-    tasks.filter((t) => isTaskAssignedToRider(t) && t.date === todayStr).forEach((t) => combinedTasks.set(t.id, t));
-    liveTasks.filter((t) => isTaskAssignedToRider(t) && t.date === todayStr).forEach((t) => combinedTasks.set(t.id, t));
+    
+    const filterTask = (t: PickupTask) => {
+      if (!isTaskAssignedToRider(t)) return false;
+      const tDate = t.scheduledDate || t.date || (t.createdAt ? t.createdAt.split('T')[0] : '');
+      const isActiveStatus = ['assigned', 'started', 'at_stop', 'picked_up', 'in_transit', 'in_progress', 'pending'].includes(t.status);
+      // Show task if it's scheduled for today, or if it's an active incomplete task assigned to this rider
+      return tDate === todayStr || (!tDate && isActiveStatus) || isActiveStatus;
+    };
+
+    tasks.filter(filterTask).forEach((t) => combinedTasks.set(t.id, t));
+    liveTasks.filter(filterTask).forEach((t) => combinedTasks.set(t.id, t));
     return Array.from(combinedTasks.values());
   }, [tasks, liveTasks, todayStr, sessionRiderId, activeRider.id, normalizedSessionPhone, sessionName]);
 
   // Build sequential scheduled stops for "My Daily Rounds Schedule"
+  // Handles BOTH predefined route loops AND direct/ad-hoc pickup tasks (e.g. laptop pickups, hospital pickups)
   const scheduleStops: ScheduleStopItem[] = useMemo(() => {
     const items: ScheduleStopItem[] = [];
+    const processedTaskIds = new Set<string>();
 
+    // 1. Process assigned route loops
     assignedRoutes.forEach((route) => {
       // Strictly use the route's configured time slots. If none configured, show single scheduled daily run
       const timeSlots = route.timeSlots && route.timeSlots.length > 0 ? route.timeSlots : ['Scheduled Slot'];
@@ -298,10 +310,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       timeSlots.forEach((slot) => {
         // Find existing task for this slot today
         const matchedTask = todayRiderTasks.find(
-          (t) => (t.routeId === route.id || t.routeName === route.name) && t.timeSlot === slot
+          (t) => (t.routeId === route.id || t.routeName === route.name) && (t.timeSlot === slot || !t.timeSlot)
         );
 
         if (matchedTask && matchedTask.stopsProgress && matchedTask.stopsProgress.length > 0) {
+          processedTaskIds.add(matchedTask.id);
           matchedTask.stopsProgress.forEach((sp, spIdx) => {
             const isCollected = sp.status === 'picked_up';
             const isInTransit =
@@ -365,6 +378,88 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           });
         }
       });
+    });
+
+    // 2. Include standalone / ad-hoc tasks directly assigned to this rider (e.g. laptop pickups, on-demand dispatch)
+    todayRiderTasks.forEach((task) => {
+      if (processedTaskIds.has(task.id)) return;
+      processedTaskIds.add(task.id);
+
+      const client = StorageService.getClientById(task.clientId || task.clientLabId) || {
+        name: task.clientName || task.clientLabName || 'Pickup Location'
+      };
+
+      const taskStops = (task.stopsProgress && task.stopsProgress.length > 0)
+        ? task.stopsProgress
+        : (task.stops && task.stops.length > 0 ? task.stops : []);
+
+      if (taskStops.length > 0) {
+        taskStops.forEach((sp: any, spIdx: number) => {
+          const isCollected = sp.status === 'picked_up' || sp.status === 'completed';
+          const isInTransit =
+            (task.status === 'started' || task.status === 'at_stop' || task.status === 'in_transit') &&
+            !isCollected;
+          const status: 'pending' | 'in_transit' | 'collected' = isCollected
+            ? 'collected'
+            : isInTransit
+            ? 'in_transit'
+            : 'pending';
+
+          items.push({
+            id: `${task.id}-stop-${spIdx}`,
+            uniqueKey: `${task.id}-stop-${spIdx}`,
+            stopNumber: spIdx + 1,
+            stopName: sp.stopName || sp.name || task.clientName || 'Assigned Pickup Point',
+            address: sp.address || (task as any).clientAddress || task.destination?.address || 'Pickup Address',
+            lat: sp.lat || 19.1287852,
+            lng: sp.lng || 72.8294183,
+            timeSlot: task.timeSlot || 'Immediate Dispatch',
+            contactPerson: sp.contactPerson || 'Point of Contact',
+            phone: sp.phone || '',
+            status,
+            vialCount: sp.sampleCount ?? sp.specimenCount ?? 0,
+            coldBoxTemp: sp.coldBoxTemp,
+            photoUrl: sp.photoUrl,
+            photo2Url: (sp as any).handoverPhotoUrl || (sp as any).photo2Url,
+            taskId: task.id,
+            task: task,
+            routeId: task.routeId || `adhoc-${task.id}`,
+            routeName: task.routeName || 'Direct Dispatch Pickup',
+            clientId: task.clientId || task.clientLabId || '',
+            clientName: task.clientName || client.name,
+            stopIndex: spIdx,
+            order: spIdx + 1
+          });
+        });
+      } else {
+        // Single stop task
+        const isCollected = task.status === 'picked_up' || task.status === 'delivered' || task.status === 'completed';
+        const isInTransit = (task.status === 'started' || task.status === 'at_stop' || task.status === 'in_transit') && !isCollected;
+        const status: 'pending' | 'in_transit' | 'collected' = isCollected ? 'collected' : isInTransit ? 'in_transit' : 'pending';
+
+        items.push({
+          id: `${task.id}-stop-0`,
+          uniqueKey: `${task.id}-stop-0`,
+          stopNumber: 1,
+          stopName: task.clientName || task.clientLabName || 'Assigned Pickup Point',
+          address: (task as any).clientAddress || task.destination?.address || 'Pickup Address',
+          lat: task.clientLabLocation?.lat || 19.1287852,
+          lng: task.clientLabLocation?.lng || 72.8294183,
+          timeSlot: task.timeSlot || 'Immediate Dispatch',
+          contactPerson: 'Point of Contact',
+          phone: '',
+          status,
+          vialCount: 0,
+          taskId: task.id,
+          task: task,
+          routeId: task.routeId || `adhoc-${task.id}`,
+          routeName: task.routeName || 'Direct Dispatch Pickup',
+          clientId: task.clientId || task.clientLabId || '',
+          clientName: task.clientName || client.name,
+          stopIndex: 0,
+          order: 1
+        });
+      }
     });
 
     return items;
@@ -1082,10 +1177,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       {/* KPI Stats Quick Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Loops</span>
-          <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">{assignedRoutes.length}</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Loops / Pickups</span>
+          <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">
+            {assignedRoutes.length + (todayRiderTasks.filter(t => !assignedRoutes.some(r => r.id === t.routeId)).length)}
+          </span>
           <span className="text-[10px] text-slate-500 truncate block mt-0.5">
-            {assignedRoutes.map((r) => r.name).join(', ') || 'No Assigned Routes'}
+            {[
+              ...assignedRoutes.map((r) => r.name),
+              ...todayRiderTasks.filter(t => !assignedRoutes.some(r => r.id === t.routeId)).map(t => t.routeName || t.clientName)
+            ].filter(Boolean).join(', ') || 'No Assigned Pickups'}
           </span>
         </div>
 
@@ -1117,13 +1217,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         </div>
       </div>
 
-      {/* No Assigned Routes Empty State */}
-      {assignedRoutes.length === 0 && (
+      {/* No Assigned Routes or Tasks Empty State */}
+      {assignedRoutes.length === 0 && todayRiderTasks.length === 0 && (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-3 shadow-xs">
           <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-700 flex items-center justify-center mx-auto border border-sky-200">
             <Inbox className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900">No Collection Loops Assigned</h3>
+          <h3 className="text-base font-bold text-slate-900">No Collection Loops or Pickups Assigned</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
             You currently have no diagnostic routes or pickup tasks assigned to your shift. Please contact SecondMedic Ops Dispatch to assign your schedule.
           </p>
