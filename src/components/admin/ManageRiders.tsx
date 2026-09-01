@@ -229,11 +229,21 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
                 {/* Rider Photo & Status */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={rider.photoUrl}
-                      alt={rider.name}
-                      className="w-11 h-11 rounded-lg object-cover border border-slate-200 shadow-xs"
-                    />
+                    {rider.photoUrl ? (
+                      <img
+                        src={rider.photoUrl}
+                        alt={rider.name}
+                        className="w-11 h-11 rounded-lg object-cover border border-slate-200 shadow-xs"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : null}
+                    {!rider.photoUrl && (
+                      <div className="w-11 h-11 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-sm border border-sky-200 shadow-xs">
+                        {rider.name.charAt(0)}
+                      </div>
+                    )}
                     <div>
                       <h4 className="font-bold text-slate-900 text-sm">{rider.name}</h4>
                       <p className="text-xs text-sky-700 font-mono font-medium">{rider.vehicleNumber}</p>

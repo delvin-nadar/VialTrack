@@ -426,7 +426,15 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     receiverName: destinationObj.receiverName || data.receiverName || data.intakeReceiver || '',
     intakeReceiver: data.intakeReceiver || destinationObj.receiverName || data.receiverName || '',
     handoverPhotoUrl: destinationObj.handoverPhotoUrl || data.handoverPhotoUrl || '',
-    handoverTemperature: destinationObj.coldBoxTempAtDrop !== undefined ? destinationObj.coldBoxTempAtDrop : data.handoverTemperature
+    handoverTemperature: destinationObj.coldBoxTempAtDrop !== undefined ? destinationObj.coldBoxTempAtDrop : data.handoverTemperature,
+    photoUrl: data.photoUrl || (stopsProgress[0]?.photoUrl) || '',
+    photo2Url: data.photo2Url || data.selfieUrl || (stopsProgress[0]?.photo2Url) || '',
+    selfieUrl: data.selfieUrl || data.photo2Url || (stopsProgress[0]?.selfieUrl) || '',
+    proofPhoto: data.proofPhoto || data.photoUrl || (stopsProgress[0]?.photoUrl) || '',
+    totalVials: data.totalVials !== undefined ? data.totalVials : stopsProgress.reduce((sum: number, s: any) => sum + Number(s.sampleCount || 0), 0),
+    sampleCount: data.sampleCount !== undefined ? data.sampleCount : stopsProgress.reduce((sum: number, s: any) => sum + Number(s.sampleCount || 0), 0),
+    coldBoxTemp: data.coldBoxTemp !== undefined ? data.coldBoxTemp : (stopsProgress[0]?.coldBoxTemp ?? 4.0),
+    temperature: data.temperature !== undefined ? data.temperature : (stopsProgress[0]?.coldBoxTemp ?? 4.0)
   };
 }
 

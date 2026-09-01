@@ -378,6 +378,14 @@ export interface PickupTask {
   intakeReceiver?: string;
   handoverPhotoUrl?: string;
   handoverTemperature?: number;
+  photoUrl?: string;
+  photo2Url?: string;
+  selfieUrl?: string;
+  proofPhoto?: string;
+  totalVials?: number;
+  sampleCount?: number;
+  coldBoxTemp?: number;
+  temperature?: number;
 }
 
 export interface AttendanceRecord {

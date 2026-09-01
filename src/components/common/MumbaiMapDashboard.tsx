@@ -976,11 +976,21 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2.5">
-                            <img
-                              src={r.photoUrl}
-                              alt={r.name}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-300"
-                            />
+                            {r.photoUrl ? (
+                              <img
+                                src={r.photoUrl}
+                                alt={r.name}
+                                className="w-8 h-8 rounded-full object-cover border border-slate-300"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : null}
+                            {!r.photoUrl && (
+                              <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-xs border border-sky-200">
+                                {r.name?.charAt(0) || 'R'}
+                              </div>
+                            )}
                             <div>
                               <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
                                 <span>{r.name}</span>
