@@ -853,6 +853,90 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     onRefresh();
   };
 
+  // Start Lab Drop / Handover from Daily Rounds Schedule
+  const handleStartDropFromSchedule = (task: PickupTask | undefined, route: Route, slot: string) => {
+    let targetTask = task;
+
+    if (!targetTask) {
+      const newTaskId = `task-${todayStr}-${slot.replace(':', '')}-${Date.now().toString().slice(-4)}`;
+      const client = StorageService.getClientById(route?.clientId || '') || {
+        id: route?.clientId || '',
+        name: route?.destinationLab?.name || (route as any)?.clientName || 'Lifecare lab',
+        address: route?.destinationLab?.address || 'Central Diagnostic Lab Facility'
+      };
+
+      const stopsProgress: StopProgress[] = (route?.stops || []).map((s, idx) => ({
+        stopId: s.id || `stop-${idx}`,
+        stopName: s.name,
+        address: s.address,
+        lat: s.lat || 19.1287852,
+        lng: s.lng || 72.8294183,
+        contactPerson: s.contactPerson || 'Point of Contact',
+        phone: s.phone || '',
+        status: 'completed',
+        sampleCount: s.sampleCount || 0
+      }));
+
+      targetTask = {
+        id: newTaskId,
+        date: todayStr,
+        timeSlot: slot,
+        routeId: route?.id || '',
+        routeName: route?.name || 'Assigned Route',
+        clientId: client.id,
+        clientName: client.name,
+        riderId: activeRider.id,
+        riderName: activeRider.name,
+        riderPhone: activeRider.phone,
+        riderVehicle: activeRider.vehicleNumber,
+        status: 'started',
+        currentStopIndex: 0,
+        pickupLocation: {
+          name: route?.stops?.[0]?.name || client.name,
+          address: route?.stops?.[0]?.address || client.address,
+          lat: route?.stops?.[0]?.lat || 19.1363,
+          lng: route?.stops?.[0]?.lng || 72.8277,
+          area: ''
+        },
+        deliveryLocation: {
+          name: route?.destinationLab?.name || client.name,
+          address: route?.destinationLab?.address || client.address,
+          lat: route?.destinationLab?.lat || 19.1860,
+          lng: route?.destinationLab?.lng || 72.8485,
+          area: ''
+        },
+        stopsProgress,
+        destination: {
+          name: route?.destinationLab?.name || client.name,
+          address: route?.destinationLab?.address || client.address,
+          lat: route?.destinationLab?.lat || 19.1860,
+          lng: route?.destinationLab?.lng || 72.8485,
+          notes: 'Specimen cold-chain transport'
+        },
+        isDelayed: false,
+        delayMinutes: 0,
+        issueFlags: [],
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString()
+      };
+
+      StorageService.addTask(targetTask);
+    }
+
+    setActiveTaskId(targetTask.id);
+    setReceiverName(
+      route?.destinationLab?.contactPerson ||
+      (targetTask.destination as any)?.receiverName ||
+      targetTask.receiverName ||
+      'Jayesh joshi'
+    );
+    setColdBoxTemp(4.0);
+    setStopPhoto(null);
+    setStopPhoto2(null);
+    setIsProcessingDrop(true);
+    onRefresh();
+  };
+
   // Confirm Stop Pickup with 2-Photo Proof (Specimens & Selfie)
   const handleConfirmStopPickup = () => {
     if (!activeTask) return;
@@ -1549,6 +1633,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         onStartCollection={handleStartStopCollectionFromSchedule}
         onOpenProofModal={onOpenProof}
         onSelectTask={(taskId) => setActiveTaskId(taskId)}
+        onStartDrop={handleStartDropFromSchedule}
       />
 
       {/* Modal: Process Stop Pickup (2-Photo Proof: Specimen Vials + Signed Slip) */}

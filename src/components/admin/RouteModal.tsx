@@ -96,7 +96,7 @@ export const RouteModal: React.FC<RouteModalProps> = ({
       });
 
       if (map.attributionControl) {
-        map.attributionControl.setPrefix('SecondMedic Route Preview |');
+        map.attributionControl.setPrefix(false);
       }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

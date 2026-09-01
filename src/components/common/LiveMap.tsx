@@ -194,7 +194,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       });
 
       if (map.attributionControl) {
-        map.attributionControl.setPrefix('SecondMedic Fleet Telematics |');
+        map.attributionControl.setPrefix(false);
       }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

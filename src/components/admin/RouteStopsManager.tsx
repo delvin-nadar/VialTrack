@@ -104,7 +104,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
       }).setView([19.1624, 72.8465], 12);
 
       if (map.attributionControl) {
-        map.attributionControl.setPrefix('SecondMedic Route Engine |');
+        map.attributionControl.setPrefix(false);
       }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

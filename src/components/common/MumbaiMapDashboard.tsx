@@ -237,7 +237,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
       // Configure official enterprise attribution prefix
       if (map.attributionControl) {
-        map.attributionControl.setPrefix('SecondMedic Fleet Radar |');
+        map.attributionControl.setPrefix(false);
       }
 
       L.control.zoom({ position: 'topleft' }).addTo(map);

@@ -311,7 +311,7 @@ export const ClientLiveTracking: React.FC<ClientLiveTrackingProps> = ({
 
       // Configure official enterprise attribution prefix
       if (map.attributionControl) {
-        map.attributionControl.setPrefix('SecondMedic Logistics Intelligence |');
+        map.attributionControl.setPrefix(false);
       }
 
       L.control.zoom({ position: 'topleft' }).addTo(map);

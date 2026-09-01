@@ -129,6 +129,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           const scheduledTask: PickupTask = {
             id: `scheduled-${rider.id}-${routeObj.id}`,
+            date: new Date().toISOString().split('T')[0],
             routeId: routeObj.id,
             routeName: routeObj.name,
             clientName: clientObj.name,
@@ -138,9 +139,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             riderPhone: rider.phone,
             riderVehicle: rider.vehicleNumber,
             timeSlot: routeObj.timeSlots?.[0] || '10:00 AM - 12:00 PM',
-            status: rider.isCheckedIn ? 'assigned' : 'scheduled',
+            status: rider.isCheckedIn ? 'assigned' : 'upcoming',
+            currentStopIndex: 0,
             temperature: 4.0,
             coldBoxTemp: 4.0,
+            issueFlags: [],
             stops: (routeObj.stops || []).map((s, idx) => ({
               stopId: s.id || `stop-${idx}`,
               stopName: s.name,
@@ -148,9 +151,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               lat: s.lat,
               lng: s.lng,
               contactPerson: s.contactPerson || 'Reception / Phlebo Counter',
-              phone: s.contactPhone || '',
+              phone: s.phone || '',
               status: 'pending' as const,
               sampleCount: 0,
+              specimenCount: 0,
               vials: []
             })),
             stopsProgress: (routeObj.stops || []).map((s, idx) => ({
@@ -160,7 +164,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               lat: s.lat,
               lng: s.lng,
               contactPerson: s.contactPerson || 'Reception / Phlebo Counter',
-              phone: s.contactPhone || '',
+              phone: s.phone || '',
               status: 'pending' as const,
               sampleCount: 0,
               vials: []
@@ -213,7 +217,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       await setDoc(doc(db, 'tasks', taskId), cleanTask);
       await setDoc(doc(db, 'trips', taskId), cleanTask);
-      StorageService.saveTask(cleanTask);
+      StorageService.updateTask(cleanTask);
 
       setSelectedTaskId(taskId);
       setDispatchNotice(`Dispatched scheduled round #${taskId.slice(-6)} to ${task.riderName}! Live alert sent to rider.`);

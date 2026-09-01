@@ -68,7 +68,7 @@ export const RouteBuilder: React.FC<RouteBuilderProps> = ({
       });
 
       if (map.attributionControl) {
-        map.attributionControl.setPrefix('SecondMedic Route Builder |');
+        map.attributionControl.setPrefix(false);
       }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
