@@ -888,7 +888,30 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const updatedTask: PickupTask = {
       ...activeTask,
       status: isAllStopsPicked ? 'in_transit' : 'at_stop',
-      stopsProgress: updatedStops
+      stopsProgress: updatedStops,
+      stops: updatedStops.map((sp: any) => ({
+        id: sp.id || sp.stopId,
+        stopId: sp.stopId || sp.id,
+        name: sp.stopName || sp.name,
+        stopName: sp.stopName || sp.name,
+        address: sp.address,
+        lat: sp.lat,
+        lng: sp.lng,
+        status: sp.status,
+        sampleCount: sp.sampleCount ?? sp.specimenCount ?? 0,
+        specimenCount: sp.sampleCount ?? sp.specimenCount ?? 0,
+        photoUrl: sp.photoUrl || '',
+        photo2Url: sp.photo2Url || sp.handoverPhotoUrl || sp.selfieUrl || '',
+        handoverPhotoUrl: sp.handoverPhotoUrl || sp.photo2Url || sp.selfieUrl || '',
+        selfieUrl: sp.selfieUrl || sp.photo2Url || sp.handoverPhotoUrl || '',
+        coldBoxTemp: sp.coldBoxTemp,
+        arrivedAt: sp.arrivedAt,
+        pickedUpAt: sp.pickedUpAt,
+        completedAt: sp.completedAt,
+        photoTimestamp: sp.photoTimestamp,
+        photoLocation: sp.photoLocation,
+        notes: sp.notes || ''
+      }))
     };
 
     setLiveTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
@@ -896,7 +919,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     CloudSync.completeTripStop(
       activeTask.id,
       currentStopIndex,
-      activeTask.stops || activeTask.stopsProgress,
+      updatedStops,
       {
         sampleCount: vialCount,
         coldBoxTemp: coldBoxTemp,

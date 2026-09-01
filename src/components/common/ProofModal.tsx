@@ -82,7 +82,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
               <Package className="w-3.5 h-3.5 text-amber-600" /> Total Vials Picked
             </span>
             <span className="font-bold text-amber-800 text-xs sm:text-sm font-mono">{totalVials} Units</span>
-            <span className="text-[10px] text-slate-500 block">{task.stopsProgress.length} Stops Handled</span>
+            <span className="text-[10px] text-slate-500 block">{safeStops.length} Stops Handled</span>
           </div>
 
           <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
@@ -103,9 +103,13 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
             </h4>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {task.stopsProgress.map((stop, idx) => (
+              {safeStops.map((stop: any, idx: number) => {
+                const vialsPhoto = stop.photoUrl || stop.photo;
+                const selfiePhoto = stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url;
+
+                return (
                 <div
-                  key={stop.stopId || idx}
+                  key={stop.stopId || stop.id || idx}
                   className="bg-white rounded-lg p-3.5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-2.5"
                 >
                   <div>
@@ -114,16 +118,16 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                         <span className="w-5 h-5 rounded-full bg-sky-700 text-white font-bold text-[11px] flex items-center justify-center">
                           {idx + 1}
                         </span>
-                        <h5 className="font-bold text-slate-900 text-xs sm:text-sm">{stop.stopName}</h5>
+                        <h5 className="font-bold text-slate-900 text-xs sm:text-sm">{stop.stopName || stop.name || `Stop ${idx + 1}`}</h5>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        stop.status === 'picked_up'
+                        stop.status === 'picked_up' || stop.status === 'completed'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                           : stop.status === 'no_sample'
                           ? 'bg-amber-100 text-amber-800 border border-amber-200'
                           : 'bg-slate-100 text-slate-700'
                       }`}>
-                        {stop.status === 'picked_up' ? `${stop.sampleCount} Vials Picked` : stop.status}
+                        {stop.status === 'picked_up' || stop.status === 'completed' ? `${stop.sampleCount ?? stop.specimenCount ?? 0} Vials Picked` : stop.status}
                       </span>
                     </div>
 
@@ -139,14 +143,14 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                       <div>
                         <span className="text-slate-400 block text-[10px] font-semibold">Chiller Temp:</span>
                         <span className="font-mono font-bold text-emerald-800 text-xs">
-                          {stop.coldBoxTemp !== undefined ? `${stop.coldBoxTemp.toFixed(1)}°C` : 'N/A'}
+                          {stop.coldBoxTemp !== undefined ? `${Number(stop.coldBoxTemp).toFixed(1)}°C` : 'N/A'}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* 2-Photo Proof Section: Photo 1 (Specimens) & Photo 2 (Rider Selfie) */}
-                  {stop.photoUrl || stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url ? (
+                  {vialsPhoto || selfiePhoto ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                       {/* Photo 1: Specimen Vials */}
                       <div className="space-y-1">
@@ -154,24 +158,24 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                           <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
                             <Package className="w-3.5 h-3.5 text-sky-700" /> Photo 1: Specimen Vials
                           </span>
-                          {stop.photoUrl && (
+                          {vialsPhoto && (
                             <button
                               type="button"
-                              onClick={() => setZoomedImage({ url: stop.photoUrl!, title: `Specimen Vials Proof: ${stop.stopName}` })}
+                              onClick={() => setZoomedImage({ url: vialsPhoto, title: `Specimen Vials Proof: ${stop.stopName || stop.name}` })}
                               className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
                             >
                               <Maximize2 className="w-3 h-3" /> Zoom
                             </button>
                           )}
                         </div>
-                        {stop.photoUrl ? (
+                        {vialsPhoto ? (
                           <div
-                            onClick={() => setZoomedImage({ url: stop.photoUrl!, title: `Specimen Vials Proof: ${stop.stopName}` })}
+                            onClick={() => setZoomedImage({ url: vialsPhoto, title: `Specimen Vials Proof: ${stop.stopName || stop.name}` })}
                             className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
                           >
                             <img
-                              src={stop.photoUrl}
-                              alt={`Specimen proof at ${stop.stopName}`}
+                              src={vialsPhoto}
+                              alt={`Specimen proof at ${stop.stopName || stop.name}`}
                               className="w-full h-36 object-cover rounded-lg group-hover:scale-101 transition-transform"
                             />
                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
@@ -191,12 +195,12 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                           <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
                             <UserCheck className="w-3.5 h-3.5 text-sky-700" /> Photo 2: Rider Selfie
                           </span>
-                          {(stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url) && (
+                          {selfiePhoto && (
                             <button
                               type="button"
                               onClick={() => setZoomedImage({
-                                url: (stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url)!,
-                                title: `Rider Selfie Proof: ${stop.stopName}`
+                                url: selfiePhoto,
+                                title: `Rider Selfie Proof: ${stop.stopName || stop.name}`
                               })}
                               className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
                             >
@@ -204,17 +208,17 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                             </button>
                           )}
                         </div>
-                        {stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url ? (
+                        {selfiePhoto ? (
                           <div
                             onClick={() => setZoomedImage({
-                              url: (stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url)!,
-                              title: `Rider Selfie Proof: ${stop.stopName}`
+                              url: selfiePhoto,
+                              title: `Rider Selfie Proof: ${stop.stopName || stop.name}`
                             })}
                             className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
                           >
                             <img
-                              src={stop.selfieUrl || stop.handoverPhotoUrl || stop.photo2Url}
-                              alt={`Rider selfie at ${stop.stopName}`}
+                              src={selfiePhoto}
+                              alt={`Rider selfie at ${stop.stopName || stop.name}`}
                               className="w-full h-36 object-cover rounded-lg group-hover:scale-101 transition-transform"
                             />
                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
@@ -240,7 +244,8 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                     </p>
                   )}
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
 
@@ -291,41 +296,45 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                 </div>
               </div>
 
-              {(task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl) && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" /> Lab Intake Watermarked Proof
-                    </span>
-                    <button
-                      type="button"
+              {(() => {
+                const destPhoto = task.destination?.dropPhotoUrl || task.destination?.handoverPhotoUrl || task.handoverPhotoUrl || (task as any)?.dropPhotoUrl;
+                if (!destPhoto) return null;
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" /> Lab Intake Watermarked Proof
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setZoomedImage({
+                          url: destPhoto,
+                          title: `Lab Handover Proof: ${task.destination?.name || 'Lab Drop'}`
+                        })}
+                        className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Maximize2 className="w-3 h-3" /> Zoom
+                      </button>
+                    </div>
+                    <div
                       onClick={() => setZoomedImage({
-                        url: (task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl)!,
-                        title: `Lab Handover Proof: ${task.destination.name}`
+                        url: destPhoto,
+                        title: `Lab Handover Proof: ${task.destination?.name || 'Lab Drop'}`
                       })}
-                      className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer"
+                      className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
                     >
-                      <Maximize2 className="w-3 h-3" /> Zoom
-                    </button>
-                  </div>
-                  <div
-                    onClick={() => setZoomedImage({
-                      url: (task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl)!,
-                      title: `Lab Handover Proof: ${task.destination.name}`
-                    })}
-                    className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
-                  >
-                    <img
-                      src={task.destination.dropPhotoUrl || task.destination.handoverPhotoUrl}
-                      alt="Lab Drop Proof"
-                      className="w-full max-h-64 object-cover rounded-lg group-hover:scale-101 transition-transform"
-                    />
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
-                      Click to enlarge
+                      <img
+                        src={destPhoto}
+                        alt="Lab Drop Proof"
+                        className="w-full max-h-64 object-cover rounded-lg group-hover:scale-101 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                        Click to enlarge
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {task.destination.notes && (
                 <p className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200 italic shadow-xs">
