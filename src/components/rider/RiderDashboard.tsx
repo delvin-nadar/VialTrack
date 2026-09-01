@@ -890,8 +890,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const stopIdx = targetStopIdx !== undefined ? targetStopIdx : currentStopIndex;
     const targetStop = activeTask.stopsProgress[stopIdx] || activeTask.stopsProgress[0];
     const destinationStopName = targetStop?.stopName || activeTask.destination.name;
-    const riderId = sessionRiderId || activeRider.id || 'pb-1';
-    const riderName = activeRider.name || 'Asif';
+    const riderId = sessionRiderId || activeRider.id || 'rider';
+    const riderName = sessionName || activeRider.name || 'Assigned Phlebotomist';
 
     // 1. Update local task state and storage
     const updatedTask: PickupTask = {

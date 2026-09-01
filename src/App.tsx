@@ -190,9 +190,27 @@ function AppContent() {
       // Realtime Firestore Riders sync
       unsubCloudRiders = CloudSync.subscribeToCollection<PickupBoy>('riders', (cloudRiders) => {
         if (cloudRiders !== null && cloudRiders !== undefined) {
-          setRiders(cloudRiders);
+          const seenIds = new Set<string>();
+          const seenPhones = new Set<string>();
+          const seenEmails = new Set<string>();
+          const uniqueRiders = cloudRiders.filter((r) => {
+            if (!r || !r.id) return false;
+            const cleanPhone = (r.phone || '').replace(/\D/g, '');
+            const cleanEmail = (r.email || '').trim().toLowerCase();
+
+            if (seenIds.has(r.id)) return false;
+            if (cleanPhone && cleanPhone.length >= 8 && seenPhones.has(cleanPhone)) return false;
+            if (cleanEmail && seenEmails.has(cleanEmail)) return false;
+
+            seenIds.add(r.id);
+            if (cleanPhone && cleanPhone.length >= 8) seenPhones.add(cleanPhone);
+            if (cleanEmail) seenEmails.add(cleanEmail);
+            return true;
+          });
+
+          setRiders(uniqueRiders);
           try {
-            localStorage.setItem('smvt_riders', JSON.stringify(cloudRiders));
+            localStorage.setItem('smvt_riders', JSON.stringify(uniqueRiders));
           } catch {}
         }
       });
@@ -200,9 +218,17 @@ function AppContent() {
       // Realtime Firestore Clients sync
       unsubCloudClients = CloudSync.subscribeToCollection<Client>('clients', (cloudClients) => {
         if (cloudClients !== null && cloudClients !== undefined) {
-          setClients(cloudClients);
+          const seenIds = new Set<string>();
+          const uniqueClients = cloudClients.filter((c) => {
+            if (!c || !c.id) return false;
+            if (seenIds.has(c.id)) return false;
+            seenIds.add(c.id);
+            return true;
+          });
+
+          setClients(uniqueClients);
           try {
-            localStorage.setItem('smvt_clients', JSON.stringify(cloudClients));
+            localStorage.setItem('smvt_clients', JSON.stringify(uniqueClients));
           } catch {}
         }
       });
@@ -210,9 +236,17 @@ function AppContent() {
       // Realtime Firestore Routes sync
       unsubCloudRoutes = CloudSync.subscribeToCollection<LogisticsRoute>('routes', (cloudRoutes) => {
         if (cloudRoutes !== null && cloudRoutes !== undefined) {
-          setRoutes(cloudRoutes);
+          const seenIds = new Set<string>();
+          const uniqueRoutes = cloudRoutes.filter((r) => {
+            if (!r || !r.id) return false;
+            if (seenIds.has(r.id)) return false;
+            seenIds.add(r.id);
+            return true;
+          });
+
+          setRoutes(uniqueRoutes);
           try {
-            localStorage.setItem('smvt_routes', JSON.stringify(cloudRoutes));
+            localStorage.setItem('smvt_routes', JSON.stringify(uniqueRoutes));
           } catch {}
         }
       });

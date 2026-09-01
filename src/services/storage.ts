@@ -88,16 +88,33 @@ export const StorageService = {
   // Clients
   getClients(): Client[] {
     const raw = safeGetItem(STORAGE_KEYS.CLIENTS);
-    return safeParse<Client[]>(raw, []);
+    const parsed = safeParse<Client[]>(raw, []);
+    const seen = new Set<string>();
+    const unique: Client[] = [];
+    for (const c of parsed) {
+      if (!c || !c.id) continue;
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      unique.push(c);
+    }
+    return unique;
   },
   saveClients(clients: Client[]): void {
-    safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    const seen = new Set<string>();
+    const unique: Client[] = [];
+    for (const c of clients) {
+      if (!c || !c.id) continue;
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      unique.push(c);
+    }
+    safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(unique));
   },
   getClientById(id: string): Client | undefined {
     return this.getClients().find((c) => c.id === id);
   },
   addClient(client: Client): void {
-    const clients = this.getClients();
+    const clients = this.getClients().filter((c) => c.id !== client.id);
     clients.unshift(client);
     this.saveClients(clients);
     CloudSync.syncDocument('clients', client.id, client);
@@ -116,10 +133,27 @@ export const StorageService = {
   // Routes
   getRoutes(): Route[] {
     const raw = safeGetItem(STORAGE_KEYS.ROUTES);
-    return safeParse<Route[]>(raw, []);
+    const parsed = safeParse<Route[]>(raw, []);
+    const seen = new Set<string>();
+    const unique: Route[] = [];
+    for (const r of parsed) {
+      if (!r || !r.id) continue;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      unique.push(r);
+    }
+    return unique;
   },
   saveRoutes(routes: Route[]): void {
-    safeSetItem(STORAGE_KEYS.ROUTES, JSON.stringify(routes));
+    const seen = new Set<string>();
+    const unique: Route[] = [];
+    for (const r of routes) {
+      if (!r || !r.id) continue;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      unique.push(r);
+    }
+    safeSetItem(STORAGE_KEYS.ROUTES, JSON.stringify(unique));
   },
   getRoutesByClientId(clientId: string): Route[] {
     return this.getRoutes().filter((r) => r.clientId === clientId);
@@ -128,7 +162,7 @@ export const StorageService = {
     return this.getRoutes().find((r) => r.id === id);
   },
   addRoute(route: Route): void {
-    const routes = this.getRoutes();
+    const routes = this.getRoutes().filter((r) => r.id !== route.id);
     routes.push(route);
     this.saveRoutes(routes);
     CloudSync.syncDocument('routes', route.id, route);
@@ -147,16 +181,64 @@ export const StorageService = {
   // Riders
   getRiders(): PickupBoy[] {
     const raw = safeGetItem(STORAGE_KEYS.RIDERS);
-    return safeParse<PickupBoy[]>(raw, []);
+    const parsed = safeParse<PickupBoy[]>(raw, []);
+    const seenIds = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
+    const unique: PickupBoy[] = [];
+
+    for (const r of parsed) {
+      if (!r || !r.id) continue;
+      const cleanPhone = (r.phone || '').replace(/\D/g, '');
+      const cleanEmail = (r.email || '').trim().toLowerCase();
+
+      if (seenIds.has(r.id)) continue;
+      if (cleanPhone && cleanPhone.length >= 8 && seenPhones.has(cleanPhone)) continue;
+      if (cleanEmail && seenEmails.has(cleanEmail)) continue;
+
+      seenIds.add(r.id);
+      if (cleanPhone && cleanPhone.length >= 8) seenPhones.add(cleanPhone);
+      if (cleanEmail) seenEmails.add(cleanEmail);
+      unique.push(r);
+    }
+    return unique;
   },
   saveRiders(riders: PickupBoy[]): void {
-    safeSetItem(STORAGE_KEYS.RIDERS, JSON.stringify(riders));
+    const seenIds = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
+    const unique: PickupBoy[] = [];
+
+    for (const r of riders) {
+      if (!r || !r.id) continue;
+      const cleanPhone = (r.phone || '').replace(/\D/g, '');
+      const cleanEmail = (r.email || '').trim().toLowerCase();
+
+      if (seenIds.has(r.id)) continue;
+      if (cleanPhone && cleanPhone.length >= 8 && seenPhones.has(cleanPhone)) continue;
+      if (cleanEmail && seenEmails.has(cleanEmail)) continue;
+
+      seenIds.add(r.id);
+      if (cleanPhone && cleanPhone.length >= 8) seenPhones.add(cleanPhone);
+      if (cleanEmail) seenEmails.add(cleanEmail);
+      unique.push(r);
+    }
+    safeSetItem(STORAGE_KEYS.RIDERS, JSON.stringify(unique));
   },
   getRiderById(id: string): PickupBoy | undefined {
     return this.getRiders().find((r) => r.id === id);
   },
   addRider(rider: PickupBoy): void {
-    const riders = this.getRiders();
+    const cleanPhone = (rider.phone || '').replace(/\D/g, '');
+    const cleanEmail = (rider.email || '').trim().toLowerCase();
+    const riders = this.getRiders().filter((r) => {
+      if (r.id === rider.id) return false;
+      const rPhone = (r.phone || '').replace(/\D/g, '');
+      if (cleanPhone && cleanPhone.length >= 8 && rPhone && cleanPhone === rPhone) return false;
+      const rEmail = (r.email || '').trim().toLowerCase();
+      if (cleanEmail && rEmail && cleanEmail === rEmail) return false;
+      return true;
+    });
     riders.unshift(rider);
     this.saveRiders(riders);
     CloudSync.syncDocument('riders', rider.id, rider);
@@ -254,11 +336,28 @@ export const StorageService = {
   // Tasks
   getTasks(): PickupTask[] {
     const raw = safeGetItem(STORAGE_KEYS.TASKS);
-    return safeParse<PickupTask[]>(raw, []);
+    const parsed = safeParse<PickupTask[]>(raw, []);
+    const seen = new Set<string>();
+    const unique: PickupTask[] = [];
+    for (const t of parsed) {
+      if (!t || !t.id) continue;
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      unique.push(t);
+    }
+    return unique;
   },
   saveTasks(tasks: PickupTask[]): void {
-    safeSetItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
-    CloudSync.syncCollection('tasks', tasks);
+    const seen = new Set<string>();
+    const unique: PickupTask[] = [];
+    for (const t of tasks) {
+      if (!t || !t.id) continue;
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      unique.push(t);
+    }
+    safeSetItem(STORAGE_KEYS.TASKS, JSON.stringify(unique));
+    CloudSync.syncCollection('tasks', unique);
   },
   getTaskById(id: string): PickupTask | undefined {
     return this.getTasks().find((t) => t.id === id);

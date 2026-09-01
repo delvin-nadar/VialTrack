@@ -569,9 +569,16 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
       onSaved();
       onClose();
     } else {
-      const riderId = `rider-${cleanPhone.replace(/\D/g, '') || Date.now()}`;
+      const existingRiders = StorageService.getRiders();
+      const existingRider = existingRiders.find(
+        (r) =>
+          (cleanPhone && cleanPhone.length >= 8 && r.phone && r.phone.replace(/\D/g, '') === cleanPhone.replace(/\D/g, '')) ||
+          (form.email.trim() && r.email && r.email.toLowerCase() === form.email.trim().toLowerCase())
+      );
+
+      const riderId = existingRider ? existingRider.id : `rider-${cleanPhone.replace(/\D/g, '') || Date.now()}`;
       const riderEmail = form.email.trim() || `${cleanName.toLowerCase().replace(/\s+/g, '.')}@vialtrack.in`;
-      const effectivePassword = form.password.trim() || generateStrongPassword(8);
+      const effectivePassword = form.password.trim() || existingRider?.password || generateStrongPassword(8);
 
       const newRider: PickupBoy = {
         id: riderId,

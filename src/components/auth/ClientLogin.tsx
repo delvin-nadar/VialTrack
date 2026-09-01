@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, KeyRound, AlertCircle, ArrowRight, ShieldCheck, Mail, RefreshCw } from 'lucide-react';
+import { Building2, KeyRound, AlertCircle, ArrowRight, ArrowLeft, ShieldCheck, Mail, RefreshCw } from 'lucide-react';
 import { StorageService } from '../../services/storage';
 import { db } from '../../services/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { UserAuth } from '../../types';
 
-export const ClientLogin: React.FC = () => {
+interface ClientLoginProps {
+  onLoginSuccess?: (user: UserAuth) => void;
+  onBackToLanding?: () => void;
+}
+
+export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -70,6 +76,21 @@ export const ClientLogin: React.FC = () => {
       };
 
       StorageService.setClientSession(clientSession);
+
+      const user: UserAuth = {
+        id: `user-${clientSession.clientId}`,
+        email: clientSession.email,
+        name: clientSession.name,
+        role: 'client',
+        clientId: clientSession.clientId,
+        phone: clientSession.phone,
+        mustChangePassword: false
+      };
+
+      if (onLoginSuccess) {
+        onLoginSuccess(user);
+      }
+
       navigate('/client');
     } catch (err: any) {
       console.error('Client login error:', err);
@@ -82,6 +103,17 @@ export const ClientLogin: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden p-6 sm:p-8 space-y-6">
+        {onBackToLanding && (
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Portal Selection</span>
+          </button>
+        )}
+
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 mb-1">
             <Building2 className="w-6 h-6" />

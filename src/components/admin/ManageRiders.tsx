@@ -110,15 +110,33 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
   };
 
   const filteredRiders = useMemo(() => {
-    if (!searchTerm.trim()) return riders;
-    const term = searchTerm.toLowerCase();
-    return riders.filter(
-      (r) =>
-        r.name.toLowerCase().includes(term) ||
-        r.phone.toLowerCase().includes(term) ||
-        r.email.toLowerCase().includes(term) ||
-        r.vehicleNumber.toLowerCase().includes(term)
-    );
+    const term = searchTerm.trim().toLowerCase();
+    const seenIds = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
+
+    return riders.filter((r) => {
+      if (!r || !r.id) return false;
+      const cleanPhone = (r.phone || '').replace(/\D/g, '');
+      const cleanEmail = (r.email || '').trim().toLowerCase();
+
+      if (seenIds.has(r.id)) return false;
+      if (cleanPhone && cleanPhone.length >= 8 && seenPhones.has(cleanPhone)) return false;
+      if (cleanEmail && seenEmails.has(cleanEmail)) return false;
+
+      seenIds.add(r.id);
+      if (cleanPhone && cleanPhone.length >= 8) seenPhones.add(cleanPhone);
+      if (cleanEmail) seenEmails.add(cleanEmail);
+
+      if (!term) return true;
+      return (
+        (r.name && r.name.toLowerCase().includes(term)) ||
+        (r.phone && r.phone.toLowerCase().includes(term)) ||
+        (r.email && r.email.toLowerCase().includes(term)) ||
+        (r.vehicleNumber && r.vehicleNumber.toLowerCase().includes(term)) ||
+        (r.plateNumber && r.plateNumber.toLowerCase().includes(term))
+      );
+    });
   }, [riders, searchTerm]);
 
   const handleCopyFormattedCredentials = async (loginId: string, tempPassword: string) => {

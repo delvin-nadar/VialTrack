@@ -39,6 +39,8 @@ export const ProtectedRoute: React.FC<RouteProps> = ({ children, fallback }) => 
   return <>{children}</>;
 };
 
+export const AdminRoute: React.FC<RouteProps> = ProtectedRoute;
+
 /**
  * Protects rider/phlebo mobile routes.
  */
