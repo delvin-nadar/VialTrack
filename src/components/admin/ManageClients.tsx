@@ -66,32 +66,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     billingRatePerPickup: '' as any
   });
 
-  const [routeForm, setRouteForm] = useState<{
-    name: string;
-    description: string;
-    destinationName: string;
-    destinationAddress: string;
-    destinationLat: number | string;
-    destinationLng: number | string;
-    destinationContact: string;
-    destinationPhone: string;
-    stops: RouteStop[];
-    timeSlots: string[];
-    newTimeSlotInput: string;
-  }>({
-    name: '',
-    description: '',
-    destinationName: '',
-    destinationAddress: '',
-    destinationLat: '',
-    destinationLng: '',
-    destinationContact: '',
-    destinationPhone: '',
-    stops: [],
-    timeSlots: [],
-    newTimeSlotInput: ''
-  });
-
   const filteredClients = clients.filter(
     (c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -160,18 +134,14 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         lng: Number(vLng),
         billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 0,
         active: clientForm.active ?? true,
-        mustChangePassword: selectedClient.mustChangePassword ?? false,
+        mustChangePassword: false, // Permanent admin password assignment
         failedAttempts: selectedClient.failedAttempts ?? 0
       };
       StorageService.updateClient(updated);
       try {
         await setDoc(doc(db, 'clients', updated.id), JSON.parse(JSON.stringify(updated)), { merge: true });
       } catch (err: any) {
-        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
-          console.warn('Firestore quota exceeded; updated client locally.');
-        } else {
-          console.error("Firestore Write Error:", err);
-        }
+        console.warn('Firestore write warning:', err);
       }
     } else {
       const [vLat, vLng] = normalizeLatLng(clientForm.lat, clientForm.lng, 19.1287852, 72.8294183);
@@ -188,7 +158,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         lat: Number(vLat),
         lng: Number(vLng),
         active: true,
-        mustChangePassword: true,
+        mustChangePassword: false, // Permanent admin password assignment
         failedAttempts: 0,
         createdAt: new Date().toISOString(),
         billingRatePerPickup: Number(clientForm.billingRatePerPickup) || 0
@@ -197,11 +167,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       try {
         await setDoc(doc(db, 'clients', newClient.id), JSON.parse(JSON.stringify(newClient)), { merge: true });
       } catch (err: any) {
-        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
-          console.warn('Firestore quota exceeded; client created locally.');
-        } else {
-          console.error("Firestore Write Error:", err);
-        }
+        console.warn('Firestore write warning:', err);
       }
       setSelectedClientId(newClient.id);
 
@@ -224,14 +190,10 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       try {
         await deleteDoc(doc(db, 'clients', clientId));
       } catch (err) {
-        console.error("Firestore Write Error:", err);
+        console.error('Firestore delete error:', err);
       }
       const remaining = clients.filter((c) => c.id !== clientId);
-      if (remaining.length > 0) {
-        setSelectedClientId(remaining[0].id);
-      } else {
-        setSelectedClientId(null);
-      }
+      setSelectedClientId(remaining.length > 0 ? remaining[0].id : null);
       onRefresh();
     }
   };
@@ -242,7 +204,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
       try {
         await deleteDoc(doc(db, 'routes', routeId));
       } catch (err) {
-        console.error("Firestore Write Error:", err);
+        console.error('Firestore delete error:', err);
       }
       onRefresh();
     }
@@ -251,38 +213,8 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   const handleSaveRoute = async (newRoute: Route) => {
     try {
       await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)));
-
-      const taskId = `task_${Date.now()}`;
-      const taskDoc = {
-        id: taskId,
-        taskId: taskId,
-        clientId: selectedClient.id,
-        clientName: selectedClient.name,
-        clientEmail: selectedClient.email || '',
-        routeId: newRoute.id,
-        routeName: newRoute.name,
-        riderId: '',
-        riderName: 'Unassigned',
-        riderPhone: '',
-        status: 'pending' as const,
-        currentStopIndex: 0,
-        stops: newRoute.stops.map((stop, index) => ({
-          id: stop.id,
-          stopIndex: index + 1,
-          name: stop.name,
-          address: stop.address || '',
-          lat: Number(stop.lat),
-          lng: Number(stop.lng),
-          status: index === 0 ? ('in_progress' as const) : ('pending' as const)
-        })),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
-
-      await setDoc(doc(db, 'tasks', taskId), taskDoc, { merge: true });
-      console.log('[CloudSync] Auto-instantiated tasks/' + taskId);
     } catch (err: any) {
-      console.error('Firestore Write Error:', err);
+      console.error('Firestore route write error:', err);
     } finally {
       setIsAddingRoute(false);
       onRefresh();
@@ -313,7 +245,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
             <span>Manage Diagnostic Clients & Routes</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Register hospital & lab accounts, manage collection routes, and configure pickup schedules.
+            Register hospital & lab accounts, manage passwords, and configure collection routes.
           </p>
         </div>
 
@@ -333,7 +265,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
             setIsAddingClient(true);
             setIsEditingClient(false);
           }}
-          className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+          className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Register New Client</span>
@@ -427,7 +359,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                     type="button"
                     onClick={() => handlePreviewAsClient(selectedClient)}
                     className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg transition-colors border border-emerald-300 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                    title="Open live client dashboard for this hospital/lab in isolated preview mode"
                   >
                     <Eye className="w-3.5 h-3.5 text-emerald-700" />
                     <span>Preview as Client</span>
@@ -437,7 +368,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                     type="button"
                     onClick={() => handleCopyClientCredentials(selectedClient.phone || selectedClient.email, selectedClient.password || '')}
                     className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold rounded-lg transition-colors border border-sky-200 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                    title="Copy formatted credentials text to clipboard"
                   >
                     <Copy className="w-3.5 h-3.5" />
                     <span>{copySuccess ? 'Copied!' : 'Copy Credentials'}</span>
@@ -456,7 +386,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                     className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
                   >
                     <Edit2 className="w-3.5 h-3.5 text-sky-700" />
-                    <span>Edit Info</span>
+                    <span>Edit Info & Password</span>
                   </button>
                   <button
                     onClick={() => handleDeleteClient(selectedClient.id, selectedClient.name)}
@@ -468,19 +398,6 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                   <button
                     onClick={() => {
                       setIsAddingRoute(true);
-                      setRouteForm({
-                        name: '',
-                        description: '',
-                        destinationName: selectedClient.name,
-                        destinationAddress: selectedClient.address,
-                        destinationLat: selectedClient.lat || 19.1287852,
-                        destinationLng: selectedClient.lng || 72.8294183,
-                        destinationContact: selectedClient.contactPerson || '',
-                        destinationPhone: selectedClient.phone || '',
-                        stops: [],
-                        timeSlots: [],
-                        newTimeSlotInput: ''
-                      });
                     }}
                     className="px-3 py-1.5 bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
                   >
@@ -617,16 +534,13 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                   onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-hidden focus:border-sky-600"
                 />
-                <span className="text-[11px] text-slate-400 mt-0.5 block">
-                  The client will use this email or phone number to log in to their dashboard.
-                </span>
               </div>
 
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-slate-700 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5 text-sky-700" />
-                    <span>Password / Access Key {isAddingClient && '*'}</span>
+                    <span>Permanent Password / Access Key {isAddingClient && '*'}</span>
                   </label>
                   <button
                     type="button"
@@ -640,7 +554,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder={isEditingClient ? 'Leave blank to keep existing password' : 'Min 8 chars alphanumeric + symbols'}
+                    placeholder={isEditingClient ? 'Leave blank to keep existing password' : 'Min 8 chars'}
                     value={clientForm.password || ''}
                     onChange={(e) => setClientForm({ ...clientForm, password: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:outline-hidden focus:border-sky-600"
@@ -657,7 +571,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                   )}
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  Must be at least 8 characters. On first login, clients will be prompted to set their permanent password.
+                  Password configured here is permanent. Clients log in directly without password change prompts.
                 </p>
               </div>
 
@@ -769,7 +683,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
             </div>
 
             <p className="text-xs text-slate-600">
-              Diagnostic Client <strong className="text-slate-900">{createdCredentialsModal.name}</strong> has been registered. Share these credentials with the client admin:
+              Diagnostic Client <strong className="text-slate-900">{createdCredentialsModal.name}</strong> has been registered. Share these credentials:
             </p>
 
             <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 font-mono text-xs text-slate-800 space-y-1.5 whitespace-pre-wrap select-all">
@@ -789,7 +703,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 <Copy className="w-4 h-4" />
-                <span>{copySuccess ? 'Copied to Clipboard!' : 'Copy Credentials Message'}</span>
+                <span>{copySuccess ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
               </button>
               <button
                 type="button"
