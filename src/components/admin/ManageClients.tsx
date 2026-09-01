@@ -307,42 +307,43 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     });
   };
 
-  // Save new Route
-  riderId: '',
-riderName: 'Unassigned',
-riderPhone: '',
-status: 'pending',
+  // Correct structure for handleSaveRoute:
+const handleSaveRoute = async (newRoute: Route) => {
+  try {
+    await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)));
 
-    StorageService.addRoute(newRoute);
-    try {
-      await setDoc(doc(db, 'routes', newRoute.id), JSON.parse(JSON.stringify(newRoute)), { merge: true });
+    // Automatically create root task document for active dispatch coverage
+    const taskId = `task_${Date.now()}`;
+    const taskDoc = {
+      id: taskId,
+      taskId: taskId,
+      clientId: selectedClient.id,
+      clientName: selectedClient.name,
+      clientEmail: selectedClient.email || '',
+      routeId: newRoute.id,
+      routeName: newRoute.name,
+      riderId: '',
+      riderName: 'Unassigned',
+      riderPhone: '',
+      status: 'pending' as const,
+      currentStopIndex: 0,
+      stops: newRoute.stops.map((stop, index) => ({
+        id: stop.id,
+        stopIndex: index + 1,
+        name: stop.name,
+        address: stop.address || '',
+        lat: Number(stop.lat),
+        lng: Number(stop.lng),
+        status: (index === 0 ? 'in_progress' : 'pending') as const
+      }))
+    };
 
-      // Automatically create root task document for active dispatch coverage
-      const taskId = `task_${Date.now()}`;
-      const taskDoc = {
-        id: taskId,
-        taskId: taskId,
-        clientId: selectedClient.id,
-        clientName: selectedClient.name,
-        clientEmail: selectedClient.email || '',
-        riderId: '',
-riderName: 'Unassigned',
-riderPhone: '',
-status: 'pending' as const,
-riderPhone: selectedRider?.phone || '',
-status: selectedRider?.id ? 'assigned' : 'pending',
-        currentStopIndex: 0,
-        stops: newRoute.stops.map((stop, index) => ({
-          id: stop.id,
-          stopIndex: index + 1,
-          name: stop.name,
-          address: stop.address || '',
-          lat: Number(stop.lat),
-          lng: Number(stop.lng),
-          estDurationMin: Number(stop.estDurationMin || stop.avgPickupDurationMinutes || 10),
-          specimenCount: 0,
-          status: index === 0 ? ('in_progress' as const) : ('pending' as const)
-        })),
+    await setDoc(doc(db, 'tasks', taskId), taskDoc, { merge: true });
+    console.log('[CloudSync] Auto-instantiated tasks/' + taskId);
+  } catch (err: any) {
+    console.warn('[CloudSync] Error saving route or task:', err);
+  }
+};
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
