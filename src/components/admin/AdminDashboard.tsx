@@ -95,11 +95,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, []);
 
   const allTasks = useMemo(() => {
-    if (hasLoadedFirestoreTasks) {
+    if (firestoreTasks.length > 0) {
       return firestoreTasks;
     }
     return initialTasks || [];
-  }, [hasLoadedFirestoreTasks, firestoreTasks, initialTasks]);
+  }, [firestoreTasks, initialTasks]);
 
   useEffect(() => {
     if (allTasks.length > 0) {
