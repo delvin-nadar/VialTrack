@@ -482,21 +482,21 @@ export const StorageService = {
       if (!s) return null;
       return {
         id: s.id || 'admin-1',
-        email: s.email || 'delvin.nadar@secondmedic.com',
-        name: s.name || 'Delvin',
+        email: s.email || '',
+        name: s.name || 'Admin',
         role: 'admin',
-        phone: s.phone || '+91 98200 99887'
+        phone: s.phone || ''
       };
     } else if (role === 'client') {
       const s = this.getClientSession();
       if (!s) return null;
       return {
         id: s.id || `user-${s.clientId}`,
-        email: s.email || `${s.clientId}@vialtrack.in`,
-        name: s.name,
+        email: s.email || '',
+        name: s.name || 'Client',
         role: 'client',
         clientId: s.clientId,
-        phone: s.phone || '+91 98200 11223',
+        phone: s.phone || '',
         mustChangePassword: s.mustChangePassword,
         isPreview: s.isPreview
       };
@@ -505,11 +505,11 @@ export const StorageService = {
       if (!s) return null;
       return {
         id: s.id || `user-${s.riderId}`,
-        email: s.email || `${s.riderId}@vialtrack.in`,
+        email: s.email || '',
         name: s.name || 'Courier Partner',
         role: 'rider',
         riderId: s.riderId,
-        phone: s.phone,
+        phone: s.phone || '',
         avatar: s.avatar,
         mustChangePassword: s.mustChangePassword
       };
@@ -568,7 +568,7 @@ export const StorageService = {
       } else if (user.role === 'client') {
         this.setClientSession({
           role: 'client',
-          clientId: user.clientId || 'client-apex',
+          clientId: user.clientId || '',
           name: user.name,
           email: user.email,
           phone: user.phone,
@@ -579,8 +579,8 @@ export const StorageService = {
       } else if (user.role === 'rider') {
         this.setRiderSession({
           role: 'rider',
-          riderId: user.riderId || 'rider-1',
-          phone: user.phone || '+91 98201 22334',
+          riderId: user.riderId || '',
+          phone: user.phone || '',
           name: user.name,
           email: user.email,
           avatar: user.avatar,

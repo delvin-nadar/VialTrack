@@ -538,7 +538,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
               <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${t.pickupLocation.address || 'Mumbai'}</div>
               <div style="margin-top: 6px; font-size: 11px; color: #334155;">
                 <b>Task:</b> ${t.title || t.routeName}<br/>
-                <b>Assigned Courier:</b> ${t.riderName || 'Rahul Sharma'}<br/>
+                <b>Assigned Courier:</b> ${t.riderName || 'Unassigned'}<br/>
                 <b>Status:</b> ${t.status.toUpperCase()}
               </div>
             </div>

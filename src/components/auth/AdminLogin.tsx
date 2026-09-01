@@ -54,12 +54,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
 
       const adminSession = {
         role: 'admin' as const,
-        email: cleanEmail || 'delvin.nadar@secondmedic.com',
+        email: cleanEmail,
         token,
         id: fbUser.uid || 'admin-1',
-        name: fbUser.displayName || 'Delvin',
-        tagline: 'System Architect & Ops Head',
-        phone: '+91 98200 99887',
+        name: fbUser.displayName || 'Administrator',
+        tagline: 'System Operations Console',
+        phone: fbUser.phoneNumber || '',
         loginTimestamp: new Date().toISOString()
       };
 

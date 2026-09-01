@@ -304,8 +304,8 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
       sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
       status: s.status || 'pending',
       id: s.id || s.stopId || `stop-${idx + 1}`,
-      contactPerson: s.contactPerson || 'Hospital OPD Desk',
-      phone: s.phone || '+91 98201 11223'
+      contactPerson: s.contactPerson || 'Point of Contact',
+      phone: s.phone || ''
     };
   });
 
@@ -315,8 +315,8 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     address: s.address,
     lat: s.lat,
     lng: s.lng,
-    contactPerson: s.contactPerson || 'Hospital OPD Desk',
-    phone: s.phone || '+91 98201 11223',
+    contactPerson: s.contactPerson || 'Point of Contact',
+    phone: s.phone || '',
     status: s.status === 'picked_up' || s.status === 'completed' || s.status === 'arrived' || s.status === 'no_sample'
       ? (s.status === 'completed' ? 'picked_up' : s.status)
       : (s.status === 'in_progress' ? 'arrived' : 'pending'),
@@ -342,7 +342,7 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     routeName: data.routeName || `${clientLabName} Route`,
     clientId: clientLabId,
     clientName: clientLabName,
-    riderVehicle: data.riderVehicle || data.vehicleNumber || 'MH02TN0897',
+    riderVehicle: data.riderVehicle || data.vehicleNumber || '',
     status: data.status || 'assigned',
     activeRiderId: data.activeRiderId || data.riderId,
     activeRiderName: data.activeRiderName || data.riderName,
@@ -401,14 +401,14 @@ export const CloudSync = {
     const tripStops = payload.stops.map((s: any, idx: number) => ({
       stopIndex: idx + 1,
       name: s.name || s.stopName || `Stop ${idx + 1}`,
-      address: s.address || 'Diagnostic Collection Point, Mumbai',
+      address: s.address || 'Diagnostic Collection Point',
       coords: [Number(s.lat || 19.1287852), Number(s.lng || 72.8294183)] as [number, number],
       specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
       status: 'pending' as 'pending' | 'in_progress' | 'completed',
       id: s.id || s.stopId || `stop-${idx + 1}`,
       stopId: s.stopId || s.id || `stop-${idx + 1}`,
-      contactPerson: s.contactPerson || 'Lab Coordinator',
-      phone: s.phone || '+91 98201 11223',
+      contactPerson: s.contactPerson || 'Point of Contact',
+      phone: s.phone || '',
       notes: s.notes || ''
     }));
 
@@ -417,7 +417,7 @@ export const CloudSync = {
       id: tripId,
       clientId: payload.client.id,
       clientName: payload.client.name,
-      clientEmail: (payload.client as any).email || 'jayesh.joshi@lifecarediagnostics.com',
+      clientEmail: (payload.client as any).email || '',
       clientCoords: [clientLat, clientLng] as [number, number],
       riderId: payload.rider.id,
       riderName: payload.rider.name,

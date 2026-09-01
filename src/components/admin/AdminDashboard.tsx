@@ -9,31 +9,19 @@ import {
   AlertTriangle,
   CheckCircle2,
   Bike,
-  Building2,
-  Thermometer,
-  ShieldCheck,
-  ChevronRight,
-  TrendingUp,
   Package,
   Eye,
-  Radio,
-  Sparkles,
   PhoneCall,
-  User,
-  Database,
   Plus,
   Trash2,
   X,
-  Send,
   UserCheck,
   RefreshCw,
-  ArrowRight,
   Navigation
 } from 'lucide-react';
-import { LocationService } from '../../services/locationService';
 import { StorageService } from '../../services/storage';
-import { CloudSync, db, formatUnifiedTask } from '../../services/firebase';
-import { collection, onSnapshot, query, orderBy, limit, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, formatUnifiedTask } from '../../services/firebase';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 interface AdminDashboardProps {
   tasks: PickupTask[];
@@ -54,7 +42,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenProof,
   onRefresh
 }) => {
-  // Live Firestore tasks state
   const [firestoreTasks, setFirestoreTasks] = useState<PickupTask[]>([]);
   const [hasLoadedFirestoreTasks, setHasLoadedFirestoreTasks] = useState<boolean>(false);
   const [activeRoundsCount, setActiveRoundsCount] = useState<number>(0);
@@ -62,15 +49,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [dispatchNotice, setDispatchNotice] = useState<string | null>(null);
 
-  // Dispatch Task Modal State
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
-
-  // Reassign Modal State
   const [reassignTask, setReassignTask] = useState<PickupTask | null>(null);
   const [selectedNewRiderId, setSelectedNewRiderId] = useState<string>('');
   const [isReassigning, setIsReassigning] = useState(false);
 
-  // 1. Direct Firestore root 'tasks' collection listener
   useEffect(() => {
     try {
       const q = collection(db, 'tasks');
@@ -82,7 +65,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             return formatUnifiedTask(docSnap.id, { id: docSnap.id, ...data });
           });
 
-          // Sort so most recent tasks appear first
           taskList.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -108,7 +90,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, []);
 
-  // Single Source of Truth: Firestore tasks exclusively once loaded
   const allTasks = useMemo(() => {
     if (hasLoadedFirestoreTasks) {
       return firestoreTasks;
@@ -116,7 +97,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return initialTasks || [];
   }, [hasLoadedFirestoreTasks, firestoreTasks, initialTasks]);
 
-  // Set default selected task if none is selected
   useEffect(() => {
     if (allTasks.length > 0) {
       if (!selectedTaskId || !allTasks.some((t) => t.id === selectedTaskId)) {
@@ -152,7 +132,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Reassign Task Handler
   const handleOpenReassign = (task: PickupTask, e: React.MouseEvent) => {
     e.stopPropagation();
     setReassignTask(task);
@@ -192,7 +171,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Unified Filter Logic
   const filteredTasks = useMemo(() => {
     return allTasks.filter((task) => {
       const isTaskDelayed =
@@ -213,12 +191,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         );
       }
 
-      // 'all' includes all valid task statuses
       return true;
     });
   }, [allTasks, statusFilter]);
 
-  // Operational metrics
   const activeRiders = riders.filter((r) => r && r.status === 'active' && r.isCheckedIn);
   const totalScheduled = allTasks.length;
   const delayedTasks = allTasks.filter(
@@ -238,30 +214,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return sum + stops.reduce((sSum, s) => sSum + (s.sampleCount || (s as any).specimenCount || 0), 0);
   }, 0);
 
-  // Active selected task for map display
   const activeTask = selectedTaskId ? allTasks.find((t) => t.id === selectedTaskId) : allTasks[0];
   const activeRoute = activeTask
     ? routes.find((r) => r.id === activeTask.routeId) || {
         id: activeTask.id,
         clientId: activeTask.clientLabId || activeTask.clientId,
-        name: activeTask.routeName || `${activeTask.clientName || 'Diagnostic'} Loop`,
+        name: activeTask.routeName || 'Pickup Loop',
         stops: (activeTask.stopsProgress || []).map((s, idx) => ({
           id: s.stopId || `s-${idx}`,
           name: s.stopName || (s as any).name || `Stop ${idx + 1}`,
-          address: s.address || 'Diagnostic Collection Point, Mumbai',
+          address: s.address || '',
           lat: s.lat || 19.1287,
           lng: s.lng || 72.8294,
-          contactPerson: 'Lab In-Charge',
-          contactPhone: '+91 98200 11223',
-          expectedTime: '10:30 AM'
+          contactPerson: 'Collection Point',
+          contactPhone: '',
+          expectedTime: '--'
         })),
         destinationLab: {
-          name: activeTask.clientName || 'Central Reference Lab',
-          address: 'Central Diagnostic Processing Facility, Mumbai',
+          name: activeTask.clientName || 'Processing Lab',
+          address: '',
           lat: (activeTask as any).clientLocation?.lat || activeTask.clientLabLocation?.lat || 19.1300,
           lng: (activeTask as any).clientLocation?.lng || activeTask.clientLabLocation?.lng || 72.8350,
-          contactPerson: 'Lead Pathologist',
-          contactPhone: '+91 98200 44556'
+          contactPerson: '',
+          contactPhone: ''
         },
         frequency: 'Daily',
         timeSlots: [activeTask.timeSlot || '09:00 AM'],
@@ -269,26 +244,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     : undefined;
 
-  const assignedRider: PickupBoy | undefined = activeTask
-    ? (riders.find((r) => r.id === activeTask.riderId) || {
-        id: activeTask.riderId || 'rider-active',
+  const assignedRider: PickupBoy | undefined = activeTask?.riderId
+    ? riders.find((r) => r.id === activeTask.riderId) || {
+        id: activeTask.riderId,
         name: activeTask.riderName || 'Assigned Runner',
         phone: activeTask.riderPhone || '',
         email: '',
         vehicleNumber: activeTask.riderVehicle || '',
         vehicleType: 'Motorcycle / Bike',
-        photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
+        photoUrl: '',
         assignedRouteIds: [],
         status: 'active' as const,
-        joiningDate: '2026-01-01',
+        joiningDate: '',
         isOnline: true,
         isCheckedIn: true
-      })
-    : (riders && riders.length > 0 ? riders[0] : undefined);
+      }
+    : undefined;
 
   return (
     <div className="space-y-5">
-      {/* Priority Operational Alert Banner */}
       {delayedCount > 0 ? (
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
@@ -300,19 +274,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Operational Alert: {delayedCount} Pickup Round(s) Requiring Priority Attention
               </h3>
               <p className="text-[11px] text-rose-700 mt-0.5">
-                Specimen transit warning or temperature SLA variance detected. Live WhatsApp/SMS dispatch ready.
+                Specimen transit warning or temperature SLA variance detected.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => setStatusFilter('alerts')}
-              className="w-full sm:w-auto px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
-            >
-              Filter Alerts ({delayedCount})
-            </button>
-          </div>
+          <button
+            onClick={() => setStatusFilter('alerts')}
+            className="w-full sm:w-auto px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
+          >
+            Filter Alerts ({delayedCount})
+          </button>
         </div>
       ) : totalScheduled > 0 ? (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-800 shadow-xs">
@@ -407,9 +379,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* Main Command Center: Live Map + Priority Feed */}
+      {/* Live Map + Priority Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left Column: Live GPS Dispatch Map (7 Cols) */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xs p-4 sm:p-5 flex flex-col overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3.5 pb-3 border-b border-slate-100">
@@ -426,7 +397,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              {/* Live Status indicator */}
               <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Real-Time GPS Tracking</span>
@@ -440,7 +410,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
 
-            {/* Map Container */}
             <div
               style={{ height: '400px', width: '100%', borderRadius: '12px' }}
               className="h-[400px] w-full rounded-xl overflow-hidden my-2 relative z-0"
@@ -458,8 +427,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             </div>
 
-            {/* Live Rider Radar Strip */}
-            {assignedRider && (
+            {assignedRider ? (
               <div className="mt-3.5 p-3 bg-slate-50 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-sky-100 border border-sky-200 text-sky-800 flex items-center justify-center font-bold">
@@ -473,7 +441,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                     </div>
                     <div className="text-slate-500 text-[11px]">
-                      {assignedRider.vehicleNumber || 'MH02TN0897'} • {assignedRider.phone}
+                      {assignedRider.vehicleNumber ? `${assignedRider.vehicleNumber} • ` : ''}{assignedRider.phone || 'No phone registered'}
                     </div>
                   </div>
                 </div>
@@ -486,26 +454,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div>
                     <span className="text-[10px] text-slate-400 block font-semibold">Phone Battery</span>
                     <span className="font-bold font-mono text-slate-800 text-xs">
-                      {(assignedRider as any)?.batteryLevel || 88}%
+                      {(assignedRider as any)?.batteryLevel ? `${(assignedRider as any).batteryLevel}%` : '100%'}
                     </span>
                   </div>
-                  <a
-                    href={`tel:${assignedRider.phone}`}
-                    className="p-1.5 bg-white hover:bg-slate-100 text-sky-700 rounded-md transition-colors border border-slate-200"
-                    title="Call Rider"
-                  >
-                    <PhoneCall className="w-3.5 h-3.5" />
-                  </a>
+                  {assignedRider.phone && (
+                    <a
+                      href={`tel:${assignedRider.phone}`}
+                      className="p-1.5 bg-white hover:bg-slate-100 text-sky-700 rounded-md transition-colors border border-slate-200"
+                      title="Call Rider"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                    </a>
+                  )}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 
-        {/* Right Column: Priority Feed & Time Slots (5 Cols) */}
+        {/* Priority Feed */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xs p-4 sm:p-5 flex flex-col h-full overflow-hidden">
-            {/* Header and Filter Tabs */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-sky-700" />
@@ -554,7 +523,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Tasks list */}
             <div className="mt-3.5 space-y-3 flex-1 overflow-y-auto max-h-[540px] pr-1">
               {filteredTasks.length === 0 ? (
                 <div className="py-16 text-center text-slate-400 text-xs">
@@ -579,12 +547,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     (task as any).tempAlert === true ||
                     task.status === 'delayed';
 
-                  // Assigned rider details
                   const taskRider = riders.find((r) => r.id === task.riderId);
                   const riderDisplayTag = taskRider
-                    ? `${taskRider.name} - ${taskRider.vehicleNumber || 'MH01AV8888'}`
+                    ? `${taskRider.name}${taskRider.vehicleNumber ? ` - ${taskRider.vehicleNumber}` : ''}`
                     : task.riderName
-                    ? `${task.riderName} - ${task.riderVehicle || 'MH01AV8888'}`
+                    ? `${task.riderName}${task.riderVehicle ? ` - ${task.riderVehicle}` : ''}`
                     : 'Unassigned Rider';
 
                   const getStatusBadge = () => {
@@ -633,12 +600,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
                       }`}
                     >
-                      {/* Top Row: Client Name & Status Badge */}
                       <div className="flex items-start justify-between gap-2 mb-1.5">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900 text-xs sm:text-sm">
-                              {task.clientName || task.clientLabName || 'Lifecare Diagnostics'}
+                              {task.clientName || task.clientLabName || 'Diagnostic Client'}
                             </span>
                             <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200">
                               {task.timeSlot || '09:00 AM'}
@@ -654,7 +620,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      {/* Rider Badge */}
                       <div className="my-1.5 flex items-center gap-1.5 text-xs text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
                         <Bike className="w-3.5 h-3.5 text-sky-700 shrink-0" />
                         <span className="font-semibold text-slate-800 text-[11px] truncate">
@@ -662,7 +627,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       </div>
 
-                      {/* Stops Preview: e.g. Stop 1 -> Stop 2 */}
                       {stopsList.length > 0 && (
                         <div className="my-2 bg-slate-50/90 p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1.5">
                           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -697,10 +661,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       )}
 
-                      {/* Action Buttons Row */}
                       <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
                         <div className="flex items-center gap-1.5">
-                          {/* View on Map */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -717,7 +679,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>View on Map</span>
                           </button>
 
-                          {/* Reassign Rider */}
                           <button
                             type="button"
                             onClick={(e) => handleOpenReassign(task, e)}
@@ -727,7 +688,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>Reassign</span>
                           </button>
 
-                          {/* Chain Proof */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -741,7 +701,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </button>
                         </div>
 
-                        {/* Cancel Task Button */}
                         <button
                           type="button"
                           onClick={(e) => handleDeleteTask(task.id, e)}
@@ -760,7 +719,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* Dispatch New Task Modal */}
       <DispatchModal
         isOpen={isDispatchModalOpen}
         onClose={() => setIsDispatchModalOpen(false)}
@@ -770,7 +728,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onDispatched={handleTaskDispatched}
       />
 
-      {/* Reassign Rider Modal */}
       {reassignTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4">
@@ -817,7 +774,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     const isOnline = r.isOnline !== false;
                     return (
                       <option key={r.id} value={r.id}>
-                        {r.name} ({r.vehicleNumber || 'MH01AV8888'}) {isOnline ? '• Online' : '• Offline'}
+                        {r.name} {r.vehicleNumber ? `(${r.vehicleNumber})` : ''} {isOnline ? '• Online' : '• Offline'}
                       </option>
                     );
                   })}

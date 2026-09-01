@@ -115,10 +115,10 @@ export const ClientLogin: React.FC<ClientLoginProps> = ({ onLoginSuccess, onBack
 
       const clientSession = {
         role: 'client' as const,
-        clientId: matchedClient?.id || 'client-apex',
-        name: matchedClient?.name || 'Metropolis Healthcare (Lab Ops)',
+        clientId: matchedClient?.id || (cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanPhone),
+        name: matchedClient?.name || 'Diagnostic Client',
         email: emailToAuth,
-        phone: matchedClient?.phone || '+91 98200 11223',
+        phone: matchedClient?.phone || '',
         token: `client_token_${Date.now()}`,
         mustChangePassword: matchedClient?.mustChangePassword ?? false,
         loginTimestamp: new Date().toISOString()

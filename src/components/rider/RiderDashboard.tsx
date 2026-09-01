@@ -316,11 +316,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               stopNumber: spIdx + 1,
               stopName: sp.stopName,
               address: sp.address,
-              lat: sp.lat || 19.2082,
-              lng: sp.lng || 72.8398,
+              lat: sp.lat || 19.1287852,
+              lng: sp.lng || 72.8294183,
               timeSlot: matchedTask.timeSlot || slot,
-              contactPerson: sp.contactPerson || 'Sister Sunita Rao (OPD Head)',
-              phone: sp.phone || '+91 98201 12345',
+              contactPerson: sp.contactPerson || 'Point of Contact',
+              phone: sp.phone || '',
               status,
               vialCount: sp.sampleCount,
               coldBoxTemp: sp.coldBoxTemp,
@@ -346,11 +346,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               stopNumber: rs.order || rsIdx + 1,
               stopName: rs.name,
               address: rs.address,
-              lat: rs.lat || 19.2082,
-              lng: rs.lng || 72.8398,
+              lat: rs.lat || 19.1287852,
+              lng: rs.lng || 72.8294183,
               timeSlot: slot,
-              contactPerson: rs.contactPerson || 'Hospital OPD Coordinator',
-              phone: rs.phone || '+91 98201 12345',
+              contactPerson: rs.contactPerson || 'Point of Contact',
+              phone: rs.phone || '',
               status: 'pending',
               routeId: route.id,
               routeName: route.name,
@@ -656,17 +656,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         stopId: s.id || `stop-${idx}`,
         stopName: s.name,
         address: s.address,
-        lat: s.lat || 19.2082,
-        lng: s.lng || 72.8398,
-        contactPerson: s.contactPerson || 'Hospital Coordinator',
-        phone: s.phone || '+91 98201 12345',
+        lat: s.lat || 19.1287852,
+        lng: s.lng || 72.8294183,
+        contactPerson: s.contactPerson || 'Point of Contact',
+        phone: s.phone || '',
         status: 'pending'
       }));
 
       const client = StorageService.getClientById(matchingRoute?.clientId || '') || {
-        id: matchingRoute?.clientId || 'client-apex',
-        name: 'Apex Diagnostic Center',
-        address: 'Malad West, Mumbai'
+        id: matchingRoute?.clientId || '',
+        name: matchingRoute?.destinationLab?.name || 'Diagnostic Processing Facility',
+        address: matchingRoute?.destinationLab?.address || ''
       };
 
       targetTask = {

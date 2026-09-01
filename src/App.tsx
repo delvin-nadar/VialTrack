@@ -484,7 +484,7 @@ function AppContent() {
           element={
             <ClientRoute>
               <ClientHeader
-                user={clientUser || { id: 'client-apex', name: 'Metropolis Healthcare (Lab Ops)', email: 'labops@metropolis.in', role: 'client', clientId: 'client-bkc-metropolis' }}
+                user={clientUser || { id: '', name: 'Client Account', email: '', role: 'client', clientId: '' }}
                 onLogout={handleClientLogout}
                 onExitPreview={handleExitClientPreview}
                 unreadNotifsCount={unreadNotifsCount}
@@ -493,7 +493,7 @@ function AppContent() {
 
               <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
                 <ClientDashboard
-                  user={clientUser || { id: 'client-apex', name: 'Metropolis Healthcare (Lab Ops)', email: 'labops@metropolis.in', role: 'client', clientId: 'client-bkc-metropolis' }}
+                  user={clientUser || { id: '', name: 'Client Account', email: '', role: 'client', clientId: '' }}
                   tasks={tasks}
                   routes={routes}
                   riders={riders}
@@ -531,8 +531,8 @@ function AppContent() {
           element={
             <RiderRoute>
               <RiderHeader
-                user={riderUser || { id: 'user-pb-1', name: 'Rahul Sharma', email: 'rahul.s@vialtrack.in', role: 'rider', riderId: 'pb-1' }}
-                rider={riders.find((r) => r.id === riderUser?.riderId) || riders[0]}
+                user={riderUser || { id: '', name: 'Courier Partner', email: '', role: 'rider', riderId: '' }}
+                rider={riders.find((r) => r.id === riderUser?.riderId)}
                 onLogout={handleRiderLogout}
                 unreadNotifsCount={unreadNotifsCount}
                 onOpenNotifications={() => setIsNotifDrawerOpen(true)}
@@ -540,10 +540,10 @@ function AppContent() {
 
               <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
                 <RiderDashboard
-                  user={riderUser || { id: 'user-pb-1', name: 'Rahul Sharma', email: 'rahul.s@vialtrack.in', role: 'rider', riderId: 'pb-1' }}
+                  user={riderUser || { id: '', name: 'Courier Partner', email: '', role: 'rider', riderId: '' }}
                   tasks={tasks}
                   routes={routes}
-                  rider={riders.find((r) => r.id === riderUser?.riderId) || riders[0]}
+                  rider={riders.find((r) => r.id === riderUser?.riderId)}
                   onRefresh={reloadData}
                   onOpenProof={handleOpenProof}
                 />

@@ -72,16 +72,16 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
           if (found) {
             matchedRider = {
               id: found.id,
-              name: found.name || `Mr. Satish (${cleanPhone.slice(-4)})`,
+              name: found.name || `Rider ${cleanPhone.slice(-4)}`,
               phone: found.phone || `+91 ${cleanPhone}`,
               email: found.email || `rider.${cleanPhone}@vialtrack.in`,
               password: found.password || cleanPin,
-              vehicleNumber: found.vehicleNo || found.vehicleNumber || 'MH02TN0897',
+              vehicleNumber: found.vehicleNo || found.vehicleNumber || '',
               vehicleType: found.vehicleType || 'Motorcycle / Bike',
-              photoUrl: found.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
+              photoUrl: found.photoUrl || '',
               assignedRouteIds: found.assignedRouteIds || [],
               status: 'active',
-              joiningDate: found.joiningDate || '2026-01-01',
+              joiningDate: found.joiningDate || new Date().toISOString().split('T')[0],
               isOnline: true,
               isCheckedIn: true
             };
@@ -93,20 +93,20 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
 
       // 3. If still not found, allow dynamic auto-provisioning for any valid 10-digit number
       if (!matchedRider) {
-        const riderId = cleanPhone === '9876543210' ? 'MrSatish' : `rider-${cleanPhone}`;
-        const riderName = cleanPhone === '9876543210' ? 'Mr. Satish' : `Rider ${cleanPhone.slice(-4)}`;
+        const riderId = `rider-${cleanPhone}`;
+        const riderName = `Rider ${cleanPhone.slice(-4)}`;
         matchedRider = {
           id: riderId,
           name: riderName,
           phone: `+91 ${cleanPhone}`,
           email: `${riderId.toLowerCase()}@vialtrack.in`,
           password: cleanPin,
-          vehicleNumber: 'MH02TN0897',
+          vehicleNumber: '',
           vehicleType: 'Motorcycle / Bike',
-          photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
+          photoUrl: '',
           assignedRouteIds: [],
           status: 'active',
-          joiningDate: '2026-01-01',
+          joiningDate: new Date().toISOString().split('T')[0],
           isOnline: true,
           isCheckedIn: true
         };
@@ -120,10 +120,10 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
               id: riderId,
               name: riderName,
               phone: `+91 ${cleanPhone}`,
-              vehicleNo: 'MH02TN0897',
-              vehicleNumber: 'MH02TN0897',
+              vehicleNo: '',
+              vehicleNumber: '',
               vehicleType: 'Motorcycle / Bike',
-              battery: 88,
+              battery: 100,
               coldBoxTemp: 4.0,
               isOnline: true,
               status: 'active',
@@ -202,8 +202,8 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
         name: matchedRider.name,
         email: matchedRider.email,
         avatar: matchedRider.photoUrl,
-        vehicleNo: matchedRider.vehicleNumber || 'MH02TN0897',
-        vehicleNumber: matchedRider.vehicleNumber || 'MH02TN0897',
+        vehicleNo: matchedRider.vehicleNumber || '',
+        vehicleNumber: matchedRider.vehicleNumber || '',
         vehicleType: matchedRider.vehicleType || 'Motorcycle / Bike',
         token: `rider_token_${Date.now()}`,
         mustChangePassword: matchedRider.mustChangePassword ?? false,
