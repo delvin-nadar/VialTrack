@@ -185,6 +185,7 @@ export interface TripStop {
   pickedUpAt?: string;
   photoUrl?: string;
   photo2Url?: string;
+  selfieUrl?: string;
   handoverPhotoUrl?: string;
   photoTimestamp?: string;
   photoLocation?: {
@@ -267,6 +268,7 @@ export interface StopExecution {
   sampleCount?: number;
   photoUrl?: string;
   photo2Url?: string;
+  selfieUrl?: string;
   handoverPhotoUrl?: string;
   photoLocation?: {
     lat: number;

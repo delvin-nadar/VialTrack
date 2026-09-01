@@ -35,6 +35,7 @@ export interface ScheduleStopItem {
   coldBoxTemp?: number;
   photoUrl?: string;
   photo2Url?: string;
+  selfieUrl?: string;
   taskId?: string;
   task?: PickupTask;
   routeId: string;

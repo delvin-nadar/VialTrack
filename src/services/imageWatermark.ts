@@ -19,6 +19,7 @@ export interface WatermarkData {
   temperature?: number;
   verificationCode?: string;
   isDrop?: boolean;
+  isSelfie?: boolean;
   receiverName?: string;
 }
 
@@ -142,7 +143,11 @@ export async function addWatermarkToImage(
 
         ctx.fillStyle = '#e2e8f0';
         ctx.font = `500 ${baseFontSize * 0.85}px 'Plus Jakarta Sans', sans-serif`;
-        const roleLabel = data.isDrop ? '• LAB DESTINATION DROP PROOF' : '• COLLECTION POINT PICKUP PROOF';
+        const roleLabel = data.isDrop
+          ? '• LAB DESTINATION DROP PROOF'
+          : data.isSelfie
+          ? '• RIDER LOCATION VERIFICATION SELFIE'
+          : '• SPECIMEN VIAL COLLECTION PROOF';
         ctx.fillText(roleLabel, padding + ctx.measureText('SECOND MEDIC VIALTRACK ').width + 10, baseFontSize * 1.7);
 
         // Draw bottom metadata box (Dark glass panel with cyan/emerald accent line)
@@ -153,7 +158,7 @@ export async function addWatermarkToImage(
         ctx.fillRect(0, boxY, width, boxHeight);
 
         // Top accent line on the box
-        ctx.fillStyle = data.isDrop ? '#10b981' : '#0284c7'; // emerald for drop, sky for pickup
+        ctx.fillStyle = data.isDrop ? '#10b981' : data.isSelfie ? '#0284c7' : '#0284c7'; // emerald for drop, sky for pickup/selfie
         ctx.fillRect(0, boxY, width, 4);
 
         // Left Column: Location & Stop Info
@@ -162,7 +167,7 @@ export async function addWatermarkToImage(
         ctx.fillStyle = '#f8fafc';
         ctx.font = `bold ${baseFontSize * 1.15}px 'Plus Jakarta Sans', sans-serif`;
         const locationName = data.stopName || data.address || (data.isDrop ? 'Diagnostic Lab' : 'Collection Stop');
-        const titleText = data.isDrop ? `DROP: ${locationName}` : `PICKUP: ${locationName}`;
+        const titleText = data.isDrop ? `DROP: ${locationName}` : data.isSelfie ? `SELFIE AT: ${locationName}` : `PICKUP: ${locationName}`;
         ctx.fillText(titleText, padding, textY);
 
         textY += baseFontSize * 1.4;
@@ -250,13 +255,18 @@ export async function addWatermarkToImage(
 }
 
 /**
- * Generates a verified specimen / chiller box photo placeholder if camera is not opened
+ * Generates a verified specimen / selfie / lab handover photo placeholder if camera is not opened
  */
-export function generateSpecimenWatermarkedPhoto(type: 'vial' | 'drop' | 'chiller', label: string): string {
+export function generateSpecimenWatermarkedPhoto(type: 'vial' | 'drop' | 'chiller' | 'selfie', label: string): string {
   const isDrop = type === 'drop';
-  const bgColor = isDrop ? '#064e3b' : '#0f172a';
-  const badgeColor = isDrop ? '#10b981' : '#0284c7';
-  const titleText = isDrop ? 'DIAGNOSTIC LAB INTAKE • DELIVERED' : 'CERTIFIED SPECIMEN VIAL COLLECTION';
+  const isSelfie = type === 'selfie';
+  const bgColor = isDrop ? '#064e3b' : isSelfie ? '#0c4a6e' : '#0f172a';
+  const badgeColor = isDrop ? '#10b981' : isSelfie ? '#0284c7' : '#0284c7';
+  const titleText = isDrop
+    ? 'DIAGNOSTIC LAB INTAKE • DELIVERED'
+    : isSelfie
+    ? 'RIDER LOCATION VERIFICATION SELFIE'
+    : 'CERTIFIED SPECIMEN VIAL COLLECTION';
   
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
     <rect width="800" height="600" fill="${bgColor}"/>
@@ -268,6 +278,12 @@ export function generateSpecimenWatermarkedPhoto(type: 'vial' | 'drop' | 'chille
       ${isDrop 
         ? `<rect x="-120" y="-70" width="240" height="140" rx="12" fill="#047857" stroke="#34d399" stroke-width="3"/>
            <text x="0" y="8" fill="#ffffff" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" text-anchor="middle">CENTRAL LAB RECEIPT</text>`
+        : isSelfie
+        ? `<circle cx="0" cy="-30" r="55" fill="#0369a1" stroke="#38bdf8" stroke-width="3"/>
+           <circle cx="0" cy="-45" r="22" fill="#bae6fd"/>
+           <path d="M -35 15 C -35 -10, 35 -10, 35 15 Z" fill="#bae6fd"/>
+           <rect x="-110" y="45" width="220" height="36" rx="18" fill="#0284c7"/>
+           <text x="0" y="68" fill="#ffffff" font-family="system-ui, sans-serif" font-size="13" font-weight="bold" text-anchor="middle">✓ RIDER ON-SITE VERIFIED</text>`
         : `<rect x="-160" y="-50" width="320" height="100" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="3"/>
            <g transform="translate(-100, -80)">
              <rect x="0" y="0" width="20" height="24" rx="4" fill="#ef4444"/>

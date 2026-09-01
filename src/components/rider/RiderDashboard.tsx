@@ -185,7 +185,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [vialCount, setVialCount] = useState<number>(0);
   const [coldBoxTemp, setColdBoxTemp] = useState<number>(4.0);
   const [stopPhoto, setStopPhoto] = useState<string | null>(null); // Photo 1: Specimen Vials
-  const [stopPhoto2, setStopPhoto2] = useState<string | null>(null); // Photo 2: Hospital Handover Slip
+  const [stopPhoto2, setStopPhoto2] = useState<string | null>(null); // Photo 2: Rider Location Selfie
   const [receiverName, setReceiverName] = useState<string>('');
   const [delayReason, setDelayReason] = useState<string>('Heavy Traffic / Rain');
   const [showDelayModal, setShowDelayModal] = useState<boolean>(false);
@@ -677,6 +677,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         vialCount: vialCount,
         temperature: coldBoxTemp,
         isDrop: photoType === 'drop',
+        isSelfie: photoType === 'photo2',
         receiverName: photoType === 'drop' ? receiverName : undefined
       });
 
@@ -700,17 +701,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     }
   };
 
-  // Digital Specimen / Custody Slip Proof Generator
+  // Verified Specimen / Rider Selfie Proof Generator
   const handleDigitalPhotoGenerate = async (photoType: 'photo1' | 'photo2' | 'drop') => {
     setWatermarking(true);
     const currentStop = activeTask?.stopsProgress[currentStopIndex];
     const generated = generateSampleVialPhoto(
-      photoType === 'drop' ? 'drop' : photoType === 'photo2' ? 'drop' : 'vial',
+      photoType === 'drop' ? 'drop' : photoType === 'photo2' ? 'selfie' : 'vial',
       photoType === 'drop'
         ? `Diagnostic Lab Handover • ${activeTask?.destination.name || 'Lab'}`
         : photoType === 'photo2'
-        ? `Hospital Handover Slip • ${currentStop?.stopName || 'Stop'}`
-        : `${vialCount} Blood Vials • ${currentStop?.stopName || 'Stop'}`
+        ? `Rider Verification Selfie • ${activeRider.name} @ ${currentStop?.stopName || 'Stop'}`
+        : `${vialCount} Specimen Vials • ${currentStop?.stopName || 'Stop'}`
     );
 
     try {
@@ -727,6 +728,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         vialCount: vialCount,
         temperature: coldBoxTemp,
         isDrop: photoType === 'drop',
+        isSelfie: photoType === 'photo2',
         receiverName: photoType === 'drop' ? receiverName : undefined
       });
       if (photoType === 'photo1') setStopPhoto(watermarked);
@@ -832,7 +834,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     onRefresh();
   };
 
-  // Confirm Stop Pickup with 2-Photo Proof
+  // Confirm Stop Pickup with 2-Photo Proof (Specimens & Selfie)
   const handleConfirmStopPickup = () => {
     if (!activeTask) return;
 
@@ -841,9 +843,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const finalSamplePhoto =
       stopPhoto ||
       generateSampleVialPhoto('vial', `${vialCount} Specimen Vials (${stopToUpdate.stopName})`);
-    const finalSlipPhoto =
+    const finalSelfiePhoto =
       stopPhoto2 ||
-      generateSampleVialPhoto('drop', `Hospital Handover Slip (${stopToUpdate.stopName})`);
+      generateSampleVialPhoto('selfie', `Rider Location Selfie • ${activeRider.name} (${stopToUpdate.stopName})`);
 
     const updatedStops: StopProgress[] = safeStops.map((s, idx) => {
       if (idx === currentStopIndex) {
@@ -855,14 +857,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           sampleCount: vialCount,
           coldBoxTemp: coldBoxTemp,
           photoUrl: finalSamplePhoto,
-          handoverPhotoUrl: finalSlipPhoto,
-          photo2Url: finalSlipPhoto,
+          handoverPhotoUrl: finalSelfiePhoto,
+          photo2Url: finalSelfiePhoto,
+          selfieUrl: finalSelfiePhoto,
           photoTimestamp: new Date().toISOString(),
           photoLocation: { lat: 19.2082, lng: 72.8398, accuracy: 5 },
           notes:
             vialCount === 0
               ? 'Verified: 0 samples ready for collection.'
-              : `${vialCount} specimen vials sealed in chiller rack with 2-photo verification.`
+              : `${vialCount} specimen vials sealed in chiller rack with rider selfie verification.`
         };
       }
       return s;
@@ -886,8 +889,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         sampleCount: vialCount,
         coldBoxTemp: coldBoxTemp,
         photoUrl: finalSamplePhoto,
-        handoverPhotoUrl: finalSlipPhoto,
-        photo2Url: finalSlipPhoto,
+        handoverPhotoUrl: finalSelfiePhoto,
+        photo2Url: finalSelfiePhoto,
+        selfieUrl: finalSelfiePhoto,
         notes: vialCount === 0 ? '0 samples collected' : `${vialCount} specimen vials collected`
       }
     );
@@ -900,7 +904,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     NotificationService.sendAlert({
       type: 'pickup',
       title: `Sample Picked: ${vialCount} Vials`,
-      message: `${activeRider.name} collected ${vialCount} vials at ${stopToUpdate.stopName}. 2-Photo proof verified. Cold box: ${coldBoxTemp}°C.`,
+      message: `${activeRider.name} collected ${vialCount} vials at ${stopToUpdate.stopName}. 2-Photo proof verified (Specimens & Selfie). Cold box: ${coldBoxTemp}°C.`,
       recipientRole: 'both',
       channel: 'both'
     });
@@ -1619,7 +1623,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Mandatory 2-Photo Proof (Automated Geotagging)
+                  Mandatory 2-Photo Proof (Specimens & Selfie)
                 </label>
                 <span className="text-[10px] text-slate-500">Live GPS & Time Watermark</span>
               </div>
@@ -1654,7 +1658,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     <img src={stopPhoto} alt="Specimen Vials Proof" className="w-full h-32 object-cover" />
                     <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
                       <span className="text-[10px] text-white font-mono truncate max-w-[200px]">
-                        Vials Watermarked
+                        Vials Geotagged
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -1691,26 +1695,26 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       disabled={watermarking}
                       className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
-                      <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span>Digital Specimen Intake</span>
+                      <Package className="w-4 h-4 text-sky-600" />
+                      <span>Sample Vials</span>
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Photo 2: Hospital Signed Intake Slip / Verification Proof */}
+              {/* Photo 2: Rider Location Selfie */}
               <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Photo 2: Signed Custody Form / Intake Slip</span>
+                    <UserCheck className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Photo 2: Rider Location Selfie</span>
                   </span>
                   {stopPhoto2 ? (
                     <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Geotagged
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-500 font-semibold">Optional / Proof</span>
+                    <span className="text-[10px] text-amber-700 font-semibold">Selfie Required</span>
                   )}
                 </div>
 
@@ -1718,17 +1722,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   ref={fileInputRef2}
                   type="file"
                   accept="image/*"
-                  capture="environment"
+                  capture="user"
                   className="hidden"
                   onChange={(e) => handlePhotoCapture(e, 'photo2')}
                 />
 
                 {stopPhoto2 ? (
                   <div className="relative rounded-lg overflow-hidden border border-slate-200 group">
-                    <img src={stopPhoto2} alt="Intake Slip Proof" className="w-full h-32 object-cover" />
+                    <img src={stopPhoto2} alt="Rider Location Selfie Proof" className="w-full h-32 object-cover" />
                     <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
                       <span className="text-[10px] text-white font-mono truncate max-w-[200px]">
-                        Slip Watermarked
+                        Selfie Geotagged
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -1754,10 +1758,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       type="button"
                       onClick={() => fileInputRef2.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-2 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-2 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
-                      <Camera className="w-4 h-4 text-emerald-700" />
-                      <span>{watermarking ? 'Processing...' : 'Capture Form'}</span>
+                      <Camera className="w-4 h-4 text-sky-700" />
+                      <span>{watermarking ? 'Processing...' : 'Take Selfie'}</span>
                     </button>
                     <button
                       type="button"
@@ -1765,8 +1769,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       disabled={watermarking}
                       className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     >
-                      <FileText className="w-4 h-4 text-emerald-600" />
-                      <span>Digital Custody Slip</span>
+                      <UserCheck className="w-4 h-4 text-sky-600" />
+                      <span>Sample Selfie</span>
                     </button>
                   </div>
                 )}
@@ -1780,7 +1784,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 className="w-full py-2.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               >
                 <Check className="w-4 h-4" />
-                <span>CONFIRM 2-PHOTO PICKUP ({vialCount} VIALS)</span>
+                <span>CONFIRM 2-PHOTO PICKUP ({vialCount} VIALS & SELFIE)</span>
               </button>
             </div>
           </div>
@@ -1862,7 +1866,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   <img src={stopPhoto} alt="Lab Handover Proof" className="w-full h-44 object-cover" />
                   <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
                     <span className="text-[10px] text-white font-mono truncate max-w-[200px]">
-                      GPS & Intake Slip Tagged
+                      GPS & Lab Handover Tagged
                     </span>
                     <div className="flex items-center gap-1.5">
                       <button
