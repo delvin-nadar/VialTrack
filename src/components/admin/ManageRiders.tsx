@@ -28,6 +28,12 @@ import { db } from '../../services/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import { formatCredentialsMessage, copyTextToClipboard } from '../../utils/security';
+import {
+  evaluateRiderPunctuality,
+  getRiderAppStatus,
+  generateRiderWhatsAppAlertUrl
+} from '../../utils/riderTelemetry';
+import { MessageSquare } from 'lucide-react';
 import { EditRiderModal } from './EditRiderModal';
 
 interface ManageRidersProps {
@@ -220,147 +226,190 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
           {filteredRiders.map((rider) => {
             const assignedRouteIds = Array.isArray(rider?.assignedRouteIds) ? rider.assignedRouteIds : [];
             const assignedRoutes = routes.filter((r) => assignedRouteIds.includes(r.id));
+            const punctuality = evaluateRiderPunctuality(rider, routes);
+            const appStatus = getRiderAppStatus(rider);
+            const whatsappUrl = generateRiderWhatsAppAlertUrl(
+              rider,
+              punctuality.isOverdue ? 'overdue_alert' : 'punch_in_reminder',
+              punctuality.routeName,
+              punctuality.firstSlot
+            );
 
-          return (
-            <div
-              key={rider.id}
-              className="bg-white border border-slate-200 rounded-xl p-4.5 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-colors"
-            >
-              <div>
-                {/* Rider Photo & Status */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {rider.photoUrl ? (
-                      <img
-                        src={rider.photoUrl}
-                        alt={rider.name}
-                        className="w-11 h-11 rounded-lg object-cover border border-slate-200 shadow-xs"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : null}
-                    {!rider.photoUrl && (
-                      <div className="w-11 h-11 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-sm border border-sky-200 shadow-xs">
-                        {rider.name.charAt(0)}
+            return (
+              <div
+                key={rider.id}
+                className={`bg-white border rounded-xl p-4.5 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all ${
+                  punctuality.isOverdue ? 'border-red-300 ring-1 ring-red-300' : 'border-slate-200'
+                }`}
+              >
+                <div>
+                  {/* Rider Photo & Status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {rider.photoUrl ? (
+                        <img
+                          src={rider.photoUrl}
+                          alt={rider.name}
+                          className="w-11 h-11 rounded-lg object-cover border border-slate-200 shadow-xs"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : null}
+                      {!rider.photoUrl && (
+                        <div className="w-11 h-11 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-sm border border-sky-200 shadow-xs">
+                          {rider.name.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{rider.name}</h4>
+                        <p className="text-xs text-sky-700 font-mono font-medium">{rider.vehicleNumber}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                          {getEmploymentBadge(rider)}
+                          {getShiftPill(rider)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${appStatus.badgeClass}`}>
+                        {appStatus.label}
+                      </span>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                          isRiderLocationStale(rider, 10)
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1'
+                        }`}
+                      >
+                        {!isRiderLocationStale(rider, 10) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>}
+                        {isRiderLocationStale(rider, 10) ? 'GPS Stale / Offline' : 'Live GPS Broadcast'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Punch-In Punctuality & Route Readiness Bar */}
+                  <div className="mt-3 p-2.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 font-semibold flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-sky-700" />
+                        <span>1st Route Slot:</span>
+                      </span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        {punctuality.firstSlot || 'No scheduled slot'}
+                      </span>
+                    </div>
+                    <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-semibold">Duty Punch-In:</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md border ${punctuality.badgeClass}`}>
+                        {punctuality.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Contact & Live Telemetry Info */}
+                  <div className="mt-2.5 grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Phone:</span>
+                      <span className="font-mono text-slate-800 font-medium">{rider.phone}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">Battery & Speed:</span>
+                      <span className="font-mono font-semibold text-slate-700 flex items-center gap-1">
+                        <Battery className="w-3.5 h-3.5 text-slate-600" /> {rider.batteryLevel || 88}% • {rider.speed || 0} km/h
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block text-[10px] font-semibold uppercase">GPS Coordinates:</span>
+                      <span className="font-mono text-slate-700 text-[11px] truncate block">
+                        {rider.currentLocation?.lat ? `${Number(rider.currentLocation.lat).toFixed(4)}, ${Number(rider.currentLocation.lng).toFixed(4)} (±${rider.currentLocation.accuracy || 5}m)` : 'Broadcasting on route start'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Assigned Routes */}
+                  <div className="mt-3 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Assigned Collection Routes:
+                    </span>
+                    {assignedRoutes.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">No routes currently assigned</span>
+                    ) : (
+                      <div className="space-y-1">
+                        {assignedRoutes.map((r) => (
+                          <div
+                            key={r.id}
+                            className="text-xs bg-slate-50 text-slate-800 px-2.5 py-1 rounded-md border border-slate-200 flex items-center justify-between"
+                          >
+                            <span className="truncate">{r.name}</span>
+                            <span className="text-[10px] text-sky-700 font-mono shrink-0 ml-1 font-semibold">
+                              {r.stops.length} Stops
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{rider.name}</h4>
-                      <p className="text-xs text-sky-700 font-mono font-medium">{rider.vehicleNumber}</p>
-                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                        {getEmploymentBadge(rider)}
-                        {getShiftPill(rider)}
-                      </div>
-                    </div>
                   </div>
+                </div>
 
-                  <div className="flex flex-col items-end gap-1">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        rider.status === 'active'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : rider.status === 'on_leave'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}
+                {/* Actions & Corrective WhatsApp */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 text-xs flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <a
+                      href={`tel:${rider.phone}`}
+                      className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 border border-slate-300 transition-colors"
+                      title="Call Rider"
                     >
-                      {rider.status === 'active' ? 'Active / On-Duty' : rider.status}
-                    </span>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                        isRiderLocationStale(rider, 10)
-                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1'
-                      }`}
+                      <Phone className="w-3.5 h-3.5 text-sky-700" />
+                      <span>Call</span>
+                    </a>
+
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold flex items-center gap-1 shadow-xs transition-colors"
+                      title="Send WhatsApp Alert"
                     >
-                      {!isRiderLocationStale(rider, 10) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>}
-                      {isRiderLocationStale(rider, 10) ? 'GPS Stale / Offline' : 'Live GPS'}
-                    </span>
-                  </div>
-                </div>
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>WhatsApp</span>
+                    </a>
 
-                {/* Contact & Live Telemetry Info */}
-                <div className="mt-3.5 grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-semibold uppercase">Phone:</span>
-                    <span className="font-mono text-slate-800 font-medium">{rider.phone}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-semibold uppercase">Battery & GPS:</span>
-                    <span className={`font-mono font-semibold flex items-center gap-1 ${isRiderLocationStale(rider, 10) ? 'text-amber-700' : 'text-emerald-700'}`}>
-                      <Battery className="w-3.5 h-3.5" /> {rider.batteryLevel || 88}% • {isRiderLocationStale(rider, 10) ? 'GPS Stale' : 'GPS OK'}
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400 block text-[10px] font-semibold uppercase">Email / Login ID:</span>
-                    <span className="font-mono text-slate-700 text-[11px] truncate block">{rider.email}</span>
-                  </div>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyFormattedCredentials(rider.phone || rider.email, rider.password || '')}
+                      className="px-2 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-lg font-bold flex items-center gap-1 transition-colors border border-sky-200 cursor-pointer"
+                      title="Copy formatted credentials text to clipboard"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copySuccess ? 'Copied' : 'Credentials'}</span>
+                    </button>
 
-                {/* Assigned Routes */}
-                <div className="mt-3 space-y-1">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Assigned Collection Routes:
-                  </span>
-                  {assignedRoutes.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic">No routes currently assigned</span>
-                  ) : (
-                    <div className="space-y-1">
-                      {assignedRoutes.map((r) => (
-                        <div
-                          key={r.id}
-                          className="text-xs bg-slate-50 text-slate-800 px-2.5 py-1 rounded-md border border-slate-200 flex items-center justify-between"
-                        >
-                          <span className="truncate">{r.name}</span>
-                          <span className="text-[10px] text-sky-700 font-mono shrink-0 ml-1 font-semibold">
-                            {r.stops.length} Stops
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleCopyFormattedCredentials(rider.phone || rider.email, rider.password || '')}
-                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-lg font-bold flex items-center gap-1.5 transition-colors border border-sky-200 cursor-pointer"
-                    title="Copy formatted credentials text to clipboard"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>{copySuccess ? 'Copied!' : 'Copy Credentials'}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingRider(rider);
+                        setIsAddingRider(true);
+                      }}
+                      className="px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg font-semibold flex items-center gap-1 transition-colors border border-slate-200 cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-sky-700" />
+                      <span>Edit</span>
+                    </button>
+                  </div>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditingRider(rider);
-                      setIsAddingRider(true);
-                    }}
-                    className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
+                    onClick={() => handleDeleteRider(rider.id, rider.name)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
+                    title="Remove Rider from Fleet"
                   >
-                    <Edit2 className="w-3.5 h-3.5 text-sky-700" />
-                    <span>Edit</span>
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleDeleteRider(rider.id, rider.name)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
-                  title="Remove Rider from Fleet"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
       )}
 

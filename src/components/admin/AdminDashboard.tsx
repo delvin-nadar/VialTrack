@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { PickupTask, PickupBoy, Route, Client, NotificationLog } from '../../types';
 import { LiveMap } from '../common/LiveMap';
 import { DispatchModal } from './DispatchModal';
+import { RiderTelemetryRadar } from './RiderTelemetryRadar';
 import {
   Calendar,
   Clock,
@@ -495,6 +496,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="text-[10px] text-slate-400 mt-1.5 font-medium">Verified biological samples</div>
         </div>
       </div>
+
+      {/* Fleet Readiness, App Heartbeat & Punctuality Radar */}
+      <RiderTelemetryRadar
+        riders={riders}
+        routes={routes}
+        tasks={allTasks}
+        onSelectRiderForMap={(r) => {
+          // Find any active task for this rider and select it to focus map
+          const riderTask = (allTasks || []).find((t) => t.riderId === r.id || t.assignedRiderId === r.id);
+          if (riderTask) {
+            setSelectedTaskId(riderTask.id);
+          }
+        }}
+      />
 
       {/* Live Map + Priority Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

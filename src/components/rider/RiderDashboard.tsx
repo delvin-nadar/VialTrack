@@ -43,6 +43,12 @@ import { LiveMap } from '../common/LiveMap';
 import { CloudSync, db, formatUnifiedTask } from '../../services/firebase';
 import { doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { DailyRoundsSchedule, ScheduleStopItem } from './DailyRoundsSchedule';
+import {
+  evaluateRiderPunctuality,
+  getRiderFirstRouteSlot,
+  parseSlotToMinutes,
+  PunctualityReport
+} from '../../utils/riderTelemetry';
 
 interface RiderDashboardProps {
   user: UserAuth;
@@ -247,6 +253,59 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Heartbeat & Live App Open Telemetry Sync to Firestore
+  useEffect(() => {
+    if (!sessionRiderId) return;
+
+    const pulseHeartbeat = async () => {
+      try {
+        let batteryPct = 88;
+        if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+          try {
+            const battery: any = await (navigator as any).getBattery();
+            if (battery && typeof battery.level === 'number') {
+              batteryPct = Math.round(battery.level * 100);
+            }
+          } catch (_) {}
+        }
+
+        await setDoc(
+          doc(db, 'riders', sessionRiderId),
+          {
+            id: sessionRiderId,
+            name: activeRider.name,
+            phone: activeRider.phone,
+            isAppOpen: true,
+            appOpenTime: (activeRider as any).appOpenTime || new Date().toISOString(),
+            lastHeartbeatTime: new Date().toISOString(),
+            lastHeartbeat: serverTimestamp(),
+            lastUpdated: serverTimestamp(),
+            batteryLevel: batteryPct,
+            isOnline: true
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        // Ignore silent network/quota notice
+      }
+    };
+
+    pulseHeartbeat();
+    const interval = setInterval(pulseHeartbeat, 20000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        pulseHeartbeat();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [sessionRiderId, activeRider.name, activeRider.phone, (activeRider as any).appOpenTime]);
 
   // Today ISO Date string
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -625,6 +684,37 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     }
 
     if (startShift) {
+      const nowIso = new Date().toISOString();
+      const firstSlotInfo = getRiderFirstRouteSlot(activeRider, assignedRoutes, todayRiderTasks);
+      const slotStr = firstSlotInfo?.slot || '10:00 AM - 12:00 PM';
+      const slotMinutes = parseSlotToMinutes(slotStr);
+      const punchInDate = new Date(nowIso);
+      const punchInMinutes = punchInDate.getHours() * 60 + punchInDate.getMinutes();
+      const diffMinutes = slotMinutes - punchInMinutes;
+
+      let punctuality: 'early' | 'on_time' | 'late' = 'on_time';
+      if (diffMinutes >= 10) punctuality = 'early';
+      else if (diffMinutes < -5) punctuality = 'late';
+
+      try {
+        await setDoc(
+          doc(db, 'riders', sessionRiderId),
+          {
+            todayPunchInTime: nowIso,
+            firstScheduledRouteTime: slotStr,
+            punchInPunctuality: punctuality,
+            punchInDiffMinutes: diffMinutes,
+            isCheckedIn: true,
+            status: 'active',
+            isOnline: true,
+            lastUpdated: serverTimestamp()
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn('Error updating rider punctuality:', e);
+      }
+
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           StorageService.addAttendanceRecord({
@@ -632,13 +722,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             riderId: activeRider.id,
             riderName: activeRider.name,
             date: todayStr,
-            checkInTime: new Date().toISOString(),
+            checkInTime: nowIso,
             checkInLocation: {
               lat: pos.coords.latitude,
               lng: pos.coords.longitude,
               address: 'Kandivali Dispatch Hub, Mumbai'
             },
-            status: 'on_duty'
+            status: 'on_duty',
+            firstRouteSlot: slotStr,
+            punchInPunctuality: punctuality,
+            punchInDiffMinutes: diffMinutes
           });
           onRefresh();
         },
@@ -648,13 +741,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             riderId: activeRider.id,
             riderName: activeRider.name,
             date: todayStr,
-            checkInTime: new Date().toISOString(),
+            checkInTime: nowIso,
             checkInLocation: {
               lat: 19.2082,
               lng: 72.8398,
               address: 'Kandivali Dispatch Hub, Mumbai'
             },
-            status: 'on_duty'
+            status: 'on_duty',
+            firstRouteSlot: slotStr,
+            punchInPunctuality: punctuality,
+            punchInDiffMinutes: diffMinutes
           });
           onRefresh();
         }
@@ -1251,8 +1347,60 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return (scheduleStops || []).filter((s) => s?.status === 'collected').length;
   }, [scheduleStops]);
 
+  // Evaluate current punctuality & route countdown
+  const punctualityReport = useMemo(() => {
+    return evaluateRiderPunctuality(activeRider, assignedRoutes, undefined, todayRiderTasks);
+  }, [activeRider, assignedRoutes, todayRiderTasks]);
+
   return (
     <div className="space-y-4 max-w-5xl mx-auto pb-16">
+      {/* Punch In Duty & Route Time Alert Banner (When Not Checked In) */}
+      {!isCheckedIn && punctualityReport.status !== 'no_route' && (
+        <div
+          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
+            punctualityReport.isOverdue
+              ? 'bg-red-50 border-red-300 text-red-900'
+              : 'bg-amber-50 border-amber-300 text-amber-900'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                punctualityReport.isOverdue ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'
+              }`}
+            >
+              <Clock className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-sm">
+                  {punctualityReport.isOverdue ? '🚨 URGENT: Punch-In Overdue!' : '⏰ Punch-In Required Before Route Starts'}
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${punctualityReport.badgeClass}`}>
+                  {punctualityReport.label}
+                </span>
+              </div>
+              <p className="text-xs mt-1 opacity-90">
+                Route: <span className="font-semibold">{punctualityReport.routeName}</span> • Slot:{' '}
+                <span className="font-semibold">{punctualityReport.firstSlot}</span>.
+                You must punch in with vehicle details and live GPS broadcast before initiating stop collections.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowVehicleDutyModal(true)}
+            className={`px-4 py-2.5 rounded-lg font-bold text-xs text-white shadow-xs shrink-0 cursor-pointer transition-transform active:scale-95 flex items-center justify-center gap-2 ${
+              punctualityReport.isOverdue ? 'bg-red-700 hover:bg-red-800' : 'bg-amber-700 hover:bg-amber-800'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>PUNCH IN & START DUTY</span>
+          </button>
+        </div>
+      )}
+
       {/* GPS Status Banner */}
       {gpsStatus.errorMessage && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs text-red-800 shadow-xs">

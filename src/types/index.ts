@@ -166,6 +166,15 @@ export interface PickupBoy {
   failedAttempts?: number;
   lockoutUntil?: string;
   lastLoginAt?: string;
+  isAppOpen?: boolean;
+  appOpenTime?: string;
+  lastHeartbeatTime?: string;
+  lastHeartbeat?: any;
+  todayPunchInTime?: string;
+  firstScheduledRouteTime?: string;
+  punchInPunctuality?: 'early' | 'on_time' | 'late' | 'not_checked_in';
+  punchInDiffMinutes?: number;
+  gpsAccuracy?: number;
 }
 
 export interface TripStop {
@@ -410,6 +419,9 @@ export interface AttendanceRecord {
   totalHours?: number;
   status: 'present' | 'on_duty' | 'completed' | 'leave' | 'absent';
   leaveReason?: string;
+  firstRouteSlot?: string;
+  punchInPunctuality?: 'early' | 'on_time' | 'late';
+  punchInDiffMinutes?: number;
 }
 
 export interface LocationPing {
