@@ -289,7 +289,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const items: ScheduleStopItem[] = [];
 
     assignedRoutes.forEach((route) => {
-      const timeSlots = route.timeSlots && route.timeSlots.length > 0 ? route.timeSlots : ['10:00', '14:00', '18:00', '22:00'];
+      // Strictly use the route's configured time slots. If none configured, show single scheduled daily run
+      const timeSlots = route.timeSlots && route.timeSlots.length > 0 ? route.timeSlots : ['09:00 AM'];
       const client = StorageService.getClientById(route.clientId) || { name: 'Diagnostic Partner' };
 
       timeSlots.forEach((slot) => {

@@ -538,20 +538,67 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
 
       {/* Fixed Daily Pickup Time Slots */}
       <div>
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
-          <Clock className="w-3 h-3 text-sky-700" />
-          Fixed Daily Pickup Time Slots:
-        </span>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            <Clock className="w-3 h-3 text-sky-700" />
+            Fixed Daily Pickup Time Slots:
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">
+            Riders will see stops scheduled for each configured slot
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {(route.timeSlots || []).map((slot) => (
             <span
               key={slot}
-              className="bg-slate-100 border border-slate-200 text-slate-800 font-mono font-bold text-xs px-2.5 py-0.5 rounded-md flex items-center gap-1"
+              className="bg-slate-100 border border-slate-200 text-slate-800 font-mono font-bold text-xs px-2.5 py-1 rounded-md flex items-center gap-1.5"
             >
               <Clock className="w-3 h-3 text-sky-700" />
-              {slot}
+              <span>{slot}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const updatedSlots = (route.timeSlots || []).filter((s) => s !== slot);
+                  const updatedRoute: Route = { ...route, timeSlots: updatedSlots };
+                  StorageService.updateRoute(updatedRoute);
+                  onRouteUpdated(updatedRoute);
+                }}
+                className="text-slate-400 hover:text-rose-600 transition-colors ml-0.5"
+                title="Remove this slot"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </span>
           ))}
+
+          {/* Add Slot inline */}
+          <div className="flex items-center gap-1">
+            <input
+              type="time"
+              id={`add-slot-input-${route.id}`}
+              className="px-2 py-0.5 border border-slate-300 rounded text-xs font-mono focus:ring-1 focus:ring-sky-500"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const input = document.getElementById(`add-slot-input-${route.id}`) as HTMLInputElement;
+                if (input && input.value) {
+                  const val = input.value;
+                  const current = route.timeSlots || [];
+                  if (!current.includes(val)) {
+                    const updatedRoute: Route = { ...route, timeSlots: [...current, val].sort() };
+                    StorageService.updateRoute(updatedRoute);
+                    onRouteUpdated(updatedRoute);
+                  }
+                  input.value = '';
+                }
+              }}
+              className="px-2 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-semibold rounded border border-sky-200 transition-colors flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Slot</span>
+            </button>
+          </div>
         </div>
       </div>
 
