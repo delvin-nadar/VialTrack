@@ -308,8 +308,10 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
   };
 
   // Save new Route
-  const handleSaveRoute = async (newRoute: Route) => {
-    if (!selectedClient) return;
+  riderId: '',
+riderName: 'Unassigned',
+riderPhone: '',
+status: 'pending',
 
     StorageService.addRoute(newRoute);
     try {
@@ -325,10 +327,10 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
         clientEmail: selectedClient.email || '',
         routeId: newRoute.id,
         routeName: newRoute.name,
-        riderId: 'rider_1',
-        riderName: 'Sameer Khan',
-        riderPhone: '+91 98201 22334',
-        status: 'assigned' as const,
+       riderId: selectedRider?.id || '',
+riderName: selectedRider?.name || 'Unassigned',
+riderPhone: selectedRider?.phone || '',
+status: selectedRider?.id ? 'assigned' : 'pending',
         currentStopIndex: 0,
         stops: newRoute.stops.map((stop, index) => ({
           id: stop.id,
