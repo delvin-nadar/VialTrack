@@ -77,8 +77,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const active = taskList.filter((t) => t.status === 'assigned' || t.status === 'in_transit');
           setActiveRoundsCount(active.length);
         },
-        (err) => {
-          console.warn('[AdminDashboard] Live tasks listener notice:', err);
+        (err: any) => {
+          if (err?.code === 'permission-denied' || err?.message?.includes('permissions')) {
+            console.info('[AdminDashboard] Firestore security rules require permission for /tasks collection in project secondmedic-vialtrack. Falling back to local data.');
+          } else {
+            console.warn('[AdminDashboard] Live tasks listener notice:', err?.message || err);
+          }
           setHasLoadedFirestoreTasks(true);
         }
       );
