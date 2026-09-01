@@ -308,15 +308,20 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       };
 
       timeSlots.forEach((slot) => {
-        // Find existing task for this slot today
-        const matchedTask = todayRiderTasks.find(
+        // Find all tasks matching this route and slot today
+        const matchingTasks = todayRiderTasks.filter(
           (t) => (t.routeId === route.id || t.routeName === route.name) && (t.timeSlot === slot || !t.timeSlot)
         );
 
+        // Mark all matching tasks as processed to prevent duplicate fallback rendering
+        matchingTasks.forEach((t) => processedTaskIds.add(t.id));
+
+        // Pick the active / most updated task for this slot
+        const matchedTask = matchingTasks.length > 0 ? matchingTasks[0] : undefined;
+
         if (matchedTask && matchedTask.stopsProgress && matchedTask.stopsProgress.length > 0) {
-          processedTaskIds.add(matchedTask.id);
           matchedTask.stopsProgress.forEach((sp, spIdx) => {
-            const isCollected = sp.status === 'picked_up';
+            const isCollected = sp.status === 'picked_up' || sp.status === 'completed';
             const isInTransit =
               (matchedTask.status === 'started' || matchedTask.status === 'at_stop' || matchedTask.status === 'in_transit') &&
               !isCollected;
@@ -342,6 +347,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               coldBoxTemp: sp.coldBoxTemp,
               photoUrl: sp.photoUrl,
               photo2Url: (sp as any).handoverPhotoUrl || (sp as any).photo2Url,
+              selfieUrl: (sp as any).selfieUrl,
               taskId: matchedTask.id,
               task: matchedTask,
               routeId: route.id,

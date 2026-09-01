@@ -119,6 +119,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (window.confirm('Are you sure you want to cancel and delete this pickup round?')) {
       try {
         await deleteDoc(doc(db, 'tasks', taskId));
+        await deleteDoc(doc(db, 'trips', taskId));
       } catch (err) {
         console.warn('Firestore task delete error:', err);
       }

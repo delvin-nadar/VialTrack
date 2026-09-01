@@ -799,46 +799,7 @@ export const CloudSync = {
       await setDoc(ref, JSON.parse(JSON.stringify(data)), { merge: true });
       console.log(`[CloudSync] Synced ${collectionName}/${docId} to Firestore.`);
 
-      // When a route is assigned or saved, automatically create/update document in 'tasks'
-      if (collectionName === 'routes' && data) {
-        try {
-          const taskId = `task_${data.id || Date.now()}`;
-          const normalizedStops = Array.isArray(data.stops)
-            ? data.stops.map((stop: any, index: number) => ({
-                id: stop.id || `stop_${index + 1}`,
-                name: stop.name || `Collection Stop ${index + 1}`,
-                address: stop.address || 'Mumbai, Maharashtra',
-                lat: Number(stop.lat || 19.1287852),
-                lng: Number(stop.lng || 72.8294183),
-                specimenCount: Number(stop.specimenCount || 0),
-                status: index === 0 ? ('in_progress' as const) : ('pending' as const)
-              }))
-            : [];
-
-          const taskDoc = {
-            id: taskId,
-            taskId: taskId,
-            clientId: data.clientId || 'client-1788210054008',
-            clientName: data.destinationLab?.name || data.name || 'Lifecare Diagnostics',
-            clientEmail: data.destinationLab?.email || (data as any).clientEmail || '',
-            routeId: data.id,
-            routeName: data.name || 'Specimen Pickup Loop',
-            riderId: data.assignedRiderId || '',
-riderName: data.assignedRiderName || 'Unassigned',
-riderPhone: data.assignedRiderPhone || '',
-status: (data.assignedRiderId ? 'assigned' : 'pending') as 'assigned' | 'pending',
-            currentStopIndex: 0,
-            stops: normalizedStops,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          };
-
-          await setDoc(doc(db, 'tasks', taskId), taskDoc, { merge: true });
-          console.log(`[CloudSync] Auto-instantiated tasks/${taskId} for route ${docId}`);
-        } catch (tErr: any) {
-          console.warn('[CloudSync] Auto-instantiate task on route save notice:', tErr?.message || tErr);
-        }
-      }
+      // Document synced successfully
     } catch (err: any) {
       if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
         console.warn(`[CloudSync] Firestore quota exceeded while syncing ${collectionName}/${docId}; cached locally.`);

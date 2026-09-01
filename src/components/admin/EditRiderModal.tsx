@@ -387,88 +387,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
     });
   };
 
-  const ensureLiveTaskGenerated = async (
-    riderData: {
-      id: string;
-      name: string;
-      phone: string;
-      vehiclePlate: string;
-    },
-    routeIds: string[]
-  ) => {
-    if (!routeIds || routeIds.length === 0) return;
-
-    try {
-      let existingTasks: any[] = [];
-      try {
-        const q = query(collection(db, 'tasks'), where('riderId', '==', riderData.id));
-        const snap = await getDocs(q);
-        existingTasks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      } catch (checkErr) {
-        console.warn('[EditRiderModal] Query tasks warning:', checkErr);
-      }
-
-      for (const selectedRouteId of routeIds) {
-        const selectedRouteDetails = availableRoutes.find((r) => r.id === selectedRouteId);
-        if (!selectedRouteDetails) continue;
-
-        const hasActiveTask = existingTasks.some(
-          (t) =>
-            (t.routeId === selectedRouteId || t.routeName === selectedRouteDetails.name) &&
-            t.status !== 'completed' &&
-            t.status !== 'delivered' &&
-            t.status !== 'cancelled'
-        );
-
-        if (!hasActiveTask) {
-          const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-          const normalizedStops =
-            selectedRouteDetails.stops && selectedRouteDetails.stops.length > 0
-              ? selectedRouteDetails.stops.map((stop: any, index: number) => ({
-                  id: stop.id || `stop_${index + 1}`,
-                  name: stop.name || `Collection Stop ${index + 1}`,
-                  address: stop.address || '',
-                  lat: Number(stop.lat || 19.1287852),
-                  lng: Number(stop.lng || 72.8294183),
-                  status: 'pending' as const,
-                  specimenCount: Number(stop.specimenCount || stop.sampleCount || 0)
-                }))
-              : [];
-
-          const taskDocPayload = {
-            id: taskId,
-            taskId: taskId,
-            clientId: selectedRouteDetails.clientId || '',
-            clientName: (selectedRouteDetails as any).clientName || (selectedRouteDetails as any).destinationLab?.name || selectedRouteDetails.name || '',
-            clientEmail: (selectedRouteDetails as any).clientEmail || (selectedRouteDetails as any).destinationLab?.email || '',
-            clientLabId: selectedRouteDetails.clientId || '',
-            clientLabName: (selectedRouteDetails as any).clientName || (selectedRouteDetails as any).destinationLab?.name || selectedRouteDetails.name || '',
-            routeName: selectedRouteDetails.name || 'Collection Route',
-            routeId: selectedRouteDetails.id || selectedRouteId,
-            riderId: riderData.id,
-            riderName: riderData.name,
-            riderPhone: riderData.phone,
-            riderVehicle: riderData.vehiclePlate,
-            assignedRiderId: riderData.id,
-            assignedRiderName: riderData.name,
-            assignedRiderPhone: riderData.phone,
-            status: 'assigned' as const,
-            currentStopIndex: 0,
-            stops: normalizedStops,
-            timeSlot: (selectedRouteDetails.timeSlots && selectedRouteDetails.timeSlots[0]) || 'Scheduled',
-            date: new Date().toISOString().split('T')[0],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          };
-
-          await setDoc(doc(db, 'tasks', taskId), taskDocPayload, { merge: true });
-        }
-      }
-    } catch (taskGenErr) {
-      console.warn('[EditRiderModal] Error auto-generating live task:', taskGenErr);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -554,16 +472,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
         };
 
         await setDoc(doc(db, 'riders', updatedRider.id), firestorePayload, { merge: true });
-
-        await ensureLiveTaskGenerated(
-          {
-            id: updatedRider.id,
-            name: updatedRider.name,
-            phone: updatedRider.phone,
-            vehiclePlate: effectivePlate
-          },
-          form.assignedRouteIds
-        );
       } catch (err: any) {
         if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
           console.warn('Firestore quota exceeded; updated rider locally.');
@@ -647,16 +555,6 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
             lastUpdated: serverTimestamp()
           },
           { merge: true }
-        );
-
-        await ensureLiveTaskGenerated(
-          {
-            id: newRider.id,
-            name: newRider.name,
-            phone: newRider.phone,
-            vehiclePlate: effectivePlate
-          },
-          form.assignedRouteIds
         );
       } catch (err: any) {
         if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {

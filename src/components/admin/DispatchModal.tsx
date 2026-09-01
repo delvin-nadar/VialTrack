@@ -275,56 +275,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     });
 
     try {
-      // 1. Direct root document write to 'tasks' collection using setDoc
-      const rootTaskDoc = {
-        id: taskId,
-        taskId: taskId,
-        clientId: client.id,
-        clientName: client.name,
-        clientEmail: client.email || '',
-        clientLabId: client.id,
-        clientLabName: client.name,
-        clientAddress: client.address || '',
-        clientCoords: [Number(client.lat || 19.1287852), Number(client.lng || 72.8294183)],
-        routeId: route?.id || 'route_1',
-        routeName: route?.name || `${client.name} Specimen Pickup Loop`,
-        riderId: rider.id,
-        riderName: rider.name,
-        riderPhone: rider.phone || '',
-        riderVehicle: rider.vehicleNumber || '',
-        assignedRiderId: rider.id,
-        assignedRiderName: rider.name,
-        assignedRiderPhone: rider.phone || '',
-        status: 'assigned' as const,
-        currentStopIndex: 0,
-        stops: stopsPayload,
-        stopsProgress: stopsPayload,
-        scheduledDate: taskDate,
-        timeSlot: taskTimeSlot,
-        taskNotes,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        chillerTemp: 4.2,
-        isDelayed: false,
-        delayMinutes: 0
-      };
-
-      await setDoc(doc(db, 'tasks', taskId), rootTaskDoc);
-
-      // 2. Update rider doc `riders/${selectedRider.id}` setting dutyStatus = "on_trip" and activeTaskId = taskId
-      await setDoc(
-        doc(db, 'riders', rider.id),
-        {
-          dutyStatus: 'on_trip',
-          activeTaskId: taskId,
-          status: 'active',
-          isOnline: true,
-          lastUpdated: serverTimestamp()
-        },
-        { merge: true }
-      );
-
-      // 3. Dispatch unified helper to sync trips and notify listeners
+      // Dispatch unified task via CloudSync using the unique taskId
       const newTask = await CloudSync.dispatchTask({
         client: {
           id: client.id,
@@ -343,7 +294,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         route,
         timeSlot: taskTimeSlot,
         scheduledDate: taskDate,
-        taskNotes
+        taskNotes,
+        customTaskId: taskId
       });
 
       // Update local storage record for offline durability

@@ -238,7 +238,7 @@ export type TaskStatus =
   | 'pending'
   | 'in_progress';
 
-export type StopStatus = 'pending' | 'arrived' | 'picked_up' | 'no_sample';
+export type StopStatus = 'pending' | 'arrived' | 'picked_up' | 'completed' | 'no_sample';
 
 export interface UnifiedStopItem {
   stopName: string;
