@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { RouteStop, DestinationLab, PickupBoy, PickupTask, StopExecution } from '../../types';
 import { Navigation, Radio } from 'lucide-react';
+import { resolveMarkerOverlaps } from '../../utils/spiderfy';
 import 'leaflet/dist/leaflet.css';
 
 // Fix default Leaflet asset icon paths
@@ -223,17 +224,35 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       `);
     }
 
-    // 2. Draw Collection Stop Markers
-    stops.forEach((stop, idx) => {
-      const lat = stop.lat ?? stop.latitude;
-      const lng = stop.lng ?? stop.longitude;
-      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+    // 2. Draw Collection Stop Markers (With Anti-Overlap Resolution)
+    const resolvedStops = resolveMarkerOverlaps(
+      stops,
+      (stop, idx) => {
+        const lat = stop.lat ?? stop.latitude;
+        const lng = stop.lng ?? stop.longitude;
+        if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+        return { id: stop.id || stop.stopId || `stop-${idx}`, lat, lng };
+      },
+      0.0003,
+      0.0004
+    );
 
+    resolvedStops.forEach((point, idx) => {
+      const stop = point.data;
       const stopName = stop.name || stop.stopName || `Stop ${idx + 1}`;
       const stopAddress = stop.address || '—';
       const isCompleted = stop.status === 'picked_up' || stop.status === 'collected' || stop.status === 'completed';
 
-      const stopMarker = L.marker([lat, lng], {
+      if (point.isOffset) {
+        L.polyline([[point.originalLat, point.originalLng], [point.lat, point.lng]], {
+          color: '#0284c7',
+          weight: 1.5,
+          dashArray: '3, 4',
+          opacity: 0.7
+        }).addTo(markersLayer);
+      }
+
+      const stopMarker = L.marker([point.lat, point.lng], {
         icon: createStopIcon(idx, stopName, isCompleted),
         zIndexOffset: 800
       }).addTo(markersLayer);

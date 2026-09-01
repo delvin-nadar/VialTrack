@@ -12,6 +12,7 @@ import { CloudSync, parseFirestoreGeoPoint, db } from '../../services/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { isRiderLocationStale } from '../../services/locationService';
 import { fetchRoadPolyline } from '../../utils/routeGeometry';
+import { resolveMarkerOverlaps } from '../../utils/spiderfy';
 import {
   MapPin,
   Bike,
@@ -325,14 +326,23 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
     trailLayer.clearLayers();
     markersMapRef.current.clear();
 
-    // A. RENDER RIDERS
+    // A. RENDER RIDERS (With Spiderfy Anti-Overlap Resolution)
     if (showRidersLayer) {
-      filteredRiders.forEach((r) => {
-        const lat = (r as any).lat ?? r.currentLocation?.lat;
-        const lng = (r as any).lng ?? r.currentLocation?.lng;
-        if (typeof lat !== 'number' || typeof lng !== 'number') return;
-        const coords = { lat, lng };
+      const resolvedRiders = resolveMarkerOverlaps(
+        filteredRiders,
+        (r) => {
+          const lat = (r as any).lat ?? r.currentLocation?.lat;
+          const lng = (r as any).lng ?? r.currentLocation?.lng;
+          if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+          return { id: r.id, lat, lng };
+        },
+        0.00045, // Proximity threshold (~45m)
+        0.00055  // Spiderfy ring radius (~55m)
+      );
 
+      resolvedRiders.forEach((point) => {
+        const r = point.data;
+        const coords = { lat: point.lat, lng: point.lng };
         const isSelected = selectedRiderId === r.id;
         const isStale = isRiderLocationStale(r, 10);
         const assignedTask = cloudTasks.find((t) => t.riderId === r.id || t.assignedRiderId === r.id);
@@ -341,6 +351,16 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
         const vehicleNum = r.vehicleNumber || '';
         const firstName = riderName.split(' ')[0] || riderName;
         const vehicleSuffix = vehicleNum ? (vehicleNum.includes('-') ? vehicleNum.split('-').pop() : vehicleNum) : '';
+
+        // If offset due to overlapping coordinates, draw a subtle dashed guide line to the base depot position
+        if (point.isOffset) {
+          L.polyline([[point.originalLat, point.originalLng], [point.lat, point.lng]], {
+            color: '#38bdf8',
+            weight: 1.5,
+            dashArray: '3, 4',
+            opacity: 0.75
+          }).addTo(markersLayer);
+        }
 
         const riderIcon = L.divIcon({
           className: 'custom-mumbai-rider',
@@ -484,70 +504,90 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
       });
     }
 
-    // B. RENDER TASK PICKUP & DELIVERY MARKERS
+    // B. RENDER TASK PICKUP & DELIVERY MARKERS (With Anti-Overlap Resolution)
     if (showTasksLayer) {
-      filteredTasks.forEach((t, idx) => {
-        // Pickup Marker
-        if (t.pickupLocation) {
-          const isUrgent = t.priority === 'urgent';
-          const isPickedUp = t.status === 'in_transit' || t.status === 'delivered';
-          const pickupName = t.pickupLocation.name || 'Pickup Point';
-          const shortPickupName = pickupName.split(' ')[0] || pickupName;
+      // Resolve pickup marker overlaps
+      const resolvedPickups = resolveMarkerOverlaps(
+        filteredTasks.filter((t) => !!t.pickupLocation),
+        (t) => {
+          if (!t.pickupLocation) return null;
+          return { id: `pickup-${t.id}`, lat: t.pickupLocation.lat, lng: t.pickupLocation.lng };
+        },
+        0.00035,
+        0.00045
+      );
 
-          const pickupIcon = L.divIcon({
-            className: 'custom-pickup-marker',
-            html: `
-              <div class="relative group cursor-pointer">
-                <div class="w-8 h-8 rounded-full ${
-                  isPickedUp
-                    ? 'bg-emerald-600 ring-2 ring-emerald-300'
-                    : isUrgent
-                    ? 'bg-rose-600 ring-3 ring-rose-300 animate-bounce'
-                    : 'bg-indigo-600 ring-2 ring-indigo-300'
-                } text-white font-bold text-xs flex items-center justify-center shadow-lg transform transition-transform group-hover:scale-115">
-                  <span>${isPickedUp ? '✓' : `P${idx + 1}`}</span>
-                </div>
-                <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-white text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-slate-200 whitespace-nowrap">
-                  ${shortPickupName}
-                </div>
-              </div>
-            `,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-          });
+      resolvedPickups.forEach((point, idx) => {
+        const t = point.data;
+        const pickupName = t.pickupLocation?.name || 'Pickup Point';
+        const shortPickupName = pickupName.split(' ')[0] || pickupName;
+        const isUrgent = t.priority === 'urgent';
+        const isPickedUp = t.status === 'in_transit' || t.status === 'delivered';
 
-          const pMarker = L.marker([t.pickupLocation.lat, t.pickupLocation.lng], {
-            icon: pickupIcon,
-            zIndexOffset: 800
+        if (point.isOffset) {
+          L.polyline([[point.originalLat, point.originalLng], [point.lat, point.lng]], {
+            color: '#818cf8',
+            weight: 1.5,
+            dashArray: '3, 4',
+            opacity: 0.7
           }).addTo(markersLayer);
-
-          pMarker.on('click', () => {
-            setSelectedTaskId(t.id);
-            setSidebarTab('tasks');
-          });
-
-          pMarker.bindPopup(`
-            <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 220px; padding: 4px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-size: 10px; font-weight: 800; color: #4338ca; text-transform: uppercase;">Pickup Location</span>
-                <span style="font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 9999px; background: ${
-                  t.priority === 'urgent' ? '#ffe4e6; color: #be123c;' : '#e0e7ff; color: #4338ca;'
-                }">${t.priority?.toUpperCase() || 'NORMAL'}</span>
-              </div>
-              <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${pickupName}</div>
-              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${t.pickupLocation.address || 'Mumbai'}</div>
-              <div style="margin-top: 6px; font-size: 11px; color: #334155;">
-                <b>Task:</b> ${t.title || t.routeName}<br/>
-                <b>Assigned Courier:</b> ${t.riderName || 'Unassigned'}<br/>
-                <b>Status:</b> ${t.status.toUpperCase()}
-              </div>
-            </div>
-          `);
-
-          markersMapRef.current.set(`pickup-${t.id}`, pMarker);
         }
 
-        // Delivery Destination Lab Marker
+        const pickupIcon = L.divIcon({
+          className: 'custom-pickup-marker',
+          html: `
+            <div class="relative group cursor-pointer">
+              <div class="w-8 h-8 rounded-full ${
+                isPickedUp
+                  ? 'bg-emerald-600 ring-2 ring-emerald-300'
+                  : isUrgent
+                  ? 'bg-rose-600 ring-3 ring-rose-300 animate-bounce'
+                  : 'bg-indigo-600 ring-2 ring-indigo-300'
+              } text-white font-bold text-xs flex items-center justify-center shadow-lg transform transition-transform group-hover:scale-115">
+                <span>${isPickedUp ? '✓' : `P${idx + 1}`}</span>
+              </div>
+              <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-white text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-slate-200 whitespace-nowrap">
+                ${shortPickupName}
+              </div>
+            </div>
+          `,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        const pMarker = L.marker([point.lat, point.lng], {
+          icon: pickupIcon,
+          zIndexOffset: 800
+        }).addTo(markersLayer);
+
+        pMarker.on('click', () => {
+          setSelectedTaskId(t.id);
+          setSidebarTab('tasks');
+        });
+
+        pMarker.bindPopup(`
+          <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 220px; padding: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 10px; font-weight: 800; color: #4338ca; text-transform: uppercase;">Pickup Location</span>
+              <span style="font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 9999px; background: ${
+                t.priority === 'urgent' ? '#ffe4e6; color: #be123c;' : '#e0e7ff; color: #4338ca;'
+              }">${t.priority?.toUpperCase() || 'NORMAL'}</span>
+            </div>
+            <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${pickupName}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${t.pickupLocation?.address || 'Mumbai'}</div>
+            <div style="margin-top: 6px; font-size: 11px; color: #334155;">
+              <b>Task:</b> ${t.title || t.routeName}<br/>
+              <b>Assigned Courier:</b> ${t.riderName || 'Unassigned'}<br/>
+              <b>Status:</b> ${t.status.toUpperCase()}
+            </div>
+          </div>
+        `);
+
+        markersMapRef.current.set(`pickup-${t.id}`, pMarker);
+      });
+
+      // Delivery Destination Lab Markers
+      filteredTasks.forEach((t) => {
         if (t.deliveryLocation) {
           const deliveryName = t.deliveryLocation.name || 'Central Lab';
           const shortDeliveryName = deliveryName.split(' ')[0] || deliveryName;
@@ -590,15 +630,31 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
       });
     }
 
-    // C. RENDER REGISTERED CLIENT DIAGNOSTIC CENTERS FROM FIRESTORE
+    // C. RENDER REGISTERED CLIENT DIAGNOSTIC CENTERS FROM FIRESTORE (With Anti-Overlap Resolution)
     if (showClientsLayer) {
-      filteredClients.forEach((client) => {
+      const resolvedClients = resolveMarkerOverlaps(
+        filteredClients,
+        (client) => {
+          if (typeof client.lat !== 'number' || typeof client.lng !== 'number') return null;
+          return { id: client.id, lat: client.lat, lng: client.lng };
+        },
+        0.00035,
+        0.00045
+      );
+
+      resolvedClients.forEach((point) => {
+        const client = point.data;
         const clientName = client.name || 'Client Diagnostic Center';
         const shortClientName = clientName.split(' ')[0] || clientName;
-        const lat = client.lat;
-        const lng = client.lng;
 
-        if (typeof lat !== 'number' || typeof lng !== 'number') return;
+        if (point.isOffset) {
+          L.polyline([[point.originalLat, point.originalLng], [point.lat, point.lng]], {
+            color: '#d97706',
+            weight: 1.5,
+            dashArray: '3, 4',
+            opacity: 0.7
+          }).addTo(markersLayer);
+        }
 
         const clientIcon = L.divIcon({
           className: 'custom-client-hub-marker',
@@ -616,7 +672,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
           iconAnchor: [12, 12]
         });
 
-        const lmMarker = L.marker([lat, lng], {
+        const lmMarker = L.marker([point.lat, point.lng], {
           icon: clientIcon,
           zIndexOffset: 600
         }).addTo(markersLayer);
