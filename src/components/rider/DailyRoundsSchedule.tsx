@@ -69,25 +69,27 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
   // Extract unique routes present in assigned stops
   const uniqueRouteNames = useMemo(() => {
     const names = new Set<string>();
-    scheduleStops.forEach((s) => {
-      if (s.routeName) names.add(s.routeName);
+    (scheduleStops || []).forEach((s) => {
+      if (s?.routeName) names.add(s.routeName);
     });
     return Array.from(names);
   }, [scheduleStops]);
 
   // Counts for status tabs
   const counts = useMemo(() => {
+    const safe = scheduleStops || [];
     return {
-      all: scheduleStops.length,
-      pending: scheduleStops.filter((s) => s.status === 'pending').length,
-      in_transit: scheduleStops.filter((s) => s.status === 'in_transit').length,
-      collected: scheduleStops.filter((s) => s.status === 'collected').length
+      all: safe.length,
+      pending: safe.filter((s) => s?.status === 'pending').length,
+      in_transit: safe.filter((s) => s?.status === 'in_transit').length,
+      collected: safe.filter((s) => s?.status === 'collected').length
     };
   }, [scheduleStops]);
 
   // Filtered stops
   const filteredStops = useMemo(() => {
-    return scheduleStops.filter((stop) => {
+    return (scheduleStops || []).filter((stop) => {
+      if (!stop) return false;
       // Route filter
       if (selectedRouteFilter !== 'all' && stop.routeName !== selectedRouteFilter && stop.routeId !== selectedRouteFilter) {
         return false;

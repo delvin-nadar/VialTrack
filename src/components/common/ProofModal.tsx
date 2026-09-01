@@ -13,7 +13,8 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
 
   if (!isOpen || !task) return null;
 
-  const totalVials = task.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
+  const safeStops = task?.stopsProgress || task?.stops || [];
+  const totalVials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
 
   const handlePrint = () => {
     window.print();

@@ -605,8 +605,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredTasks.map((t) => {
-                const vials = t.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
-                const lastTemp = t.destination.coldBoxTempAtDrop || t.stopsProgress[0]?.coldBoxTemp;
+                const safeStops = t?.stopsProgress || t?.stops || [];
+                const vials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+                const lastTemp = t?.destination?.coldBoxTempAtDrop || (safeStops[0] as any)?.coldBoxTemp;
 
                 return (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors">

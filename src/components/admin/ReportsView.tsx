@@ -13,12 +13,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ tasks, riders, clients
   const [selectedMonth, setSelectedMonth] = useState('August 2026');
 
   // Calculate Rider Monthly Metrics
-  const riderMetrics = riders.map((rider) => {
-    const riderTasks = tasks.filter((t) => t.riderId === rider.id);
+  const riderMetrics = (riders || []).map((rider) => {
+    const riderTasks = (tasks || []).filter((t) => t.riderId === rider.id);
     const completed = riderTasks.filter((t) => t.status === 'delivered').length;
     const delayed = riderTasks.filter((t) => t.isDelayed || t.status === 'delayed').length;
     const totalVials = riderTasks.reduce(
-      (sum, t) => sum + t.stopsProgress.reduce((sSum, s) => sSum + (s.sampleCount || 0), 0),
+      (sum, t) => {
+        const stops = t?.stopsProgress || t?.stops || [];
+        return sum + stops.reduce((sSum: number, s: any) => sSum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+      },
       0
     );
     const onTimePct = riderTasks.length > 0 ? Math.round(((riderTasks.length - delayed) / riderTasks.length) * 100) : 100;
@@ -36,11 +39,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ tasks, riders, clients
   });
 
   // Calculate Client Billing Metrics
-  const clientMetrics = clients.map((client) => {
-    const clientTasks = tasks.filter((t) => t.clientId === client.id);
+  const clientMetrics = (clients || []).map((client) => {
+    const clientTasks = (tasks || []).filter((t) => t.clientId === client.id);
     const completed = clientTasks.filter((t) => t.status === 'delivered').length;
     const totalVials = clientTasks.reduce(
-      (sum, t) => sum + t.stopsProgress.reduce((sSum, s) => sSum + (s.sampleCount || 0), 0),
+      (sum, t) => {
+        const stops = t?.stopsProgress || t?.stops || [];
+        return sum + stops.reduce((sSum: number, s: any) => sSum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+      },
       0
     );
     const rate = client.billingRatePerPickup || 450;

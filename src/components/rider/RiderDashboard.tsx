@@ -738,7 +738,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const handleConfirmStopPickup = () => {
     if (!activeTask) return;
 
-    const stopToUpdate = activeTask.stopsProgress[currentStopIndex];
+    const safeStops = activeTask.stopsProgress || activeTask.stops || [];
+    const stopToUpdate = safeStops[currentStopIndex] || safeStops[0] || { stopName: 'Collection Point' };
     const finalSamplePhoto =
       stopPhoto ||
       generateSampleVialPhoto('vial', `${vialCount} Specimen Vials (${stopToUpdate.stopName})`);
@@ -746,7 +747,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       stopPhoto2 ||
       generateSampleVialPhoto('drop', `Hospital Handover Slip (${stopToUpdate.stopName})`);
 
-    const updatedStops: StopProgress[] = activeTask.stopsProgress.map((s, idx) => {
+    const updatedStops: StopProgress[] = safeStops.map((s, idx) => {
       if (idx === currentStopIndex) {
         return {
           ...s,
@@ -813,9 +814,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     const finalLabPhoto =
       stopPhoto ||
-      generateSampleVialPhoto('drop', `Lab Handover Verified (${activeTask.destination.name})`);
+      generateSampleVialPhoto('drop', `Lab Handover Verified (${activeTask.destination?.name || 'Central Lab'})`);
 
-    const totalVials = activeTask.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
+    const safeStops = activeTask.stopsProgress || activeTask.stops || [];
+    const totalVials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
 
     const nowStr = new Date().toISOString();
     const updatedTask: PickupTask = {
@@ -831,6 +833,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       handoverTemperature: coldBoxTemp,
       destination: {
         ...activeTask.destination,
+        name: activeTask.destination?.name || 'Central Diagnostic Processing Lab',
+        address: activeTask.destination?.address || 'Lab Facility',
         status: 'delivered',
         deliveredAt: nowStr,
         receiverName: receiverName,
@@ -842,11 +846,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       }
     };
 
-    setLiveTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    setLiveTasks((prev) => (prev || []).map((t) => (t.id === updatedTask.id ? updatedTask : t)));
     StorageService.updateTask(updatedTask);
     CloudSync.completeTripFinalHandover(activeTask.id, sessionRiderId, {
-      destinationName: activeTask.destination.name,
-      destinationAddress: activeTask.destination.address,
+      destinationName: activeTask.destination?.name || 'Central Diagnostic Processing Lab',
+      destinationAddress: activeTask.destination?.address || 'Lab Facility',
       receiverName,
       totalVials,
       coldBoxTemp,
@@ -860,7 +864,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     NotificationService.sendAlert({
       type: 'delivery',
       title: `Lab Delivery Completed (${totalVials} Vials)`,
-      message: `${activeRider.name} delivered ${totalVials} vials to ${activeTask.destination.name}. Received by ${receiverName}.`,
+      message: `${activeRider.name} delivered ${totalVials} vials to ${activeTask.destination?.name || 'Central Lab'}. Received by ${receiverName}.`,
       recipientRole: 'both',
       channel: 'both'
     });
@@ -980,14 +984,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   // Calculate live summary counters
   const totalCollectedVials = useMemo(() => {
-    return todayRiderTasks.reduce((sum, t) => {
-      const taskVials = t.stopsProgress.reduce((sub, s) => sub + (s.sampleCount || 0), 0);
+    return (todayRiderTasks || []).reduce((sum: number, t: any) => {
+      const stops = t?.stopsProgress || t?.stops || [];
+      const taskVials = stops.reduce((sub: number, s: any) => sub + Number(s?.sampleCount || s?.specimenCount || 0), 0);
       return sum + taskVials;
     }, 0);
   }, [todayRiderTasks]);
 
   const completedStopsCount = useMemo(() => {
-    return scheduleStops.filter((s) => s.status === 'collected').length;
+    return (scheduleStops || []).filter((s) => s?.status === 'collected').length;
   }, [scheduleStops]);
 
   return (
@@ -1201,9 +1206,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             </div>
             <div className="space-y-2">
               {(() => {
-                const firstPendingIdx = activeTask.stopsProgress.findIndex((s) => s.status !== 'picked_up');
+                const safeStops = activeTask.stopsProgress || activeTask.stops || [];
+                const firstPendingIdx = safeStops.findIndex((s) => s.status !== 'picked_up');
 
-                return activeTask.stopsProgress.map((stop, idx) => {
+                return safeStops.map((stop, idx) => {
                   const isPicked = stop.status === 'picked_up';
                   const isLocked = !isPicked && firstPendingIdx !== -1 && idx > firstPendingIdx;
                   const isUnlockedActive = !isPicked && (idx === firstPendingIdx || (firstPendingIdx === -1 && idx === 0));

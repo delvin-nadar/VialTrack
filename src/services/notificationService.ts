@@ -111,15 +111,17 @@ class NotificationDispatcherService {
   }
 
   public notifyDropCompleted(task: PickupTask, receiver: string, temp?: number) {
-    const totalVials = task.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
+    const safeStops = task?.stopsProgress || task?.stops || [];
+    const totalVials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+    const destinationName = task?.destination?.name || 'Destination Lab';
     const tempText = temp !== undefined ? ` • Temp: ${temp.toFixed(1)}°C` : '';
     this.sendNotification(
       'drop_done',
-      `Delivered to ${task.destination.name}`,
+      `Delivered to ${destinationName}`,
       `Total ${totalVials} vials handed over to ${receiver}${tempText}. Chain of custody verified.`,
       'all',
-      task.clientId,
-      task.id,
+      task?.clientId,
+      task?.id,
       'whatsapp'
     );
   }

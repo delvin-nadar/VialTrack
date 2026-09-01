@@ -37,17 +37,21 @@ export const TaskHistory: React.FC<TaskHistoryProps> = ({ tasks, clients, riders
 
   const handleExportCSV = () => {
     const headers = ['Task ID', 'Date', 'Time Slot', 'Client', 'Route', 'Rider', 'Status', 'Total Vials', 'Completed At'];
-    const rows = filteredTasks.map((t) => [
-      `"${t.id}"`,
-      `"${t.date}"`,
-      `"${t.timeSlot}"`,
-      `"${t.clientName}"`,
-      `"${t.routeName}"`,
-      `"${t.riderName}"`,
-      `"${t.status}"`,
-      `"${t.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0)}"`,
-      `"${t.completedAt || 'In Progress'}"`
-    ]);
+    const rows = filteredTasks.map((t) => {
+      const stops = t?.stopsProgress || t?.stops || [];
+      const totalVials = stops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+      return [
+        `"${t.id}"`,
+        `"${t.date}"`,
+        `"${t.timeSlot}"`,
+        `"${t.clientName}"`,
+        `"${t.routeName}"`,
+        `"${t.riderName}"`,
+        `"${t.status}"`,
+        `"${totalVials}"`,
+        `"${t.completedAt || 'In Progress'}"`
+      ];
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -168,11 +172,12 @@ export const TaskHistory: React.FC<TaskHistoryProps> = ({ tasks, clients, riders
                 </tr>
               ) : (
                 filteredTasks.map((task) => {
-                  const vials = task.stopsProgress.reduce((sum, s) => sum + (s.sampleCount || 0), 0);
+                  const safeStops = task?.stopsProgress || task?.stops || [];
+                  const vials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
                   const lastTemp =
-                    task.destination.coldBoxTempAtDrop ||
-                    task.stopsProgress[task.stopsProgress.length - 1]?.coldBoxTemp ||
-                    task.stopsProgress[0]?.coldBoxTemp;
+                    task?.destination?.coldBoxTempAtDrop ||
+                    (safeStops[safeStops.length - 1] as any)?.coldBoxTemp ||
+                    (safeStops[0] as any)?.coldBoxTemp;
 
                   return (
                     <tr key={task.id} className="hover:bg-slate-50 transition-colors">
