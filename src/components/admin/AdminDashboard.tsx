@@ -56,6 +56,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   // Live Firestore tasks state
   const [firestoreTasks, setFirestoreTasks] = useState<PickupTask[]>([]);
+  const [hasLoadedFirestoreTasks, setHasLoadedFirestoreTasks] = useState<boolean>(false);
   const [activeRoundsCount, setActiveRoundsCount] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'alerts'>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -89,33 +90,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           });
 
           setFirestoreTasks(taskList);
+          setHasLoadedFirestoreTasks(true);
 
           const active = taskList.filter((t) => t.status === 'assigned' || t.status === 'in_transit');
           setActiveRoundsCount(active.length);
         },
         (err) => {
           console.warn('[AdminDashboard] Live tasks listener notice:', err);
+          setHasLoadedFirestoreTasks(true);
         }
       );
 
       return () => unsubscribe();
     } catch (e) {
       console.warn('[AdminDashboard] Setup tasks listener failed:', e);
+      setHasLoadedFirestoreTasks(true);
     }
   }, []);
 
-  // Merge tasks: Prefer live Firestore tasks if available, otherwise use initialTasks from props
+  // Single Source of Truth: Firestore tasks exclusively once loaded
   const allTasks = useMemo(() => {
-    if (firestoreTasks.length > 0) {
+    if (hasLoadedFirestoreTasks) {
       return firestoreTasks;
     }
-    return initialTasks;
-  }, [firestoreTasks, initialTasks]);
+    return initialTasks || [];
+  }, [hasLoadedFirestoreTasks, firestoreTasks, initialTasks]);
 
   // Set default selected task if none is selected
   useEffect(() => {
-    if (!selectedTaskId && allTasks.length > 0) {
-      setSelectedTaskId(allTasks[0].id);
+    if (allTasks.length > 0) {
+      if (!selectedTaskId || !allTasks.some((t) => t.id === selectedTaskId)) {
+        setSelectedTaskId(allTasks[0].id);
+      }
+    } else {
+      setSelectedTaskId(null);
     }
   }, [allTasks, selectedTaskId]);
 
@@ -231,7 +239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, 0);
 
   // Active selected task for map display
-  const activeTask = allTasks.find((t) => t.id === selectedTaskId) || allTasks[0] || undefined;
+  const activeTask = selectedTaskId ? allTasks.find((t) => t.id === selectedTaskId) : allTasks[0];
   const activeRoute = activeTask
     ? routes.find((r) => r.id === activeTask.routeId) || {
         id: activeTask.id,
@@ -262,12 +270,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     : undefined;
 
   const assignedRider: PickupBoy | undefined = activeTask
-    ? riders.find((r) => r.id === activeTask.riderId) || {
+    ? (riders.find((r) => r.id === activeTask.riderId) || {
         id: activeTask.riderId || 'rider-active',
         name: activeTask.riderName || 'Assigned Runner',
-        phone: activeTask.riderPhone || '+91 98201 22334',
-        email: 'runner@secondmedic.com',
-        vehicleNumber: activeTask.riderVehicle || 'MH02TN0897',
+        phone: activeTask.riderPhone || '',
+        email: '',
+        vehicleNumber: activeTask.riderVehicle || '',
         vehicleType: 'Motorcycle / Bike',
         photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop&crop=faces&q=80',
         assignedRouteIds: [],
@@ -275,8 +283,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         joiningDate: '2026-01-01',
         isOnline: true,
         isCheckedIn: true
-      }
-    : riders[0] || undefined;
+      })
+    : (riders && riders.length > 0 ? riders[0] : undefined);
 
   return (
     <div className="space-y-5">
@@ -551,7 +559,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {filteredTasks.length === 0 ? (
                 <div className="py-16 text-center text-slate-400 text-xs">
                   <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="font-semibold text-slate-600">No pickup rounds match the selected filter.</p>
+                  <p className="font-semibold text-slate-600">
+                    {allTasks.length === 0 ? 'No active tasks in database.' : 'No pickup rounds match the selected filter.'}
+                  </p>
                   <p className="text-[11px] text-slate-400 mt-1">
                     Click "+ Dispatch Task" above to schedule a collection round.
                   </p>

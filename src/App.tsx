@@ -150,9 +150,6 @@ function AppContent() {
       console.warn('Failed to clear mock cache from localStorage:', e);
     }
     reloadData();
-    seedCoreCollectionsIfEmpty().catch((err) => {
-      console.error("Firestore Write Error:", err);
-    });
   }, [reloadData]);
 
   // Real-time Firestore synchronizer (Deduplicated based on active portal view)

@@ -259,160 +259,12 @@ seedOperationalAuthAccounts().catch(() => {});
 const locationWriteThrottleMap = new Map<string, { timestamp: number; lat: number; lng: number }>();
 
 /**
- * Database Auto-Seeder & Live Write Enforcer:
- * Checks if 'clients' and 'riders' collections are empty.
- * If empty, executes real setDoc writes so data immediately appears in Firebase Console.
- * Cached in sessionStorage so it only checks once per session.
+ * Database Auto-Seeder:
+ * Disabled to maintain strict single source of truth with live Firestore documents.
  */
 export async function seedCoreCollectionsIfEmpty(): Promise<{ clientsSeeded: boolean; ridersSeeded: boolean }> {
-  if (typeof window !== 'undefined' && sessionStorage.getItem('smvt_core_seeded_v1')) {
-    return { clientsSeeded: false, ridersSeeded: false };
-  }
-
-  let clientsSeeded = false;
-  let ridersSeeded = false;
-
-  try {
-    // 1. Check clients collection
-    const clientsSnap = await getDocs(collection(db, 'clients'));
-    if (clientsSnap.empty) {
-      console.log('[AutoSeeder] clients collection is empty. Seeding clients/client_lifecare to Firestore...');
-      const lifecareDoc = {
-        id: 'client_lifecare',
-        name: 'Lifecare Diagnostics',
-        email: 'jayesh.joshi@lifecarediagnostics.com',
-        address: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
-        lat: 19.1287852,
-        lng: 72.8294183,
-        ratePerRound: 130,
-        billingRatePerPickup: 130,
-        isActive: true,
-        active: true,
-        role: 'client',
-        contactPerson: 'Dr. Jayesh Joshi',
-        phone: '+91 98200 98200',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'clients', 'client_lifecare'), lifecareDoc, { merge: true });
-      clientsSeeded = true;
-      console.log('[AutoSeeder] Successfully seeded clients/client_lifecare to Firestore.');
-    }
-
-    // 2. Check riders collection
-    const ridersSnap = await getDocs(collection(db, 'riders'));
-    if (ridersSnap.empty) {
-      console.log('[AutoSeeder] riders collection is empty. Seeding riders/rider_asif to Firestore...');
-      const asifDoc = {
-        id: 'rider_asif',
-        name: 'Asif',
-        phone: '8268826200',
-        password: 'Asif@6200',
-        vehicle: 'MH01AV8888',
-        vehicleNo: 'MH01AV8888',
-        vehicleNumber: 'MH01AV8888',
-        lat: 19.1287,
-        lng: 72.8294,
-        isOnline: true,
-        dutyStatus: 'available',
-        role: 'rider',
-        status: 'active',
-        assignedRouteIds: ['route_lifecare_andheri'],
-        batteryLevel: 95,
-        battery: 95,
-        shiftTimings: '08:00 AM - 04:00 PM (Morning Slot)',
-        currentLocation: {
-          lat: 19.1287,
-          lng: 72.8294,
-          timestamp: new Date().toISOString()
-        },
-        createdAt: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'riders', 'rider_asif'), asifDoc, { merge: true });
-      ridersSeeded = true;
-      console.log('[AutoSeeder] Successfully seeded riders/rider_asif to Firestore.');
-    }
-
-    // 3. Ensure a collection route exists for Lifecare if routes collection is empty
-    const routesSnap = await getDocs(collection(db, 'routes'));
-    if (routesSnap.empty) {
-      console.log('[AutoSeeder] routes collection is empty. Seeding routes/route_lifecare_andheri to Firestore...');
-      const routeDoc = {
-        id: 'route_lifecare_andheri',
-        clientId: 'client_lifecare',
-        name: 'Lifecare Andheri West Specimen Collection Loop',
-        description: 'Andheri West & Lokhandwala Clinics to Lifecare Central Hub',
-        destinationName: 'Lifecare Diagnostics',
-        destinationAddress: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
-        destinationLat: 19.1287852,
-        destinationLng: 72.8294183,
-        destinationContact: 'Dr. Jayesh Joshi',
-        destinationPhone: '+91 98200 98200',
-        destinationLab: {
-          name: 'Lifecare Diagnostics',
-          address: 'Cosmos Plaza, 206, D.N. Nagar, Andheri West, Mumbai 400053',
-          lat: 19.1287852,
-          lng: 72.8294183
-        },
-        stops: [
-          {
-            id: 'stop_1_lokhandwala',
-            name: 'Lokhandwala Collection Centre',
-            address: '4th Cross Road, Lokhandwala Complex, Andheri West',
-            lat: 19.1415,
-            lng: 72.8285,
-            contactPerson: 'Dr. Sneha Desai',
-            phone: '+91 98201 55667',
-            order: 1
-          },
-          {
-            id: 'stop_2_dn_nagar',
-            name: 'DN Nagar Metro Diagnostic Hub',
-            address: 'Link Road, Near DN Nagar Metro, Andheri West',
-            lat: 19.1305,
-            lng: 72.8335,
-            contactPerson: 'Sister Anjali Rao',
-            phone: '+91 98202 77889',
-            order: 2
-          },
-          {
-            id: 'stop_3_versova',
-            name: 'Versova Pathology Point',
-            address: 'Yari Road, Versova, Mumbai',
-            lat: 19.1360,
-            lng: 72.8150,
-            contactPerson: 'Karan Varma',
-            phone: '+91 98203 99001',
-            order: 3
-          }
-        ],
-        timeSlots: ['09:00', '12:00', '15:00', '18:00']
-      };
-      await setDoc(doc(db, 'routes', 'route_lifecare_andheri'), routeDoc, { merge: true });
-      console.log('[AutoSeeder] Successfully seeded routes/route_lifecare_andheri to Firestore.');
-    }
-
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('smvt_core_seeded_v1', 'true');
-    }
-  } catch (err: any) {
-    if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota exceeded')) {
-      console.warn('[AutoSeeder] Firestore quota limit reached; using local seed data.');
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('smvt_core_seeded_v1', 'true');
-      }
-    } else {
-      console.error('Firestore Write Error:', err);
-    }
-  }
-
-  return { clientsSeeded, ridersSeeded };
+  return { clientsSeeded: false, ridersSeeded: false };
 }
-
-// Auto-seed core collections at startup
-seedCoreCollectionsIfEmpty().catch((err) => {
-  console.error('Firestore Write Error:', err);
-});
 
 export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
 
@@ -1022,7 +874,9 @@ export const CloudSync = {
         const colRef = collection(db, collectionName);
         const snapshot = await getDocs(colRef);
         if (isCancelled) return;
-        if (!snapshot.empty) {
+        if (snapshot.empty) {
+          onUpdate([]);
+        } else {
           const list: T[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
@@ -1061,7 +915,9 @@ export const CloudSync = {
               clearInterval(pollIntervalId);
               pollIntervalId = null;
             }
-            if (!snapshot.empty) {
+            if (snapshot.empty) {
+              onUpdate([]);
+            } else {
               const list: T[] = [];
               snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
