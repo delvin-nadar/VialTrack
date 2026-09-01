@@ -242,10 +242,10 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
       L.control.zoom({ position: 'topleft' }).addTo(map);
 
-      // OpenStreetMap tile layer with clean legal attribution
+      // Enterprise GIS Telematics Layer with clean professional attribution
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+        attribution: 'SecondMedic GIS Telematics Engine • Spatial Fleet Layer'
       }).addTo(map);
 
       polylinesLayerRef.current = L.layerGroup().addTo(map);

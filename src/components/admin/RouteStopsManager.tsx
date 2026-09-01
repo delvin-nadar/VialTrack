@@ -109,7 +109,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+        attribution: 'SecondMedic GIS Telematics Engine • Spatial Fleet Layer'
       }).addTo(map);
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);

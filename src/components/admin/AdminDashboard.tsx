@@ -17,11 +17,14 @@ import {
   X,
   UserCheck,
   RefreshCw,
-  Navigation
+  Navigation,
+  MessageCircle,
+  Play,
+  Send
 } from 'lucide-react';
 import { StorageService } from '../../services/storage';
-import { db, formatUnifiedTask } from '../../services/firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, formatUnifiedTask, CloudSync } from '../../services/firebase';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AdminDashboardProps {
   tasks: PickupTask[];
@@ -95,11 +98,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, []);
 
   const allTasks = useMemo(() => {
-    if (firestoreTasks.length > 0) {
-      return firestoreTasks;
-    }
-    return initialTasks || [];
-  }, [firestoreTasks, initialTasks]);
+    // 1. Gather all active / existing Firestore tasks
+    const existing = firestoreTasks.length > 0 ? firestoreTasks : (initialTasks || []);
+
+    // 2. Synthesize daily scheduled tasks for all assigned rider routes that don't yet have an active trip today!
+    const scheduledFromRiders: PickupTask[] = [];
+
+    (riders || []).forEach((rider) => {
+      const assignedRouteIds = Array.isArray(rider?.assignedRouteIds) ? rider.assignedRouteIds : [];
+      assignedRouteIds.forEach((routeId) => {
+        const routeObj = routes.find((r) => r.id === routeId);
+        if (!routeObj) return;
+
+        // Check if there is already an active/existing task for this rider and route
+        const alreadyHasTask = existing.some(
+          (t) => t.routeId === routeId || (t.riderId === rider.id && (t.routeName === routeObj.name || (t as any).route_name === routeObj.name))
+        );
+
+        if (!alreadyHasTask) {
+          const clientObj = clients.find((c) => c.id === routeObj.clientId) || {
+            id: routeObj.clientId || 'client-default',
+            name: routeObj.name?.split('-')[0]?.trim() || 'Diagnostic Client Lab',
+            code: 'CL',
+            address: routeObj.destinationLab?.address || '',
+            lat: routeObj.destinationLab?.lat || 19.1287,
+            lng: routeObj.destinationLab?.lng || 72.8294,
+            phone: '',
+            contactPerson: ''
+          };
+
+          const scheduledTask: PickupTask = {
+            id: `scheduled-${rider.id}-${routeObj.id}`,
+            routeId: routeObj.id,
+            routeName: routeObj.name,
+            clientName: clientObj.name,
+            clientId: clientObj.id,
+            riderId: rider.id,
+            riderName: rider.name,
+            riderPhone: rider.phone,
+            riderVehicle: rider.vehicleNumber,
+            timeSlot: routeObj.timeSlots?.[0] || '10:00 AM - 12:00 PM',
+            status: rider.isCheckedIn ? 'assigned' : 'scheduled',
+            temperature: 4.0,
+            coldBoxTemp: 4.0,
+            stops: (routeObj.stops || []).map((s, idx) => ({
+              stopId: s.id || `stop-${idx}`,
+              stopName: s.name,
+              address: s.address,
+              lat: s.lat,
+              lng: s.lng,
+              contactPerson: s.contactPerson || 'Reception / Phlebo Counter',
+              phone: s.contactPhone || '',
+              status: 'pending' as const,
+              sampleCount: 0,
+              vials: []
+            })),
+            stopsProgress: (routeObj.stops || []).map((s, idx) => ({
+              stopId: s.id || `stop-${idx}`,
+              stopName: s.name,
+              address: s.address,
+              lat: s.lat,
+              lng: s.lng,
+              contactPerson: s.contactPerson || 'Reception / Phlebo Counter',
+              phone: s.contactPhone || '',
+              status: 'pending' as const,
+              sampleCount: 0,
+              vials: []
+            })),
+            destination: {
+              name: routeObj.destinationLab?.name || clientObj.name || 'Central Diagnostic Lab',
+              address: routeObj.destinationLab?.address || clientObj.address || '',
+              lat: routeObj.destinationLab?.lat || clientObj.lat || 19.1300,
+              lng: routeObj.destinationLab?.lng || clientObj.lng || 72.8350
+            },
+            isDelayed: false,
+            createdAt: new Date().toISOString()
+          };
+
+          scheduledFromRiders.push(scheduledTask);
+        }
+      });
+    });
+
+    return [...existing, ...scheduledFromRiders];
+  }, [firestoreTasks, initialTasks, riders, routes, clients]);
 
   useEffect(() => {
     if (allTasks.length > 0) {
@@ -116,6 +198,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onRefresh();
     setDispatchNotice(`Dispatched new pickup round #${newTask.id.slice(-6)} to ${newTask.riderName}!`);
     setTimeout(() => setDispatchNotice(null), 4500);
+  };
+
+  const handleForceDispatchScheduled = async (task: PickupTask, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const taskId = task.id.startsWith('scheduled-') ? `task-${Date.now()}` : task.id;
+      const cleanTask: PickupTask = {
+        ...task,
+        id: taskId,
+        status: 'assigned',
+        createdAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, 'tasks', taskId), cleanTask);
+      await setDoc(doc(db, 'trips', taskId), cleanTask);
+      StorageService.saveTask(cleanTask);
+
+      setSelectedTaskId(taskId);
+      setDispatchNotice(`Dispatched scheduled round #${taskId.slice(-6)} to ${task.riderName}! Live alert sent to rider.`);
+      setTimeout(() => setDispatchNotice(null), 4500);
+      onRefresh();
+    } catch (err) {
+      console.warn('Dispatch error:', err);
+    }
   };
 
   const handleDeleteTask = async (taskId: string, e: React.MouseEvent) => {
@@ -561,6 +667,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ? `${task.riderName}${task.riderVehicle ? ` - ${task.riderVehicle}` : ''}`
                     : 'Unassigned Rider';
 
+                  const isScheduledOnly = task.id.startsWith('scheduled-');
+                  const isRiderCheckedIn = taskRider?.isCheckedIn || false;
+
                   const getStatusBadge = () => {
                     if (isTaskDelayed) {
                       return (
@@ -582,20 +691,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       case 'started':
                       case 'picked_up':
                         return (
-                          <span className="bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
                             <Bike className="w-3 h-3 text-sky-600" /> In Transit
                           </span>
                         );
                       case 'assigned':
                       case 'scheduled':
                       default:
+                        if (isRiderCheckedIn) {
+                          return (
+                            <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-amber-600" /> Rider On-Duty (Pending Start)
+                            </span>
+                          );
+                        }
                         return (
                           <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-500" /> Assigned
+                            <Clock className="w-3 h-3 text-slate-500" /> Scheduled (Offline)
                           </span>
                         );
                     }
                   };
+
+                  const riderPhoneClean = (taskRider?.phone || task.riderPhone || '').replace(/\D/g, '');
+                  const whatsappMessage = encodeURIComponent(
+                    `Hello ${taskRider?.name || task.riderName || 'Rider'}, your diagnostic collection round for ${
+                      task.routeName || task.clientName || 'assigned route'
+                    } is scheduled. Please start your trip in the SecondMedic app.`
+                  );
 
                   return (
                     <div
@@ -629,11 +752,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="my-1.5 flex items-center gap-1.5 text-xs text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-                        <Bike className="w-3.5 h-3.5 text-sky-700 shrink-0" />
-                        <span className="font-semibold text-slate-800 text-[11px] truncate">
-                          {riderDisplayTag}
-                        </span>
+                      <div className="my-1.5 flex items-center justify-between gap-1.5 text-xs text-slate-700 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Bike className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+                          <span className="font-semibold text-slate-800 text-[11px] truncate">
+                            {riderDisplayTag}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {riderPhoneClean && (
+                            <>
+                              <a
+                                href={`https://wa.me/91${riderPhoneClean}?text=${whatsappMessage}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Ping Rider on WhatsApp"
+                                className="p-1 text-emerald-700 hover:bg-emerald-100 rounded transition-colors"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </a>
+                              <a
+                                href={`tel:${riderPhoneClean}`}
+                                onClick={(e) => e.stopPropagation()}
+                                title="Call Rider"
+                                className="p-1 text-sky-700 hover:bg-sky-100 rounded transition-colors"
+                              >
+                                <PhoneCall className="w-3.5 h-3.5" />
+                              </a>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {stopsList.length > 0 && (
@@ -671,7 +820,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
 
                       <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -688,6 +837,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>View on Map</span>
                           </button>
 
+                          {isScheduledOnly && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleForceDispatchScheduled(task, e)}
+                              className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-bold shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Force dispatch / launch this round now"
+                            >
+                              <Play className="w-3 h-3" />
+                              <span>Dispatch</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={(e) => handleOpenReassign(task, e)}
@@ -697,27 +858,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>Reassign</span>
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenProof(task);
-                            }}
-                            className="px-2 py-1 bg-slate-100 hover:bg-sky-50 text-slate-600 hover:text-sky-900 font-semibold rounded text-[10px] border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
-                          >
-                            <Eye className="w-3 h-3 text-slate-500" />
-                            <span>Proof</span>
-                          </button>
+                          {!isScheduledOnly && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenProof(task);
+                              }}
+                              className="px-2 py-1 bg-slate-100 hover:bg-sky-50 text-slate-600 hover:text-sky-900 font-semibold rounded text-[10px] border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-3 h-3 text-slate-500" />
+                              <span>Proof</span>
+                            </button>
+                          )}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteTask(task.id, e)}
-                          title="Cancel / Delete Task"
-                          className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isScheduledOnly && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteTask(task.id, e)}
+                            title="Cancel / Delete Task"
+                            className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
