@@ -32,7 +32,8 @@ import {
   Inbox,
   LogOut,
   Edit2,
-  Lock
+  Lock,
+  Upload
 } from 'lucide-react';
 import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
@@ -204,8 +205,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [showExitConfirmModal, setShowExitConfirmModal] = useState<boolean>(false);
 
   const fileInputRef1 = useRef<HTMLInputElement>(null);
+  const fileGalleryRef1 = useRef<HTMLInputElement>(null);
   const fileInputRef2 = useRef<HTMLInputElement>(null);
+  const fileGalleryRef2 = useRef<HTMLInputElement>(null);
   const dropFileInputRef = useRef<HTMLInputElement>(null);
+  const dropGalleryRef = useRef<HTMLInputElement>(null);
 
   // Restrict Browser Back Navigation on Rider App
   useEffect(() => {
@@ -662,21 +666,21 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     if (!file) return;
 
     setWatermarking(true);
-    const currentStop = activeTask?.stopsProgress[currentStopIndex];
+    const currentStop = activeTask?.stopsProgress?.[currentStopIndex] || (activeTask as any)?.stops?.[currentStopIndex];
 
     if (e.target) {
       e.target.value = '';
     }
 
     try {
-      const compressedBase64 = await compressImageToBase64(file, 800, 0.6);
-      const watermarked = await addWatermarkToImage(compressedBase64, {
+      // Single-pass direct file watermark and compression (640px max, quality 0.48 JPEG)
+      const watermarked = await addWatermarkToImage(file, {
         timestamp: new Date().toISOString(),
         lat: 19.2082,
         lng: 72.8398,
         address:
           photoType === 'drop'
-            ? activeTask?.destination.name || activeTask?.destination.address || 'Processing Facility'
+            ? activeTask?.destination?.name || activeTask?.destination?.address || 'Processing Facility'
             : currentStop?.stopName || currentStop?.address || 'Collection Stop',
         riderName: activeRider.name,
         clientName: activeTask?.clientName || (activeTask as any)?.destination?.name || '',
@@ -695,13 +699,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         setStopPhoto(watermarked);
       }
     } catch (err) {
-      console.warn('Watermark generation error:', err);
+      console.warn('Watermark generation error, applying fallback compression:', err);
       try {
-        const fallbackBase64 = await compressImageToBase64(file, 800, 0.6);
+        const fallbackBase64 = await compressImageToBase64(file, 640, 0.5);
         if (photoType === 'photo1') setStopPhoto(fallbackBase64);
         else if (photoType === 'photo2') setStopPhoto2(fallbackBase64);
         else setStopPhoto(fallbackBase64);
-      } catch {}
+      } catch (fallbackErr) {
+        console.error('Photo compression fallback error:', fallbackErr);
+      }
     } finally {
       setWatermarking(false);
     }
@@ -1658,6 +1664,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   className="hidden"
                   onChange={(e) => handlePhotoCapture(e, 'photo1')}
                 />
+                <input
+                  ref={fileGalleryRef1}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handlePhotoCapture(e, 'photo1')}
+                />
 
                 {stopPhoto ? (
                   <div className="relative rounded-lg overflow-hidden border border-slate-200 group">
@@ -1685,24 +1698,36 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef1.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-2 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      title="Open Live Camera"
                     >
                       <Camera className="w-4 h-4 text-sky-700" />
-                      <span>{watermarking ? 'Processing...' : 'Camera Photo'}</span>
+                      <span className="text-[11px]">{watermarking ? '...' : 'Camera'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileGalleryRef1.current?.click()}
+                      disabled={watermarking}
+                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      title="Select from Photo Library / Files"
+                    >
+                      <Upload className="w-4 h-4 text-slate-600" />
+                      <span className="text-[11px]">Upload</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDigitalPhotoGenerate('photo1')}
                       disabled={watermarking}
-                      className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      title="Generate Certified Digital Vial Tag"
                     >
                       <Package className="w-4 h-4 text-sky-600" />
-                      <span>Sample Vials</span>
+                      <span className="text-[11px]">Digital Tag</span>
                     </button>
                   </div>
                 )}
@@ -1729,6 +1754,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   type="file"
                   accept="image/*"
                   capture="user"
+                  className="hidden"
+                  onChange={(e) => handlePhotoCapture(e, 'photo2')}
+                />
+                <input
+                  ref={fileGalleryRef2}
+                  type="file"
+                  accept="image/*"
                   className="hidden"
                   onChange={(e) => handlePhotoCapture(e, 'photo2')}
                 />
@@ -1759,24 +1791,36 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef2.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-2 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      title="Open Front Camera Selfie"
                     >
                       <Camera className="w-4 h-4 text-sky-700" />
-                      <span>{watermarking ? 'Processing...' : 'Take Selfie'}</span>
+                      <span className="text-[11px]">{watermarking ? '...' : 'Selfie'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileGalleryRef2.current?.click()}
+                      disabled={watermarking}
+                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      title="Select Selfie from Photo Library / Files"
+                    >
+                      <Upload className="w-4 h-4 text-slate-600" />
+                      <span className="text-[11px]">Upload</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDigitalPhotoGenerate('photo2')}
                       disabled={watermarking}
-                      className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      title="Generate Verified Rider Presence Tag"
                     >
                       <UserCheck className="w-4 h-4 text-sky-600" />
-                      <span>Sample Selfie</span>
+                      <span className="text-[11px]">Digital Tag</span>
                     </button>
                   </div>
                 )}
@@ -1866,6 +1910,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 className="hidden"
                 onChange={(e) => handlePhotoCapture(e, 'drop')}
               />
+              <input
+                ref={dropGalleryRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handlePhotoCapture(e, 'drop')}
+              />
 
               {stopPhoto ? (
                 <div className="relative rounded-lg overflow-hidden border border-slate-200 group">
@@ -1894,27 +1945,38 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => dropFileInputRef.current?.click()}
                     disabled={watermarking}
-                    className="py-4 px-3 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
+                    className="py-3 px-2 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    title="Take photo with camera"
                   >
-                    <Camera className="w-5 h-5 text-emerald-700" />
-                    <span>{watermarking ? 'Processing...' : 'Capture / Upload Proof'}</span>
-                    <span className="text-[10px] text-slate-500">Camera / Signed Form</span>
+                    <Camera className="w-4 h-4 text-emerald-700" />
+                    <span className="text-[11px]">{watermarking ? '...' : 'Camera'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => dropGalleryRef.current?.click()}
+                    disabled={watermarking}
+                    className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    title="Choose from photo library / signed slip file"
+                  >
+                    <Upload className="w-4 h-4 text-slate-600" />
+                    <span className="text-[11px]">Upload Slip</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleDigitalPhotoGenerate('drop')}
                     disabled={watermarking}
-                    className="py-4 px-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all"
+                    className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    title="Generate certified lab custody transfer record"
                   >
-                    <FileText className="w-5 h-5 text-emerald-600" />
-                    <span>Digital Handover Form</span>
-                    <span className="text-[10px] text-slate-500">Lab Custody Transfer</span>
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                    <span className="text-[11px]">Digital Form</span>
                   </button>
                 </div>
               )}

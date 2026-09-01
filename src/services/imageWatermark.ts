@@ -24,12 +24,13 @@ export interface WatermarkData {
 }
 
 /**
- * Compresses an image to max dimension of 800px and JPEG quality 0.6 Base64 string for Firestore.
+ * Compresses an image to max dimension of 640px and JPEG quality 0.5 Base64 string for Firestore.
+ * This guarantees photo payloads remain ~25-35KB each, preventing Firestore from hitting the 1MB document size limit on multi-stop routes.
  */
 export async function compressImageToBase64(
   imageSource: File | Blob | string | HTMLImageElement,
-  maxDimension: number = 800,
-  quality: number = 0.6
+  maxDimension: number = 640,
+  quality: number = 0.5
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -37,8 +38,15 @@ export async function compressImageToBase64(
       img.crossOrigin = 'anonymous';
     }
 
+    let objectUrlToRevoke: string | null = null;
+
     const handleLoad = () => {
       try {
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+          objectUrlToRevoke = null;
+        }
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
@@ -46,10 +54,10 @@ export async function compressImageToBase64(
           throw new Error('Canvas 2D context not available');
         }
 
-        let width = img.naturalWidth || img.width || 800;
-        let height = img.naturalHeight || img.height || 600;
+        let width = img.naturalWidth || img.width || 640;
+        let height = img.naturalHeight || img.height || 480;
 
-        // Maintain aspect ratio, max dimension 800px
+        // Maintain aspect ratio, max dimension 640px
         if (width > maxDimension || height > maxDimension) {
           const scale = Math.min(maxDimension / width, maxDimension / height);
           width = Math.max(1, Math.round(width * scale));
@@ -68,22 +76,44 @@ export async function compressImageToBase64(
         const base64 = canvas.toDataURL('image/jpeg', quality);
         resolve(base64);
       } catch (err) {
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+        }
         reject(err);
       }
     };
 
     img.onload = handleLoad;
-    img.onerror = (err) => reject(err);
+    img.onerror = (err) => {
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+      reject(err);
+    };
 
     if (typeof imageSource === 'string') {
       img.src = imageSource;
     } else if (imageSource instanceof Blob || imageSource instanceof File) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(imageSource);
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        try {
+          objectUrlToRevoke = URL.createObjectURL(imageSource);
+          img.src = objectUrlToRevoke;
+        } catch {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            img.src = e.target?.result as string;
+          };
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(imageSource);
+        }
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          img.src = e.target?.result as string;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(imageSource);
+      }
     } else if (imageSource instanceof HTMLImageElement) {
       img.src = imageSource.src;
     }
@@ -101,8 +131,15 @@ export async function addWatermarkToImage(
       img.crossOrigin = 'anonymous';
     }
 
+    let objectUrlToRevoke: string | null = null;
+
     const handleLoad = () => {
       try {
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+          objectUrlToRevoke = null;
+        }
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
@@ -110,10 +147,10 @@ export async function addWatermarkToImage(
           throw new Error('Canvas 2D context not available');
         }
 
-        // Set dimensions (maintain aspect ratio, max 800px dimension for Spark plan Firestore limits)
-        const maxDimension = 800;
-        let width = img.naturalWidth || img.width || 800;
-        let height = img.naturalHeight || img.height || 600;
+        // Set dimensions (maintain aspect ratio, max 640px dimension for safe 1MB Firestore document limits)
+        const maxDimension = 640;
+        let width = img.naturalWidth || img.width || 640;
+        let height = img.naturalHeight || img.height || 480;
 
         if (width > maxDimension || height > maxDimension) {
           const scale = Math.min(maxDimension / width, maxDimension / height);
@@ -130,11 +167,11 @@ export async function addWatermarkToImage(
         ctx.drawImage(img, 0, 0, width, height);
 
         // Calculate responsive scaling
-        const baseFontSize = Math.max(12, Math.floor(width / 45));
-        const padding = Math.max(12, Math.floor(width / 40));
+        const baseFontSize = Math.max(11, Math.floor(width / 45));
+        const padding = Math.max(10, Math.floor(width / 40));
 
         // Draw top brand banner
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)'; // slate-900 with alpha
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.90)'; // slate-900 with alpha
         ctx.fillRect(0, 0, width, baseFontSize * 2.6);
 
         ctx.fillStyle = '#38bdf8'; // sky-400
@@ -228,26 +265,48 @@ export async function addWatermarkToImage(
         ctx.font = `bold ${baseFontSize * 0.8}px 'JetBrains Mono', monospace`;
         ctx.fillText(`CHAIN-OF-CUSTODY ID: #${hash}`, rightColX, rightY);
 
-        // Convert back to compressed Data URL (quality 0.6 JPEG for Firestore efficiency)
-        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.6);
+        // Convert back to compressed Data URL (quality 0.48 JPEG for Firestore 1MB limits)
+        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.48);
         resolve(watermarkedUrl);
       } catch (err) {
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+        }
         reject(err);
       }
     };
 
     img.onload = handleLoad;
-    img.onerror = (err) => reject(err);
+    img.onerror = (err) => {
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+      reject(err);
+    };
 
     if (typeof imageSource === 'string') {
       img.src = imageSource;
     } else if (imageSource instanceof Blob || imageSource instanceof File) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(imageSource);
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        try {
+          objectUrlToRevoke = URL.createObjectURL(imageSource);
+          img.src = objectUrlToRevoke;
+        } catch {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            img.src = e.target?.result as string;
+          };
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(imageSource);
+        }
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          img.src = e.target?.result as string;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(imageSource);
+      }
     } else if (imageSource instanceof HTMLImageElement) {
       img.src = imageSource.src;
     }
