@@ -17,17 +17,19 @@ export const TaskHistory: React.FC<TaskHistoryProps> = ({ tasks, clients, riders
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    return (tasks || []).filter((task) => {
+      if (!task) return false;
       if (selectedClientId !== 'all' && task.clientId !== selectedClientId) return false;
       if (selectedRiderId !== 'all' && task.riderId !== selectedRiderId) return false;
       if (statusFilter !== 'all' && task.status !== statusFilter) return false;
 
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesClient = task.clientName.toLowerCase().includes(q);
-        const matchesRoute = task.routeName.toLowerCase().includes(q);
-        const matchesRider = task.riderName.toLowerCase().includes(q);
-        const matchesStop = task.stopsProgress.some((s) => s.stopName.toLowerCase().includes(q));
+        const matchesClient = (task.clientName || '').toLowerCase().includes(q);
+        const matchesRoute = (task.routeName || '').toLowerCase().includes(q);
+        const matchesRider = (task.riderName || '').toLowerCase().includes(q);
+        const stopsList = task.stopsProgress || task.stops || [];
+        const matchesStop = stopsList.some((s: any) => (s?.stopName || s?.name || '').toLowerCase().includes(q));
         if (!matchesClient && !matchesRoute && !matchesRider && !matchesStop) return false;
       }
 

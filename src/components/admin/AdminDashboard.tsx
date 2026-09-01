@@ -173,12 +173,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const filteredTasks = useMemo(() => {
-    return allTasks.filter((task) => {
+    return (allTasks || []).filter((task) => {
+      if (!task) return false;
       const isTaskDelayed =
         task.isDelayed === true ||
         (task as any).tempAlert === true ||
         task.status === 'delayed' ||
-        (task.issueFlags && task.issueFlags.some((i) => !i.resolved));
+        (Array.isArray(task.issueFlags) && task.issueFlags.some((i) => !i.resolved));
 
       if (statusFilter === 'alerts') {
         return isTaskDelayed;
@@ -187,7 +188,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (statusFilter === 'active') {
         return (
           ['assigned', 'in_transit', 'scheduled', 'in_progress', 'started', 'at_stop', 'picked_up'].includes(
-            task.status
+            task.status || ''
           ) && !isTaskDelayed
         );
       }
@@ -196,39 +197,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [allTasks, statusFilter]);
 
-  const activeRiders = riders.filter((r) => r && r.status === 'active' && r.isCheckedIn);
-  const totalScheduled = allTasks.length;
-  const delayedTasks = allTasks.filter(
+  const activeRiders = (riders || []).filter((r) => r && r.status === 'active' && r.isCheckedIn);
+  const totalScheduled = (allTasks || []).length;
+  const delayedTasks = (allTasks || []).filter(
     (t) =>
-      t.isDelayed === true ||
-      (t as any).tempAlert === true ||
-      t.status === 'delayed' ||
-      (t.issueFlags && t.issueFlags.some((i) => !i.resolved))
+      t &&
+      (t.isDelayed === true ||
+        (t as any).tempAlert === true ||
+        t.status === 'delayed' ||
+        (Array.isArray(t.issueFlags) && t.issueFlags.some((i) => !i.resolved)))
   );
   const delayedCount = delayedTasks.length;
-  const activeRounds = allTasks.filter((t) =>
-    ['assigned', 'in_transit', 'scheduled', 'in_progress', 'started', 'at_stop', 'picked_up'].includes(t.status)
+  const activeRounds = (allTasks || []).filter((t) =>
+    t && t.status && ['assigned', 'in_transit', 'scheduled', 'in_progress', 'started', 'at_stop', 'picked_up'].includes(t.status)
   ).length;
 
-  const totalVialsMoved = allTasks.reduce((sum, t) => {
-    const stops = t.stopsProgress || [];
-    return sum + stops.reduce((sSum, s) => sSum + (s.sampleCount || (s as any).specimenCount || 0), 0);
+  const totalVialsMoved = (allTasks || []).reduce((sum, t) => {
+    const stops = t?.stopsProgress || t?.stops || [];
+    return sum + stops.reduce((sSum: number, s: any) => sSum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
   }, 0);
 
-  const activeTask = selectedTaskId ? allTasks.find((t) => t.id === selectedTaskId) : allTasks[0];
+  const activeTask = selectedTaskId ? (allTasks || []).find((t) => t && t.id === selectedTaskId) : (allTasks || [])[0];
   const activeRoute = activeTask
-    ? routes.find((r) => r.id === activeTask.routeId) || {
+    ? (routes || []).find((r) => r && r.id === activeTask.routeId) || {
         id: activeTask.id,
         clientId: activeTask.clientLabId || activeTask.clientId,
         name: activeTask.routeName || 'Pickup Loop',
-        stops: (activeTask.stopsProgress || []).map((s, idx) => ({
-          id: s.stopId || `s-${idx}`,
-          name: s.stopName || (s as any).name || `Stop ${idx + 1}`,
-          address: s.address || '',
-          lat: s.lat || 19.1287,
-          lng: s.lng || 72.8294,
-          contactPerson: 'Collection Point',
-          contactPhone: '',
+        stops: (activeTask.stopsProgress || activeTask.stops || []).map((s: any, idx: number) => ({
+          id: s?.stopId || s?.id || `s-${idx}`,
+          name: s?.stopName || s?.name || `Stop ${idx + 1}`,
+          address: s?.address || '',
+          lat: s?.lat || 19.1287,
+          lng: s?.lng || 72.8294,
+          contactPerson: s?.contactPerson || 'Collection Point',
+          contactPhone: s?.phone || '',
           expectedTime: '--'
         })),
         destinationLab: {
@@ -246,7 +248,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     : undefined;
 
   const assignedRider: PickupBoy | undefined = activeTask?.riderId
-    ? riders.find((r) => r.id === activeTask.riderId) || {
+    ? (riders || []).find((r) => r && r.id === activeTask.riderId) || {
         id: activeTask.riderId,
         name: activeTask.riderName || 'Assigned Runner',
         phone: activeTask.riderPhone || '',

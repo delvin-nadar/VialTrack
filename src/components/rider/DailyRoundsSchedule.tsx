@@ -102,11 +102,11 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchName = stop.stopName?.toLowerCase().includes(q);
-        const matchAddr = stop.address?.toLowerCase().includes(q);
-        const matchContact = stop.contactPerson?.toLowerCase().includes(q);
-        const matchRoute = stop.routeName?.toLowerCase().includes(q);
-        const matchClient = stop.clientName?.toLowerCase().includes(q);
+        const matchName = (stop.stopName || '').toLowerCase().includes(q);
+        const matchAddr = (stop.address || '').toLowerCase().includes(q);
+        const matchContact = (stop.contactPerson || '').toLowerCase().includes(q);
+        const matchRoute = (stop.routeName || '').toLowerCase().includes(q);
+        const matchClient = (stop.clientName || '').toLowerCase().includes(q);
         if (!matchName && !matchAddr && !matchContact && !matchRoute && !matchClient) {
           return false;
         }

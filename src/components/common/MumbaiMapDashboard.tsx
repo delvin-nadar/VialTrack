@@ -178,12 +178,13 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
   // Filtered riders based on area and search
   const filteredRiders = useMemo(() => {
     return cloudRiders.filter((r) => {
+      if (!r) return false;
       if (selectedArea !== 'All Areas' && r.area !== selectedArea) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesName = r.name.toLowerCase().includes(q);
-        const matchesVehicle = r.vehicleNumber?.toLowerCase().includes(q);
-        const matchesArea = r.area?.toLowerCase().includes(q);
+        const matchesName = (r.name || '').toLowerCase().includes(q);
+        const matchesVehicle = (r.vehicleNumber || '').toLowerCase().includes(q);
+        const matchesArea = (r.area || '').toLowerCase().includes(q);
         if (!matchesName && !matchesVehicle && !matchesArea) return false;
       }
       return true;
@@ -193,17 +194,18 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
   // Filtered tasks based on area, status, and search
   const filteredTasks = useMemo(() => {
     return cloudTasks.filter((t) => {
+      if (!t) return false;
       if (selectedArea !== 'All Areas' && t.area !== selectedArea) return false;
       if (taskStatusFilter !== 'all') {
         if (taskStatusFilter === 'pending' && t.status !== 'pending' && t.status !== 'upcoming') return false;
-        if (taskStatusFilter === 'in_progress' && !['in_transit', 'started', 'at_stop', 'picked_up'].includes(t.status)) return false;
+        if (taskStatusFilter === 'in_progress' && (!t.status || !['in_transit', 'started', 'at_stop', 'picked_up'].includes(t.status))) return false;
         if (taskStatusFilter === 'completed' && t.status !== 'delivered') return false;
       }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesTitle = t.title?.toLowerCase().includes(q) || t.routeName?.toLowerCase().includes(q);
-        const matchesRider = t.riderName?.toLowerCase().includes(q);
-        const matchesClient = t.clientName?.toLowerCase().includes(q);
+        const matchesTitle = (t.title || '').toLowerCase().includes(q) || (t.routeName || '').toLowerCase().includes(q);
+        const matchesRider = (t.riderName || '').toLowerCase().includes(q);
+        const matchesClient = (t.clientName || '').toLowerCase().includes(q);
         if (!matchesTitle && !matchesRider && !matchesClient) return false;
       }
       return true;

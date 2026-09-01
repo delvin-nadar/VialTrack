@@ -68,16 +68,16 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
     billingRatePerPickup: '' as any
   });
 
-  const filteredClients = clients.filter(
+  const filteredClients = (clients || []).filter(
     (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.contactPerson?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.address?.toLowerCase().includes(searchQuery.toLowerCase())
+      (c?.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (c?.contactPerson || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (c?.email || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (c?.address || '').toLowerCase().includes((searchQuery || '').toLowerCase())
   );
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || filteredClients[0] || clients[0];
-  const clientRoutes = routes.filter((r) => r.clientId === selectedClient?.id);
+  const selectedClient = (clients || []).find((c) => c && c.id === selectedClientId) || filteredClients[0] || (clients || [])[0];
+  const clientRoutes = (routes || []).filter((r) => r && r.clientId === selectedClient?.id);
 
   const handleGeneratePassword = () => {
     const strong = generateStrongPassword(9);

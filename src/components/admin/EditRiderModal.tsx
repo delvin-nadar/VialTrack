@@ -377,12 +377,13 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
   const handleToggleRoute = (routeId: string) => {
     setForm((prev) => {
-      const exists = prev.assignedRouteIds.includes(routeId);
+      const currentIds = Array.isArray(prev.assignedRouteIds) ? prev.assignedRouteIds : [];
+      const exists = currentIds.includes(routeId);
       return {
         ...prev,
         assignedRouteIds: exists
-          ? prev.assignedRouteIds.filter((id) => id !== routeId)
-          : [...prev.assignedRouteIds, routeId]
+          ? currentIds.filter((id) => id !== routeId)
+          : [...currentIds, routeId]
       };
     });
   };
@@ -941,7 +942,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
 
           <div>
             <label className="block text-slate-700 font-bold uppercase tracking-wider mb-1.5 text-[11px]">
-              Assign Collection Routes ({form.assignedRouteIds.length} Selected)
+              Assign Collection Routes ({(form.assignedRouteIds || []).length} Selected)
             </label>
             <div className="space-y-1 max-h-36 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
               {isLoadingRoutes ? (
@@ -955,7 +956,7 @@ export const EditRiderModal: React.FC<EditRiderModalProps> = ({
                 </div>
               ) : (
                 availableRoutes.map((r) => {
-                  const isChecked = form.assignedRouteIds.includes(r.id);
+                  const isChecked = (form.assignedRouteIds || []).includes(r.id);
                   return (
                     <label
                       key={r.id}

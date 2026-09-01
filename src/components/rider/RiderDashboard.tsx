@@ -267,7 +267,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     if (r.assignedRiderId && (r.assignedRiderId === sessionRiderId || r.assignedRiderId === activeRider.id)) return true;
     if (normalizedSessionPhone && (r as any).assignedRiderPhone && normalizePhone((r as any).assignedRiderPhone) === normalizedSessionPhone) return true;
     if (sessionName && (r as any).assignedRiderName && (r as any).assignedRiderName.trim().toLowerCase() === sessionName.trim().toLowerCase()) return true;
-    if (activeRider.assignedRouteIds && activeRider.assignedRouteIds.includes(r.id)) return true;
+    const riderAssignedRouteIds = Array.isArray(activeRider?.assignedRouteIds) ? activeRider.assignedRouteIds : [];
+    if (riderAssignedRouteIds.includes(r.id)) return true;
     if (liveTasks.some((t) => isTaskAssignedToRider(t) && t.routeId === r.id)) return true;
     return false;
   };

@@ -218,7 +218,8 @@ export const ManageRiders: React.FC<ManageRidersProps> = ({ riders, routes, onRe
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredRiders.map((rider) => {
-            const assignedRoutes = routes.filter((r) => rider.assignedRouteIds.includes(r.id));
+            const assignedRouteIds = Array.isArray(rider?.assignedRouteIds) ? rider.assignedRouteIds : [];
+            const assignedRoutes = routes.filter((r) => assignedRouteIds.includes(r.id));
 
           return (
             <div
