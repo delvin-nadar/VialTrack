@@ -186,7 +186,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [coldBoxTemp, setColdBoxTemp] = useState<number>(4.0);
   const [stopPhoto, setStopPhoto] = useState<string | null>(null); // Photo 1: Specimen Vials
   const [stopPhoto2, setStopPhoto2] = useState<string | null>(null); // Photo 2: Hospital Handover Slip
-  const [receiverName, setReceiverName] = useState<string>('Dr. Ramesh Patil (Lab Head)');
+  const [receiverName, setReceiverName] = useState<string>('');
   const [delayReason, setDelayReason] = useState<string>('Heavy Traffic / Rain');
   const [showDelayModal, setShowDelayModal] = useState<boolean>(false);
   const [watermarking, setWatermarking] = useState<boolean>(false);
@@ -777,6 +777,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       stopsProgress: updatedStops
     };
 
+    setLiveTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
     StorageService.updateTask(updatedTask);
     CloudSync.completeTripStop(
       activeTask.id,
@@ -784,7 +785,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       activeTask.stops || activeTask.stopsProgress,
       {
         sampleCount: vialCount,
+        coldBoxTemp: coldBoxTemp,
         photoUrl: finalSamplePhoto,
+        handoverPhotoUrl: finalSlipPhoto,
+        photo2Url: finalSlipPhoto,
         notes: vialCount === 0 ? '0 samples collected' : `${vialCount} specimen vials collected`
       }
     );
@@ -830,8 +834,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       }
     };
 
+    setLiveTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
     StorageService.updateTask(updatedTask);
     CloudSync.completeTripFinalHandover(activeTask.id, sessionRiderId, {
+      destinationName: activeTask.destination.name,
+      destinationAddress: activeTask.destination.address,
       receiverName,
       totalVials,
       coldBoxTemp,

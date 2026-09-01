@@ -1,22 +1,21 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { RouteStop, PickupBoy, PickupTask } from '../../types';
-import { Navigation, Clock, ShieldCheck, Radio, Compass, LocateFixed } from 'lucide-react';
+import { RouteStop, DestinationLab, PickupBoy, PickupTask, StopExecution } from '../../types';
+import { Navigation, Radio } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
-// Fix Leaflet asset paths
+// Fix default Leaflet asset icon paths
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
 });
 
-interface LiveMapProps {
-  stops: RouteStop[];
-  destination?: { lat: number; lng: number; name?: string; address?: string };
-  rider?: PickupBoy;
+export interface LiveMapProps {
+  stops?: (RouteStop | StopExecution | any)[];
+  destination?: DestinationLab | { lat: number; lng: number; name?: string; address?: string } | any;
+  rider?: PickupBoy | null;
   riders?: PickupBoy[];
   tasks?: PickupTask[];
   activeTaskId?: string | null;
@@ -61,7 +60,7 @@ const createStopIcon = (index: number, name: string, isCompleted: boolean) => {
           ${name}
         </div>
         <div style="background: ${bg}; width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid white; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px; box-shadow: 0 3px 8px rgba(0,0,0,0.25);">
-          ${index + 1}
+          ${isCompleted ? '✓' : index + 1}
         </div>
         <div style="width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid ${bg};"></div>
       </div>
@@ -92,27 +91,6 @@ const createDestinationIcon = (name?: string) => {
   });
 };
 
-// Map Auto-Fit & Live Re-center Controller
-const MapController: React.FC<{
-  bounds: L.LatLngBoundsExpression | null;
-  enrouteMode: boolean;
-  riderPosition: [number, number] | null;
-}> = ({ bounds, enrouteMode, riderPosition }) => {
-  const map = useMap();
-  const initialFitDone = useRef(false);
-
-  useEffect(() => {
-    if (enrouteMode && riderPosition) {
-      map.flyTo(riderPosition, 14, { animate: true, duration: 1.2 });
-    } else if (bounds && !initialFitDone.current) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: true });
-      initialFitDone.current = true;
-    }
-  }, [bounds, enrouteMode, riderPosition, map]);
-
-  return null;
-};
-
 export const LiveMap: React.FC<LiveMapProps> = ({
   stops = [],
   destination,
@@ -122,11 +100,15 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   activeTaskId,
   height = '400px'
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const polylinesLayerRef = useRef<L.LayerGroup | null>(null);
+  const initialFitDoneRef = useRef<boolean>(false);
+
   // Default Enroute Live Mode to true
   const [enrouteLive, setEnrouteLive] = useState<boolean>(true);
-  const [roadPolyline, setRoadPolyline] = useState<[number, number][]>([]);
   const [routeStats, setRouteStats] = useState<{ distanceKm: string; durationMin: number; etaTime: string } | null>(null);
-  const [isRouting, setIsRouting] = useState<boolean>(false);
 
   // Active Rider Extraction
   const activeRider = useMemo(() => {
@@ -141,8 +123,10 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   }, [rider, activeTaskId, tasks, riders]);
 
   const riderCoords: [number, number] | null = useMemo(() => {
-    if (activeRider?.currentLocation?.lat && activeRider?.currentLocation?.lng) {
-      return [activeRider.currentLocation.lat, activeRider.currentLocation.lng];
+    const lat = activeRider?.lat ?? activeRider?.currentLocation?.lat;
+    const lng = activeRider?.lng ?? activeRider?.currentLocation?.lng;
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      return [lat, lng];
     }
     return null;
   }, [activeRider]);
@@ -154,73 +138,211 @@ export const LiveMap: React.FC<LiveMapProps> = ({
       pts.push(riderCoords);
     }
     stops.forEach((s) => {
-      if (s.lat && s.lng) pts.push([s.lat, s.lng]);
+      const lat = s.lat ?? s.latitude;
+      const lng = s.lng ?? s.longitude;
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        pts.push([lat, lng]);
+      }
     });
-    if (destination?.lat && destination?.lng) {
+    if (destination && typeof destination.lat === 'number' && typeof destination.lng === 'number') {
       pts.push([destination.lat, destination.lng]);
     }
     return pts;
   }, [riderCoords, stops, destination]);
 
-  // Live Road Snapping via OSRM Routing Engine
+  // Initialize Leaflet Map Instance
   useEffect(() => {
-    if (waypoints.length < 2) {
-      setRoadPolyline([]);
-      setRouteStats(null);
-      return;
+    if (!containerRef.current) return;
+
+    if (!mapRef.current) {
+      const defaultCenter: [number, number] = riderCoords || waypoints[0] || [19.0330, 73.0297];
+
+      const map = L.map(containerRef.current, {
+        center: defaultCenter,
+        zoom: 13,
+        zoomControl: true,
+        attributionControl: true
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+      }).addTo(map);
+
+      polylinesLayerRef.current = L.layerGroup().addTo(map);
+      markersLayerRef.current = L.layerGroup().addTo(map);
+
+      mapRef.current = map;
     }
 
-    let isMounted = true;
-    setIsRouting(true);
-
-    const fetchRoadRoute = async () => {
-      try {
-        const coordString = waypoints.map((pt) => `${pt[1]},${pt[0]}`).join(';');
-        const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson`;
-
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Routing network error');
-        const data = await response.json();
-
-        if (isMounted && data.routes && data.routes.length > 0) {
-          const route = data.routes[0];
-          const latLngs: [number, number][] = route.geometry.coordinates.map(
-            (c: [number, number]) => [c[1], c[0]]
-          );
-          setRoadPolyline(latLngs);
-
-          const distanceKm = (route.distance / 1000).toFixed(1);
-          const durationMin = Math.round(route.duration / 60);
-
-          const now = new Date();
-          now.setMinutes(now.getMinutes() + durationMin);
-          const etaTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-
-          setRouteStats({ distanceKm, durationMin, etaTime });
-        }
-      } catch (err) {
-        console.warn('[LiveMap] OSRM Road Route lookup fallback:', err);
-        if (isMounted) {
-          setRoadPolyline(waypoints);
-        }
-      } finally {
-        if (isMounted) setIsRouting(false);
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
       }
     };
+  }, []);
 
-    fetchRoadRoute();
+  // Handle Container Resize Invalidation
+  useEffect(() => {
+    if (!mapRef.current) return;
+    mapRef.current.invalidateSize();
+    const timer = setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [height]);
+
+  // Fetch Road Geometry & Update Layers
+  useEffect(() => {
+    const map = mapRef.current;
+    const markersLayer = markersLayerRef.current;
+    const polylinesLayer = polylinesLayerRef.current;
+    if (!map || !markersLayer || !polylinesLayer) return;
+
+    markersLayer.clearLayers();
+    polylinesLayer.clearLayers();
+
+    // 1. Draw Active Rider Marker
+    if (activeRider && riderCoords) {
+      const riderMarker = L.marker(riderCoords, {
+        icon: createRiderIcon(activeRider.name, activeRider.vehicleNumber || activeRider.plateNumber),
+        zIndexOffset: 1000
+      }).addTo(markersLayer);
+
+      riderMarker.bindPopup(`
+        <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 180px; padding: 4px;">
+          <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${activeRider.name}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${activeRider.phone || '—'}</div>
+          <div style="font-size: 10px; font-weight: 700; color: #059669; margin-top: 4px;">Live Enroute GPS Active</div>
+        </div>
+      `);
+    }
+
+    // 2. Draw Collection Stop Markers
+    stops.forEach((stop, idx) => {
+      const lat = stop.lat ?? stop.latitude;
+      const lng = stop.lng ?? stop.longitude;
+      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+
+      const stopName = stop.name || stop.stopName || `Stop ${idx + 1}`;
+      const stopAddress = stop.address || '—';
+      const isCompleted = stop.status === 'picked_up' || stop.status === 'collected' || stop.status === 'completed';
+
+      const stopMarker = L.marker([lat, lng], {
+        icon: createStopIcon(idx, stopName, isCompleted),
+        zIndexOffset: 800
+      }).addTo(markersLayer);
+
+      stopMarker.bindPopup(`
+        <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 180px; padding: 4px;">
+          <div style="font-size: 10px; font-weight: 800; color: #0284c7; text-transform: uppercase;">Stop #${idx + 1}</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${stopName}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${stopAddress}</div>
+          <div style="font-size: 10px; font-weight: 700; color: ${isCompleted ? '#059669' : '#0284c7'}; margin-top: 4px;">
+            Status: ${stop.status ? String(stop.status).toUpperCase() : 'PENDING'}
+          </div>
+        </div>
+      `);
+    });
+
+    // 3. Draw Destination Lab Marker
+    if (destination && typeof destination.lat === 'number' && typeof destination.lng === 'number') {
+      const destMarker = L.marker([destination.lat, destination.lng], {
+        icon: createDestinationIcon(destination.name),
+        zIndexOffset: 900
+      }).addTo(markersLayer);
+
+      destMarker.bindPopup(`
+        <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 180px; padding: 4px;">
+          <div style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Central Lab</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${destination.name || 'Central Diagnostic Lab'}</div>
+          ${destination.address ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">${destination.address}</div>` : ''}
+          <div style="font-size: 10px; font-weight: 700; color: #059669; margin-top: 4px;">Final Intake Destination</div>
+        </div>
+      `);
+    }
+
+    // 4. Calculate Road Geometry via OSRM & Render Polyline
+    let isCancelled = false;
+
+    if (waypoints.length >= 2) {
+      const coordString = waypoints.map((pt) => `${pt[1]},${pt[0]}`).join(';');
+      const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson`;
+
+      fetch(url)
+        .then((res) => {
+          if (!res.ok) throw new Error('OSRM routing network error');
+          return res.json();
+        })
+        .then((data) => {
+          if (isCancelled || !polylinesLayer) return;
+
+          let roadPoints: [number, number][] = [];
+          if (data?.routes && data.routes.length > 0) {
+            const route = data.routes[0];
+            roadPoints = route.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+
+            const distanceKm = (route.distance / 1000).toFixed(1);
+            const durationMin = Math.round(route.duration / 60);
+
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + durationMin);
+            const etaTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            setRouteStats({ distanceKm, durationMin, etaTime });
+          } else {
+            roadPoints = waypoints;
+          }
+
+          if (roadPoints.length > 0) {
+            // Glow border polyline
+            L.polyline(roadPoints, {
+              color: '#0284c7',
+              weight: 6,
+              opacity: 0.3,
+              lineCap: 'round',
+              lineJoin: 'round'
+            }).addTo(polylinesLayer);
+
+            // Main sharp road route
+            L.polyline(roadPoints, {
+              color: '#0369a1',
+              weight: 3.5,
+              opacity: 0.95,
+              lineCap: 'round',
+              lineJoin: 'round'
+            }).addTo(polylinesLayer);
+          }
+        })
+        .catch(() => {
+          if (isCancelled || !polylinesLayer) return;
+          // Fallback direct waypoints line if offline
+          L.polyline(waypoints, {
+            color: '#0369a1',
+            weight: 3.5,
+            opacity: 0.85,
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(polylinesLayer);
+        });
+    } else {
+      setRouteStats(null);
+    }
+
+    // 5. Follow Mode / Initial Fit
+    if (enrouteLive && riderCoords) {
+      map.flyTo(riderCoords, 14, { animate: true, duration: 1.0 });
+    } else if (!initialFitDoneRef.current && waypoints.length > 0) {
+      const bounds = L.latLngBounds(waypoints.map((p) => L.latLng(p[0], p[1])));
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: true });
+      initialFitDoneRef.current = true;
+    }
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
     };
-  }, [waypoints]);
-
-  const bounds = useMemo(() => {
-    if (waypoints.length === 0) return null;
-    return L.latLngBounds(waypoints.map((p) => L.latLng(p[0], p[1])));
-  }, [waypoints]);
-
-  const defaultCenter: [number, number] = riderCoords || waypoints[0] || [19.0330, 73.0297];
+  }, [waypoints, riderCoords, activeRider, stops, destination, enrouteLive]);
 
   return (
     <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 shadow-inner" style={{ height }}>
@@ -273,92 +395,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
         </div>
       )}
 
-      <MapContainer
-        center={defaultCenter}
-        zoom={13}
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        <MapController
-          bounds={bounds}
-          enrouteMode={enrouteLive}
-          riderPosition={riderCoords}
-        />
-
-        {/* Road-Snapped Polyline (No Water Crossings) */}
-        {roadPolyline.length > 0 && (
-          <>
-            <Polyline
-              positions={roadPolyline}
-              pathOptions={{ color: '#0284c7', weight: 6, opacity: 0.3, lineCap: 'round', lineJoin: 'round' }}
-            />
-            <Polyline
-              positions={roadPolyline}
-              pathOptions={{ color: '#0369a1', weight: 3.5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
-            />
-          </>
-        )}
-
-        {/* Live Rider Marker */}
-        {activeRider?.currentLocation?.lat && activeRider?.currentLocation?.lng && (
-          <Marker
-            position={[activeRider.currentLocation.lat, activeRider.currentLocation.lng]}
-            icon={createRiderIcon(activeRider.name, activeRider.vehicleNumber || activeRider.plateNumber)}
-          >
-            <Popup>
-              <div className="text-xs p-1">
-                <div className="font-bold text-slate-900">{activeRider.name}</div>
-                <div className="text-[11px] text-slate-500">{activeRider.phone}</div>
-                <div className="text-[10px] text-emerald-600 font-bold mt-1">Live Enroute GPS Active</div>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-
-        {/* Collection Stops */}
-        {stops.map((stop, idx) => {
-          if (!stop.lat || !stop.lng) return null;
-          const isCompleted = stop.status === 'picked_up' || stop.status === 'collected';
-          return (
-            <Marker
-              key={stop.id || `stop-${idx}`}
-              position={[stop.lat, stop.lng]}
-              icon={createStopIcon(idx, stop.name || `Stop ${idx + 1}`, isCompleted)}
-            >
-              <Popup>
-                <div className="text-xs p-1">
-                  <div className="font-bold text-slate-900">{stop.name}</div>
-                  <div className="text-[11px] text-slate-500">{stop.address}</div>
-                  <div className="text-[10px] text-sky-700 font-bold mt-1">
-                    Status: {stop.status ? stop.status.toUpperCase() : 'PENDING'}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-
-        {/* Destination Lab Marker */}
-        {destination?.lat && destination?.lng && (
-          <Marker
-            position={[destination.lat, destination.lng]}
-            icon={createDestinationIcon(destination.name)}
-          >
-            <Popup>
-              <div className="text-xs p-1">
-                <div className="font-bold text-slate-900">{destination.name || 'Central Lab'}</div>
-                <div className="text-[11px] text-slate-500">{destination.address}</div>
-                <div className="text-[10px] text-emerald-700 font-bold mt-1">Final Intake Destination</div>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-      </MapContainer>
+      {/* Leaflet Map DOM Canvas */}
+      <div ref={containerRef} className="w-full h-full" />
     </div>
   );
 };

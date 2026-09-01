@@ -204,7 +204,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                 <div className="bg-white border border-emerald-200 px-3 py-1.5 rounded-lg text-right shadow-xs">
                   <span className="text-[10px] text-emerald-700 block font-semibold">Intake Receiver</span>
                   <span className="text-xs font-bold text-slate-900">
-                    {task.destination.receiverName || 'Dr. Ramesh Patil (Senior Lab Tech)'}
+                    {task.destination.receiverName || 'Lab Intake Personnel'}
                   </span>
                 </div>
               </div>

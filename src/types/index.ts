@@ -184,6 +184,14 @@ export interface TripStop {
   completedAt?: string;
   pickedUpAt?: string;
   photoUrl?: string;
+  photo2Url?: string;
+  handoverPhotoUrl?: string;
+  photoTimestamp?: string;
+  photoLocation?: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+  };
   coldBoxTemp?: number;
   sampleCount?: number;
 }
@@ -258,6 +266,8 @@ export interface StopExecution {
   pickedUpAt?: string;
   sampleCount?: number;
   photoUrl?: string;
+  photo2Url?: string;
+  handoverPhotoUrl?: string;
   photoLocation?: {
     lat: number;
     lng: number;

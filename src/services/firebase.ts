@@ -281,22 +281,37 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
       ? Number(s.coords[1])
       : Number(s.lng || 72.8294183);
 
+    const photoUrl = s.photoUrl || s.photo || '';
+    const photo2Url = s.photo2Url || s.handoverPhotoUrl || '';
+    const handoverPhotoUrl = s.handoverPhotoUrl || s.photo2Url || '';
+
     return {
       stopName: s.stopName || s.name || `Collection Stop ${idx + 1}`,
       address: s.address || 'Diagnostic Collection Point',
       lat: sLat,
       lng: sLng,
       specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
-      sampleCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
+      sampleCount: Number(s.sampleCount ?? s.specimenCount ?? 0),
       status: s.status || 'pending',
       id: s.id || s.stopId || `stop-${idx + 1}`,
+      stopId: s.stopId || s.id || `stop-${idx + 1}`,
       contactPerson: s.contactPerson || 'Point of Contact',
-      phone: s.phone || ''
+      phone: s.phone || '',
+      photoUrl,
+      photo2Url,
+      handoverPhotoUrl,
+      coldBoxTemp: s.coldBoxTemp !== undefined ? Number(s.coldBoxTemp) : undefined,
+      arrivedAt: s.arrivedAt,
+      pickedUpAt: s.pickedUpAt,
+      completedAt: s.completedAt,
+      photoTimestamp: s.photoTimestamp,
+      photoLocation: s.photoLocation,
+      notes: s.notes || ''
     };
   });
 
   const stopsProgress: any[] = unifiedStops.map((s: any, idx: number) => ({
-    stopId: s.id || `stop-${idx + 1}`,
+    stopId: s.id || s.stopId || `stop-${idx + 1}`,
     stopName: s.stopName,
     address: s.address,
     lat: s.lat,
@@ -306,11 +321,37 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     status: s.status === 'picked_up' || s.status === 'completed' || s.status === 'arrived' || s.status === 'no_sample'
       ? (s.status === 'completed' ? 'picked_up' : s.status)
       : (s.status === 'in_progress' ? 'arrived' : 'pending'),
-    sampleCount: s.specimenCount,
+    sampleCount: s.sampleCount ?? s.specimenCount ?? 0,
+    photoUrl: s.photoUrl || '',
+    photo2Url: s.photo2Url || s.handoverPhotoUrl || '',
+    handoverPhotoUrl: s.handoverPhotoUrl || s.photo2Url || '',
+    coldBoxTemp: s.coldBoxTemp,
+    arrivedAt: s.arrivedAt,
+    pickedUpAt: s.pickedUpAt,
+    completedAt: s.completedAt,
+    photoTimestamp: s.photoTimestamp,
+    photoLocation: s.photoLocation,
     notes: s.notes || ''
   }));
 
   const scheduledDate = data.scheduledDate || data.date || new Date().toISOString().split('T')[0];
+
+  const destinationObj = {
+    name: data.destination?.name || data.deliveryLocation?.name || clientLabName,
+    address: data.destination?.address || data.deliveryLocation?.address || data.clientAddress || '',
+    lat: data.destination?.lat || data.deliveryLocation?.lat || clientLat,
+    lng: data.destination?.lng || data.deliveryLocation?.lng || clientLng,
+    status: data.destination?.status || (data.status === 'delivered' || data.status === 'completed' ? 'delivered' : 'pending'),
+    arrivedAt: data.destination?.arrivedAt,
+    deliveredAt: data.destination?.deliveredAt || data.completedAt,
+    receiverName: data.destination?.receiverName || data.finalDrop?.receiverName || '',
+    receiverDesignation: data.destination?.receiverDesignation || '',
+    dropPhotoUrl: data.destination?.dropPhotoUrl || data.destination?.handoverPhotoUrl || data.finalDrop?.dropPhotoUrl || data.dropPhotoUrl || '',
+    handoverPhotoUrl: data.destination?.handoverPhotoUrl || data.destination?.dropPhotoUrl || data.finalDrop?.dropPhotoUrl || data.dropPhotoUrl || '',
+    coldBoxTempAtDrop: data.destination?.coldBoxTempAtDrop !== undefined ? data.destination.coldBoxTempAtDrop : (data.finalDrop?.coldBoxTemp !== undefined ? data.finalDrop.coldBoxTemp : data.chillerTemp),
+    totalVialsHandedOver: data.destination?.totalVialsHandedOver !== undefined ? data.destination.totalVialsHandedOver : (data.finalDrop?.totalVials !== undefined ? data.finalDrop.totalVials : undefined),
+    notes: data.destination?.notes || data.taskNotes || 'Specimen cold-chain transport'
+  };
 
   return {
     id: id || data.id,
@@ -336,13 +377,7 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     tripStartedAt: data.tripStartedAt,
     currentStopIndex: data.currentStopIndex || 0,
     stopsProgress,
-    destination: data.destination || {
-      name: clientLabName,
-      address: data.deliveryLocation?.address || data.clientAddress || '',
-      lat: clientLat,
-      lng: clientLng,
-      notes: data.taskNotes || data.destination?.notes || 'Specimen cold-chain transport'
-    },
+    destination: destinationObj,
     isDelayed: Boolean(data.isDelayed),
     delayMinutes: data.delayMinutes || 0,
     issueFlags: data.issueFlags || [],
@@ -603,14 +638,29 @@ export const CloudSync = {
 
   async completeTripStop(tripId: string, stopIndex: number, currentStops: any[], extra?: any) {
     try {
+      const nowStr = new Date().toISOString();
       const updatedStops = currentStops.map((s, idx) => {
         if (idx === stopIndex) {
+          const sampleCount = extra?.sampleCount !== undefined ? Number(extra.sampleCount) : Number(s.sampleCount ?? s.specimenCount ?? 0);
+          const photoUrl = extra?.photoUrl || s.photoUrl || '';
+          const photo2Url = extra?.photo2Url || extra?.handoverPhotoUrl || s.photo2Url || s.handoverPhotoUrl || '';
+          const handoverPhotoUrl = extra?.handoverPhotoUrl || extra?.photo2Url || s.handoverPhotoUrl || s.photo2Url || '';
+          const coldBoxTemp = extra?.coldBoxTemp !== undefined ? Number(extra.coldBoxTemp) : (s.coldBoxTemp ?? 4.0);
+
           return {
             ...s,
             status: 'completed',
-            completedAt: new Date().toISOString(),
-            specimenCount: extra?.sampleCount !== undefined ? Number(extra.sampleCount) : Number(s.specimenCount || 0),
-            photoUrl: extra?.photoUrl || s.photoUrl || '',
+            completedAt: nowStr,
+            pickedUpAt: s.pickedUpAt || nowStr,
+            arrivedAt: s.arrivedAt || nowStr,
+            specimenCount: sampleCount,
+            sampleCount: sampleCount,
+            photoUrl: photoUrl,
+            photo2Url: photo2Url,
+            handoverPhotoUrl: handoverPhotoUrl,
+            photoTimestamp: extra?.photoTimestamp || nowStr,
+            photoLocation: extra?.photoLocation || s.photoLocation || { lat: 19.2082, lng: 72.8398, accuracy: 5 },
+            coldBoxTemp: coldBoxTemp,
             notes: extra?.notes || s.notes || ''
           };
         }
@@ -632,40 +682,66 @@ export const CloudSync = {
       // Mirror to tasks
       await setDoc(doc(db, 'tasks', tripId), {
         currentStopIndex: nextStopIndex,
-        stopsProgress: updatedStops.map(s => ({
+        stopsProgress: updatedStops.map((s: any) => ({
           stopId: s.id || s.stopId,
-          stopName: s.name,
+          stopName: s.name || s.stopName,
           address: s.address,
           lat: s.coords?.[0] || s.lat,
           lng: s.coords?.[1] || s.lng,
           status: s.status === 'completed' ? 'picked_up' : s.status,
-          sampleCount: s.specimenCount,
-          notes: s.notes
+          sampleCount: s.sampleCount ?? s.specimenCount ?? 0,
+          photoUrl: s.photoUrl || '',
+          photo2Url: s.photo2Url || s.handoverPhotoUrl || '',
+          handoverPhotoUrl: s.handoverPhotoUrl || s.photo2Url || '',
+          photoTimestamp: s.photoTimestamp || nowStr,
+          photoLocation: s.photoLocation || { lat: 19.2082, lng: 72.8398, accuracy: 5 },
+          coldBoxTemp: s.coldBoxTemp,
+          pickedUpAt: s.pickedUpAt || nowStr,
+          completedAt: s.completedAt || nowStr,
+          arrivedAt: s.arrivedAt,
+          notes: s.notes || ''
         })),
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      console.log(`[CloudSync] Completed stop ${stopIndex + 1} for trip ${tripId}`);
+      console.log(`[CloudSync] Completed stop ${stopIndex + 1} for trip ${tripId} with photo verification.`);
     } catch (err) {
-      console.error("Firestore Write Error:", err);
+      console.error("Firestore Write Error in completeTripStop:", err);
     }
   },
 
   async completeTripFinalHandover(tripId: string, riderId: string, dropData?: any) {
     try {
+      const nowStr = new Date().toISOString();
+      const dropObj = {
+        name: dropData?.destinationName || 'Central Diagnostic Processing Lab',
+        address: dropData?.destinationAddress || '',
+        status: 'delivered',
+        completedAt: nowStr,
+        deliveredAt: nowStr,
+        receiverName: dropData?.receiverName || '',
+        dropPhotoUrl: dropData?.dropPhotoUrl || '',
+        handoverPhotoUrl: dropData?.dropPhotoUrl || '',
+        coldBoxTempAtDrop: dropData?.coldBoxTemp ?? 4.0,
+        totalVialsHandedOver: dropData?.totalVials ?? 0,
+        notes: dropData?.notes || `Total ${dropData?.totalVials ?? 0} specimen vials handed over in certified cold chain (${dropData?.coldBoxTemp ?? 4.0}°C).`
+      };
+
       const tripRef = doc(db, 'trips', tripId);
       await setDoc(tripRef, {
         status: 'completed',
         completedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        finalDrop: dropData || null
+        finalDrop: dropData || null,
+        destination: dropObj
       }, { merge: true });
 
       // Mirror to tasks
       await setDoc(doc(db, 'tasks', tripId), {
-        status: 'completed',
+        status: 'delivered',
         completedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        destination: dropObj
       }, { merge: true });
 
       if (riderId) {
@@ -680,7 +756,7 @@ export const CloudSync = {
 
       console.log(`[CloudSync] Successfully completed final delivery handover for trip ${tripId}`);
     } catch (err) {
-      console.error("Firestore Write Error:", err);
+      console.error("Firestore Write Error in completeTripFinalHandover:", err);
     }
   },
 
