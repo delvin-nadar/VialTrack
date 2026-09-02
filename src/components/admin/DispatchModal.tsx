@@ -4,6 +4,7 @@ import { CloudSync, formatUnifiedTask } from '../../services/firebase';
 import { db } from '../../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { StorageService } from '../../services/storage';
+import { buildCanonicalTaskId } from '../../utils/taskId';
 import {
   X,
   Send,
@@ -224,7 +225,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     }
 
     setIsSubmitting(true);
-    const taskId = `task_${Date.now()}`;
+    // Deterministic ID (route + slot + date), NOT a random timestamp — see buildCanonicalTaskId's
+    // comment. This ensures dispatching a round here lands on the exact same Firestore document a
+    // rider's app would create/update for that same route+slot+day, instead of a parallel orphan.
+    const taskId = buildCanonicalTaskId(route?.id, taskTimeSlot, taskDate);
     const stopsPayload = selectedStopsList.map((stop, idx) => ({
       id: stop.id,
       stopId: stop.id || `stop_${idx + 1}`,
