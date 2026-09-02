@@ -52,6 +52,7 @@ import {
   PunctualityReport
 } from '../../utils/riderTelemetry';
 import { getLiveBatteryInfo, subscribeToBatteryChanges } from '../../utils/deviceBattery';
+import { buildCanonicalTaskId } from '../../utils/taskId';
 
 // Rank how "complete" a stop's status is, so a race between the two live Firestore listeners
 // below (one on 'trips', one on 'tasks' — both mirror the same document) can never regress an
@@ -940,9 +941,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         liveRoutes[0] ||
         routes[0];
 
-      const cleanRouteId = (matchingRoute?.id || stopItem.routeId || 'route').replace(/[^a-zA-Z0-9_-]/g, '');
-      const cleanSlot = (stopItem.timeSlot || '0900').replace(/[^a-zA-Z0-9]/g, '');
-      const canonicalTaskId = `task-${todayStr}-${cleanRouteId}-${cleanSlot}`;
+      const canonicalTaskId = buildCanonicalTaskId(matchingRoute?.id || stopItem.routeId, stopItem.timeSlot, todayStr);
 
       const rawRouteStops = (matchingRoute?.stops && matchingRoute.stops.length > 0)
         ? matchingRoute.stops
@@ -1094,9 +1093,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     let targetTask = findExistingTask();
 
     if (!targetTask) {
-      const cleanRouteId = (route?.id || 'route').replace(/[^a-zA-Z0-9_-]/g, '');
-      const cleanSlot = (slot || '0900').replace(/[^a-zA-Z0-9]/g, '');
-      const canonicalTaskId = `task-${todayStr}-${cleanRouteId}-${cleanSlot}`;
+      const canonicalTaskId = buildCanonicalTaskId(route?.id, slot, todayStr);
 
       const client = StorageService.getClientById(route?.clientId || '') || {
         id: route?.clientId || '',
