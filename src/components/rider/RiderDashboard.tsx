@@ -990,36 +990,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
       const rawRouteStops = (matchingRoute?.stops && matchingRoute.stops.length > 0)
         ? matchingRoute.stops
-        : [
-            {
-              id: 'stop-1',
-              name: 'Dr. Mehta Clinic / Collection Center 1',
-              address: 'Shop 4, Swami Vivekananda Rd, Andheri West',
-              lat: 19.1287852,
-              lng: 72.8294183,
-              contactPerson: 'Dr. Mehta',
-              phone: '9820011223'
-            },
-            {
-              id: 'stop-2',
-              name: 'Apex Diagnostic Collection Point',
-              address: 'G-12, Lokhandwala Complex, Andheri West',
-              lat: 19.1412,
-              lng: 72.8299,
-              contactPerson: 'Sister Mary',
-              phone: '9833445566'
-            }
-          ];
+        : [];
 
       const stopsProgress: StopProgress[] = rawRouteStops.map((s: any, idx: number) => ({
         stopId: s.id || `stop-${idx + 1}`,
         id: s.id || `stop-${idx + 1}`,
-        stopName: s.name || s.stopName || `Stop ${idx + 1}`,
-        name: s.name || s.stopName || `Stop ${idx + 1}`,
-        address: s.address || 'Collection Facility',
+        stopName: s.name || s.stopName || '',
+        name: s.name || s.stopName || '',
+        address: s.address || '',
         lat: s.lat || 19.1287852,
         lng: s.lng || 72.8294183,
-        contactPerson: s.contactPerson || 'Point of Contact',
+        contactPerson: s.contactPerson || '',
         phone: s.phone || '',
         status: 'pending',
         sampleCount: 0,
@@ -1028,17 +1009,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
       const client = StorageService.getClientById(matchingRoute?.clientId || '') || {
         id: matchingRoute?.clientId || '',
-        name: matchingRoute?.destinationLab?.name || (matchingRoute as any)?.clientName || 'Lifecare Central Lab',
-        address: matchingRoute?.destinationLab?.address || 'Diagnostic Lab Facility'
+        name: matchingRoute?.destinationLab?.name || (matchingRoute as any)?.clientName || '',
+        address: matchingRoute?.destinationLab?.address || ''
       };
 
       targetTask = {
         id: canonicalTaskId,
         date: todayStr,
         scheduledDate: todayStr,
-        timeSlot: stopItem.timeSlot,
-        routeId: matchingRoute?.id || stopItem.routeId,
-        routeName: matchingRoute?.name || stopItem.routeName,
+        timeSlot: stopItem.timeSlot || '',
+        routeId: matchingRoute?.id || stopItem.routeId || '',
+        routeName: matchingRoute?.name || stopItem.routeName || '',
         clientId: client.id,
         clientName: client.name,
         riderId: activeRider.id,
@@ -1048,15 +1029,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         status: 'started',
         currentStopIndex: stopItem.stopIndex || 0,
         pickupLocation: {
-          name: rawRouteStops[0]?.name || client.name,
-          address: rawRouteStops[0]?.address || client.address,
+          name: rawRouteStops[0]?.name || client.name || '',
+          address: rawRouteStops[0]?.address || client.address || '',
           lat: rawRouteStops[0]?.lat || 19.1363,
           lng: rawRouteStops[0]?.lng || 72.8277,
           area: ''
         },
         deliveryLocation: {
-          name: matchingRoute?.destinationLab?.name || client.name,
-          address: matchingRoute?.destinationLab?.address || client.address,
+          name: matchingRoute?.destinationLab?.name || client.name || '',
+          address: matchingRoute?.destinationLab?.address || client.address || '',
           lat: matchingRoute?.destinationLab?.lat || 19.1860,
           lng: matchingRoute?.destinationLab?.lng || 72.8485,
           area: ''
@@ -1073,16 +1054,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           status: sp.status,
           sampleCount: sp.sampleCount || 0,
           specimenCount: sp.sampleCount || 0,
-          contactPerson: sp.contactPerson,
-          phone: sp.phone
+          contactPerson: sp.contactPerson || '',
+          phone: sp.phone || ''
         })),
         destination: {
-          name: matchingRoute?.destinationLab?.name || client.name,
-          address: matchingRoute?.destinationLab?.address || client.address,
+          name: matchingRoute?.destinationLab?.name || client.name || '',
+          address: matchingRoute?.destinationLab?.address || client.address || '',
           lat: matchingRoute?.destinationLab?.lat || 19.1860,
           lng: matchingRoute?.destinationLab?.lng || 72.8485,
-          receiverName: matchingRoute?.destinationLab?.contactPerson || 'Lab Pathologist',
-          notes: 'Specimen cold-chain transport'
+          receiverName: matchingRoute?.destinationLab?.contactPerson || '',
+          notes: ''
         },
         isDelayed: false,
         delayMinutes: 0,
@@ -1146,42 +1127,27 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
       const client = StorageService.getClientById(route?.clientId || '') || {
         id: route?.clientId || '',
-        name: route?.destinationLab?.name || (route as any)?.clientName || 'Lifecare Central Lab',
-        address: route?.destinationLab?.address || 'Central Diagnostic Lab Facility'
+        name: route?.destinationLab?.name || (route as any)?.clientName || '',
+        address: route?.destinationLab?.address || ''
       };
 
       const rawRouteStops = (route?.stops && route.stops.length > 0)
         ? route.stops
-        : [
-            {
-              id: 'stop-1',
-              name: 'Dr. Mehta Clinic / Collection Center 1',
-              address: 'Shop 4, Swami Vivekananda Rd, Andheri West',
-              lat: 19.1287852,
-              lng: 72.8294183
-            },
-            {
-              id: 'stop-2',
-              name: 'Apex Diagnostic Collection Point',
-              address: 'G-12, Lokhandwala Complex, Andheri West',
-              lat: 19.1412,
-              lng: 72.8299
-            }
-          ];
+        : [];
 
       const stopsProgress: StopProgress[] = rawRouteStops.map((s: any, idx: number) => ({
         stopId: s.id || `stop-${idx + 1}`,
         id: s.id || `stop-${idx + 1}`,
-        stopName: s.name || s.stopName || `Stop ${idx + 1}`,
-        name: s.name || s.stopName || `Stop ${idx + 1}`,
-        address: s.address || 'Collection Facility',
+        stopName: s.name || s.stopName || '',
+        name: s.name || s.stopName || '',
+        address: s.address || '',
         lat: s.lat || 19.1287852,
         lng: s.lng || 72.8294183,
-        contactPerson: s.contactPerson || 'Point of Contact',
+        contactPerson: s.contactPerson || '',
         phone: s.phone || '',
         status: 'picked_up',
-        sampleCount: s.sampleCount || 5,
-        specimenCount: s.sampleCount || 5
+        sampleCount: s.sampleCount || 0,
+        specimenCount: s.sampleCount || 0
       }));
 
       targetTask = {
@@ -1190,7 +1156,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         scheduledDate: todayStr,
         timeSlot: slot,
         routeId: route?.id || '',
-        routeName: route?.name || 'Assigned Route',
+        routeName: route?.name || '',
         clientId: client.id,
         clientName: client.name,
         riderId: activeRider.id,
@@ -1200,15 +1166,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         status: 'in_transit',
         currentStopIndex: stopsProgress.length,
         pickupLocation: {
-          name: rawRouteStops[0]?.name || client.name,
-          address: rawRouteStops[0]?.address || client.address,
+          name: rawRouteStops[0]?.name || client.name || '',
+          address: rawRouteStops[0]?.address || client.address || '',
           lat: rawRouteStops[0]?.lat || 19.1363,
           lng: rawRouteStops[0]?.lng || 72.8277,
           area: ''
         },
         deliveryLocation: {
-          name: route?.destinationLab?.name || client.name,
-          address: route?.destinationLab?.address || client.address,
+          name: route?.destinationLab?.name || client.name || '',
+          address: route?.destinationLab?.address || client.address || '',
           lat: route?.destinationLab?.lat || 19.1860,
           lng: route?.destinationLab?.lng || 72.8485,
           area: ''

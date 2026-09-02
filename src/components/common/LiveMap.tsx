@@ -76,9 +76,9 @@ const createDestinationIcon = (name?: string) => {
     className: 'custom-dest-marker',
     html: `
       <div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
-        <div style="background: #047857; color: white; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.25);">
-          ${name || 'Central Diagnostic Lab'}
-        </div>
+        ${name ? `<div style="background: #047857; color: white; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.25);">
+          ${name}
+        </div>` : ''}
         <div style="background: #059669; width: 30px; height: 30px; border-radius: 8px; border: 2.5px solid white; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 3px 8px rgba(0,0,0,0.3); margin-top: 2px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
@@ -306,8 +306,8 @@ export const LiveMap: React.FC<LiveMapProps> = ({
 
       destMarker.bindPopup(`
         <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 180px; padding: 4px;">
-          <div style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Central Lab</div>
-          <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${destination.name || 'Central Diagnostic Lab'}</div>
+          <div style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Destination Lab</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;">${destination.name || ''}</div>
           ${destination.address ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">${destination.address}</div>` : ''}
           <div style="font-size: 10px; font-weight: 700; color: #059669; margin-top: 4px;">Final Intake Destination</div>
         </div>

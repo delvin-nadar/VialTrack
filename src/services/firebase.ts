@@ -262,7 +262,7 @@ export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, on
 // Helper to normalize and unify tasks and trips across Admin, Rider, and Client schemas
 export function formatUnifiedTask(id: string, data: any): PickupTask {
   const clientLabId = data.clientLabId || data.clientId || '';
-  const clientLabName = data.clientLabName || data.clientName || 'Diagnostic Facility';
+  const clientLabName = data.clientLabName || data.clientName || '';
 
   const clientLat = Array.isArray(data.clientCoords) && data.clientCoords.length === 2
     ? Number(data.clientCoords[0])
@@ -298,16 +298,16 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     const sampleCount = Number(prog.sampleCount ?? prog.specimenCount ?? s.sampleCount ?? s.specimenCount ?? 0);
     const status = prog.status || s.status || 'pending';
     const coldBoxTemp = prog.coldBoxTemp !== undefined ? Number(prog.coldBoxTemp) : (s.coldBoxTemp !== undefined ? Number(s.coldBoxTemp) : undefined);
-    const arrivedAt = prog.arrivedAt || s.arrivedAt;
-    const pickedUpAt = prog.pickedUpAt || s.pickedUpAt;
-    const completedAt = prog.completedAt || s.completedAt;
+    const arrivedAt = prog.arrivedAt || s.arrivedAt || '';
+    const pickedUpAt = prog.pickedUpAt || s.pickedUpAt || '';
+    const completedAt = prog.completedAt || s.completedAt || '';
     const notes = prog.notes || s.notes || '';
-    const photoTimestamp = prog.photoTimestamp || s.photoTimestamp;
+    const photoTimestamp = prog.photoTimestamp || s.photoTimestamp || '';
     const photoLocation = prog.photoLocation || s.photoLocation;
 
     return {
-      stopName: s.stopName || s.name || prog.stopName || prog.name || `Collection Stop ${idx + 1}`,
-      address: s.address || prog.address || 'Diagnostic Collection Point',
+      stopName: s.stopName || s.name || prog.stopName || prog.name || '',
+      address: s.address || prog.address || '',
       lat: sLat,
       lng: sLng,
       specimenCount: sampleCount,
@@ -315,7 +315,7 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
       status: status,
       id: sId,
       stopId: sId,
-      contactPerson: s.contactPerson || prog.contactPerson || 'Point of Contact',
+      contactPerson: s.contactPerson || prog.contactPerson || '',
       phone: s.phone || prog.phone || '',
       photoUrl,
       photo2Url,
@@ -333,11 +333,11 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
 
   const stopsProgress: any[] = unifiedStops.map((s: any, idx: number) => ({
     stopId: s.id || s.stopId || `stop-${idx + 1}`,
-    stopName: s.stopName,
-    address: s.address,
+    stopName: s.stopName || '',
+    address: s.address || '',
     lat: s.lat,
     lng: s.lng,
-    contactPerson: s.contactPerson || 'Point of Contact',
+    contactPerson: s.contactPerson || '',
     phone: s.phone || '',
     status: s.status === 'picked_up' || s.status === 'completed' || s.status === 'arrived' || s.status === 'no_sample'
       ? (s.status === 'completed' ? 'picked_up' : s.status)
@@ -348,10 +348,10 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     handoverPhotoUrl: s.handoverPhotoUrl || s.photo2Url || s.selfieUrl || '',
     selfieUrl: s.selfieUrl || s.photo2Url || s.handoverPhotoUrl || '',
     coldBoxTemp: s.coldBoxTemp,
-    arrivedAt: s.arrivedAt,
-    pickedUpAt: s.pickedUpAt,
-    completedAt: s.completedAt,
-    photoTimestamp: s.photoTimestamp,
+    arrivedAt: s.arrivedAt || '',
+    pickedUpAt: s.pickedUpAt || '',
+    completedAt: s.completedAt || '',
+    photoTimestamp: s.photoTimestamp || '',
     photoLocation: s.photoLocation,
     notes: s.notes || ''
   }));
@@ -368,20 +368,20 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     '';
 
   const destinationObj = {
-    name: data.destination?.name || data.deliveryLocation?.name || clientLabName,
+    name: data.destination?.name || data.deliveryLocation?.name || clientLabName || '',
     address: data.destination?.address || data.deliveryLocation?.address || data.clientAddress || '',
     lat: data.destination?.lat || data.deliveryLocation?.lat || clientLat,
     lng: data.destination?.lng || data.deliveryLocation?.lng || clientLng,
     status: data.destination?.status || (data.status === 'delivered' || data.status === 'completed' ? 'delivered' : 'pending'),
-    arrivedAt: data.destination?.arrivedAt || data.finalDrop?.arrivedAt,
-    deliveredAt: data.destination?.deliveredAt || data.destination?.completedAt || data.completedAt || data.deliveryTimestamp || data.finalDrop?.deliveredAt,
+    arrivedAt: data.destination?.arrivedAt || data.finalDrop?.arrivedAt || '',
+    deliveredAt: data.destination?.deliveredAt || data.destination?.completedAt || data.completedAt || data.deliveryTimestamp || data.finalDrop?.deliveredAt || '',
     receiverName: data.destination?.receiverName || data.receiverName || data.intakeReceiver || data.finalDrop?.receiverName || '',
     receiverDesignation: data.destination?.receiverDesignation || '',
     dropPhotoUrl: destinationDropPhoto,
     handoverPhotoUrl: destinationDropPhoto,
     coldBoxTempAtDrop: data.destination?.coldBoxTempAtDrop !== undefined ? data.destination.coldBoxTempAtDrop : (data.finalDrop?.coldBoxTemp !== undefined ? data.finalDrop.coldBoxTemp : (data.handoverTemperature !== undefined ? data.handoverTemperature : data.chillerTemp)),
     totalVialsHandedOver: data.destination?.totalVialsHandedOver !== undefined ? data.destination.totalVialsHandedOver : (data.finalDrop?.totalVials !== undefined ? data.finalDrop.totalVials : data.totalVials),
-    notes: data.destination?.notes || data.finalDrop?.notes || data.taskNotes || 'Specimen cold-chain transport'
+    notes: data.destination?.notes || data.finalDrop?.notes || data.taskNotes || ''
   };
 
   const isDeliveredOrCompleted =
@@ -405,16 +405,16 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     stops: unifiedStops,
     scheduledDate,
     date: scheduledDate,
-    timeSlot: data.timeSlot || '09:00',
-    routeId: data.routeId || `route-${clientLabId || 'direct'}`,
-    routeName: data.routeName || `${clientLabName} Route`,
+    timeSlot: data.timeSlot || '',
+    routeId: data.routeId || '',
+    routeName: data.routeName || '',
     clientId: clientLabId,
     clientName: clientLabName,
     riderVehicle: data.riderVehicle || data.vehicleNumber || '',
     status: resolvedStatus,
-    activeRiderId: data.activeRiderId || data.riderId,
-    activeRiderName: data.activeRiderName || data.riderName,
-    currentDestinationStop: data.currentDestinationStop || (stopsProgress[0]?.stopName),
+    activeRiderId: data.activeRiderId || data.riderId || '',
+    activeRiderName: data.activeRiderName || data.riderName || '',
+    currentDestinationStop: data.currentDestinationStop || (stopsProgress[0]?.stopName) || '',
     tripStartedAt: data.tripStartedAt,
     currentStopIndex: data.currentStopIndex || 0,
     stopsProgress,
@@ -477,14 +477,14 @@ export const CloudSync = {
     // 1. Format unified trip stops schema
     const tripStops = payload.stops.map((s: any, idx: number) => ({
       stopIndex: idx + 1,
-      name: s.name || s.stopName || `Stop ${idx + 1}`,
-      address: s.address || 'Diagnostic Collection Point',
+      name: s.name || s.stopName || '',
+      address: s.address || '',
       coords: [Number(s.lat || 19.1287852), Number(s.lng || 72.8294183)] as [number, number],
       specimenCount: Number(s.specimenCount ?? s.sampleCount ?? 0),
       status: 'pending' as 'pending' | 'in_progress' | 'completed',
       id: s.id || s.stopId || `stop-${idx + 1}`,
       stopId: s.stopId || s.id || `stop-${idx + 1}`,
-      contactPerson: s.contactPerson || 'Point of Contact',
+      contactPerson: s.contactPerson || '',
       phone: s.phone || '',
       notes: s.notes || ''
     }));
@@ -492,13 +492,13 @@ export const CloudSync = {
     // Exact Unified Trip document model
     const tripDocPayload = {
       id: tripId,
-      clientId: payload.client.id,
-      clientName: payload.client.name,
+      clientId: payload.client.id || '',
+      clientName: payload.client.name || '',
       clientEmail: (payload.client as any).email || '',
       clientCoords: [clientLat, clientLng] as [number, number],
-      riderId: payload.rider.id,
-      riderName: payload.rider.name,
-      riderPhone: payload.rider.phone,
+      riderId: payload.rider.id || '',
+      riderName: payload.rider.name || '',
+      riderPhone: payload.rider.phone || '',
       riderCoords: [riderLat, riderLng] as [number, number],
       stops: tripStops,
       currentStopIndex: 0,
@@ -507,9 +507,9 @@ export const CloudSync = {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       // Additional metadata for compatibility
-      routeId: payload.route?.id || `route-${payload.client.id}`,
-      routeName: payload.route?.name || `${payload.client.name} Collection Loop`,
-      timeSlot: payload.timeSlot || '09:00',
+      routeId: payload.route?.id || '',
+      routeName: payload.route?.name || '',
+      timeSlot: payload.timeSlot || '',
       date: todayStr,
       riderVehicle: payload.rider.vehicleNumber || '',
       isDelayed: false,
@@ -778,7 +778,7 @@ export const CloudSync = {
     try {
       const nowStr = new Date().toISOString();
       const dropObj = {
-        name: dropData?.destinationName || 'Central Diagnostic Processing Lab',
+        name: dropData?.destinationName || '',
         address: dropData?.destinationAddress || '',
         status: 'delivered',
         completedAt: nowStr,

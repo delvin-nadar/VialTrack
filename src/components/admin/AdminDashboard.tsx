@@ -500,7 +500,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-[11px] text-slate-500">
                   Tracking round:{' '}
                   <span className="font-semibold text-slate-800">
-                    {activeTask ? `${activeTask.clientName || 'Diagnostic Lab'} (#${activeTask.id.slice(-6)})` : 'All Fleet Runners'}
+                    {activeTask ? `${activeTask.clientName || ''} (#${activeTask.id.slice(-6)})` : 'All Fleet Runners'}
                   </span>
                 </p>
               </div>
@@ -729,7 +729,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900 text-xs sm:text-sm">
-                              {task.clientName || task.clientLabName || 'Diagnostic Client'}
+                              {task.clientName || task.clientLabName || ''}
                             </span>
                             {task.timeSlot && (
                               <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200">
@@ -737,9 +737,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            {task.routeName || 'Diagnostic Collection Loop'}
-                          </div>
+                          {task.routeName && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              {task.routeName}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1.5">
@@ -798,7 +800,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         : 'bg-slate-300'
                                     }`}
                                   />
-                                  <span className="truncate">{stop.stopName || stop.name || `Stop ${idx + 1}`}</span>
+                                  <span className="truncate">{stop.stopName || stop.name || ''}</span>
                                 </span>
                                 <span className="font-mono text-[10px] text-slate-500 shrink-0">
                                   {stop.sampleCount || (stop as any).specimenCount || 0} Vials

@@ -610,9 +610,9 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                 <div class="w-8 h-8 rounded-lg bg-emerald-700 ring-2 ring-emerald-300 text-white font-bold text-xs flex items-center justify-center shadow-lg transform transition-transform group-hover:scale-115">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z"/><path d="M8 14h8"/><path d="M12 10v8"/></svg>
                 </div>
-                <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-emerald-950 text-emerald-200 text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-emerald-800 whitespace-nowrap">
+                ${shortDeliveryName ? `<div class="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-emerald-950 text-emerald-200 text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-emerald-800 whitespace-nowrap">
                   ${shortDeliveryName}
-                </div>
+                </div>` : ''}
               </div>
             `,
             iconSize: [32, 32],
@@ -626,11 +626,11 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
 
           dMarker.bindPopup(`
             <div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 210px; padding: 4px;">
-              <span style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Central Diagnostic Intake Lab</span>
+              <span style="font-size: 10px; font-weight: 800; color: #047857; text-transform: uppercase;">Intake Lab Destination</span>
               <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">${deliveryName}</div>
-              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${t.deliveryLocation.address || 'Mumbai'}</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${t.deliveryLocation.address || ''}</div>
               <div style="margin-top: 6px; font-size: 11px; color: #334155;">
-                <b>Expected Intake:</b> ${t.timeSlot || '14:00'}<br/>
+                ${t.timeSlot ? `<b>Expected Intake:</b> ${t.timeSlot}<br/>` : ''}
                 <b>Cold Chain SLA:</b> 2.0°C – 8.0°C Verified
               </div>
             </div>
@@ -1132,7 +1132,7 @@ export const MumbaiMapDashboard: React.FC<MumbaiMapDashboardProps> = ({
                           </div>
                           <div className="flex items-center gap-1.5 text-slate-700">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span className="font-semibold">To:</span> {t.deliveryLocation?.name || 'Central Lab'}
+                            <span className="font-semibold">To:</span> {t.deliveryLocation?.name || t.destination?.name || ''}
                           </div>
                         </div>
 
