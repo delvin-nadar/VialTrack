@@ -28,6 +28,7 @@ import {
   User,
   UserCredential
 } from 'firebase/auth';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { UserRole, LocationPing, PickupBoy, PickupTask, Client, AttendanceRecord, Route } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -126,8 +127,34 @@ export const db = (() => {
   }
 })();
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 export { GeoPoint };
+
+/**
+ * Photo proofs (specimen vials, rider selfies, lab handover slips) were previously stored as
+ * full base64 JPEG strings directly on the Firestore task/trip document. Firestore hard-caps a
+ * single document at 1 MiB — once a round has a couple of stops, each carrying two ~200-400KB
+ * base64 photos, the document write silently exceeds that cap and Firestore rejects it. Because
+ * every write here is wrapped in try/catch that only console.warns, that failure was invisible:
+ * the photo looked fine in the app right after capture (it was still sitting in local React
+ * state) but was never actually persisted, so it vanished on reload / for other viewers.
+ *
+ * The fix: upload the photo bytes to Firebase Cloud Storage instead, and store only the short
+ * https download URL string on the Firestore document. If the input is already an https URL
+ * (e.g. re-confirming a stop that already has a saved photo) it's returned unchanged — nothing
+ * to upload. Throws on failure so callers can surface the error instead of silently losing data.
+ */
+export async function uploadPhotoToStorage(dataUrl: string, path: string): Promise<string> {
+  if (!dataUrl) return dataUrl;
+  if (!dataUrl.startsWith('data:')) {
+    // Already a hosted URL (previously uploaded) - nothing to do.
+    return dataUrl;
+  }
+  const fileRef = storageRef(storage, path);
+  await uploadString(fileRef, dataUrl, 'data_url');
+  return await getDownloadURL(fileRef);
+}
 
 export enum OperationType {
   CREATE = 'create',
