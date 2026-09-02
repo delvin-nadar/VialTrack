@@ -40,11 +40,13 @@ interface ManageClientsProps {
 
 export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, onRefresh }) => {
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'clients' | 'all_routes'>('clients');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(clients[0]?.id || null);
   const [isAddingClient, setIsAddingClient] = useState(false);
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [isAddingRoute, setIsAddingRoute] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [routeSearchQuery, setRouteSearchQuery] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -251,29 +253,176 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setClientForm({
-              name: '',
-              contactPerson: '',
-              phone: '',
-              email: '',
-              address: '',
-              lat: 19.1287852,
-              lng: 72.8294183,
-              active: true,
-              billingRatePerPickup: 0
-            });
-            setIsAddingClient(true);
-            setIsEditingClient(false);
-          }}
-          className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Register New Client</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('clients')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'clients'
+                  ? 'bg-white text-sky-800 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Client Profiles & Builder
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('all_routes')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'all_routes'
+                  ? 'bg-white text-sky-800 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-sky-700" />
+              <span>All Master Routes ({routes.length})</span>
+            </button>
+          </div>
+
+          <button
+            onClick={() => {
+              setClientForm({
+                name: '',
+                contactPerson: '',
+                phone: '',
+                email: '',
+                address: '',
+                lat: 19.1287852,
+                lng: 72.8294183,
+                active: true,
+                billingRatePerPickup: 0
+              });
+              setIsAddingClient(true);
+              setIsEditingClient(false);
+            }}
+            className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register New Client</span>
+          </button>
+        </div>
       </div>
 
+      {viewMode === 'all_routes' ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-sky-700" />
+                <span>All Master Routes in System ({routes.length})</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Overview of all collection routes across every hospital and laboratory. Delete or edit any route here.
+              </p>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search routes by name or client..."
+                value={routeSearchQuery}
+                onChange={(e) => setRouteSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-sky-600 shadow-2xs"
+              />
+            </div>
+          </div>
+
+          {routes.length === 0 ? (
+            <div className="p-12 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs">
+              No master routes created yet. Register a client or add routes from the Client Profiles tab.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {routes
+                .filter((r) => {
+                  const q = (routeSearchQuery || '').toLowerCase();
+                  const clientObj = clients.find((c) => c.id === r.clientId);
+                  return (
+                    (r.name || '').toLowerCase().includes(q) ||
+                    (r.description || '').toLowerCase().includes(q) ||
+                    (clientObj?.name || '').toLowerCase().includes(q)
+                  );
+                })
+                .map((route) => {
+                  const clientObj = clients.find((c) => c.id === route.clientId);
+                  const stopsCount = Array.isArray(route.stops) ? route.stops.length : 0;
+                  const slots = Array.isArray(route.timeSlots) && route.timeSlots.length > 0 ? route.timeSlots : ['10:00 AM'];
+
+                  return (
+                    <div
+                      key={route.id}
+                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-4 shadow-xs space-y-3 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4 text-sky-700 shrink-0" />
+                            <span>{route.name}</span>
+                          </h4>
+                          <span className="text-[11px] text-slate-500 block mt-0.5">
+                            Client: <strong className="text-slate-700">{clientObj?.name || (route as any).clientName || 'Unassigned / Independent'}</strong>
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRoute(route.id, route.name)}
+                          className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                          title={`Delete route "${route.name}"`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 font-semibold">Total Stops:</span>
+                          <span className="font-bold text-slate-800">{stopsCount} collection stop(s)</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 font-semibold">Destination Lab:</span>
+                          <span className="font-semibold text-slate-800 truncate max-w-[150px]">
+                            {route.destinationLab?.name || clientObj?.name || 'Central Lab'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 font-semibold">Time Slots:</span>
+                          <span className="font-mono font-bold text-sky-700">{slots.join(', ')}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (route.clientId) {
+                              setSelectedClientId(route.clientId);
+                            }
+                            setViewMode('clients');
+                          }}
+                          className="w-full py-1.5 px-3 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold rounded-lg border border-sky-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>View / Edit Stops</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRoute(route.id, route.name)}
+                          className="py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 transition-colors flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-2.5">
           <div className="flex items-center justify-between px-1">
@@ -455,6 +604,7 @@ export const ManageClients: React.FC<ManageClientsProps> = ({ clients, routes, o
           )}
         </div>
       </div>
+      )}
 
       {(isAddingClient || isEditingClient) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">

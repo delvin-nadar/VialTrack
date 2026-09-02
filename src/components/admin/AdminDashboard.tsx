@@ -99,94 +99,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, []);
 
   const allTasks = useMemo(() => {
-    // 1. Gather all active / existing Firestore tasks
-    const existing = firestoreTasks.length > 0 ? firestoreTasks : (initialTasks || []);
-
-    // 2. Synthesize daily scheduled tasks for all assigned rider routes that don't yet have an active trip today!
-    const scheduledFromRiders: PickupTask[] = [];
-
-    (riders || []).forEach((rider) => {
-      const assignedRouteIds = Array.isArray(rider?.assignedRouteIds) ? rider.assignedRouteIds : [];
-      assignedRouteIds.forEach((routeId) => {
-        const routeObj = routes.find((r) => r.id === routeId);
-        if (!routeObj) return;
-
-        // Check if there is already an active/existing task for this rider and route
-        const alreadyHasTask = existing.some(
-          (t) => t.routeId === routeId || (t.riderId === rider.id && (t.routeName === routeObj.name || (t as any).route_name === routeObj.name))
-        );
-
-        if (!alreadyHasTask) {
-          const clientObj = clients.find((c) => c.id === routeObj.clientId) || {
-            id: routeObj.clientId || 'client-default',
-            name: routeObj.name?.split('-')[0]?.trim() || 'Diagnostic Client Lab',
-            code: 'CL',
-            address: routeObj.destinationLab?.address || '',
-            lat: routeObj.destinationLab?.lat || 19.1287,
-            lng: routeObj.destinationLab?.lng || 72.8294,
-            phone: '',
-            contactPerson: ''
-          };
-
-          const scheduledTask: PickupTask = {
-            id: `scheduled-${rider.id}-${routeObj.id}`,
-            date: new Date().toISOString().split('T')[0],
-            routeId: routeObj.id,
-            routeName: routeObj.name,
-            clientName: clientObj.name,
-            clientId: clientObj.id,
-            riderId: rider.id,
-            riderName: rider.name,
-            riderPhone: rider.phone,
-            riderVehicle: rider.vehicleNumber,
-            timeSlot: routeObj.timeSlots?.[0] || '10:00 AM - 12:00 PM',
-            status: rider.isCheckedIn ? 'assigned' : 'upcoming',
-            currentStopIndex: 0,
-            temperature: 4.0,
-            coldBoxTemp: 4.0,
-            issueFlags: [],
-            stops: (routeObj.stops || []).map((s, idx) => ({
-              stopId: s.id || `stop-${idx}`,
-              stopName: s.name,
-              address: s.address,
-              lat: s.lat,
-              lng: s.lng,
-              contactPerson: s.contactPerson || 'Reception / Phlebo Counter',
-              phone: s.phone || '',
-              status: 'pending' as const,
-              sampleCount: 0,
-              specimenCount: 0,
-              vials: []
-            })),
-            stopsProgress: (routeObj.stops || []).map((s, idx) => ({
-              stopId: s.id || `stop-${idx}`,
-              stopName: s.name,
-              address: s.address,
-              lat: s.lat,
-              lng: s.lng,
-              contactPerson: s.contactPerson || 'Reception / Phlebo Counter',
-              phone: s.phone || '',
-              status: 'pending' as const,
-              sampleCount: 0,
-              vials: []
-            })),
-            destination: {
-              name: routeObj.destinationLab?.name || clientObj.name || 'Central Diagnostic Lab',
-              address: routeObj.destinationLab?.address || clientObj.address || '',
-              lat: routeObj.destinationLab?.lat || clientObj.lat || 19.1300,
-              lng: routeObj.destinationLab?.lng || clientObj.lng || 72.8350
-            },
-            isDelayed: false,
-            createdAt: new Date().toISOString()
-          };
-
-          scheduledFromRiders.push(scheduledTask);
-        }
-      });
-    });
-
-    return [...existing, ...scheduledFromRiders];
-  }, [firestoreTasks, initialTasks, riders, routes, clients]);
+    // Return only actual dispatched tasks from Firestore (or initial tasks if empty)
+    return firestoreTasks.length > 0 ? firestoreTasks : (initialTasks || []);
+  }, [firestoreTasks, initialTasks]);
 
   useEffect(() => {
     if (allTasks.length > 0) {
@@ -856,18 +771,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>View on Map</span>
                           </button>
 
-                          {isScheduledOnly && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleForceDispatchScheduled(task, e)}
-                              className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-bold shadow-2xs flex items-center gap-1 transition-colors cursor-pointer"
-                              title="Force dispatch / launch this round now"
-                            >
-                              <Play className="w-3 h-3" />
-                              <span>Dispatch</span>
-                            </button>
-                          )}
-
                           <button
                             type="button"
                             onClick={(e) => handleOpenReassign(task, e)}
@@ -877,31 +780,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>Reassign</span>
                           </button>
 
-                          {!isScheduledOnly && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenProof(task);
-                              }}
-                              className="px-2 py-1 bg-slate-100 hover:bg-sky-50 text-slate-600 hover:text-sky-900 font-semibold rounded text-[10px] border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
-                            >
-                              <Eye className="w-3 h-3 text-slate-500" />
-                              <span>Proof</span>
-                            </button>
-                          )}
-                        </div>
-
-                        {!isScheduledOnly && (
                           <button
                             type="button"
-                            onClick={(e) => handleDeleteTask(task.id, e)}
-                            title="Cancel / Delete Task"
-                            className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenProof(task);
+                            }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-sky-50 text-slate-600 hover:text-sky-900 font-semibold rounded text-[10px] border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Eye className="w-3 h-3 text-slate-500" />
+                            <span>Proof</span>
                           </button>
-                        )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteTask(task.id, e)}
+                          title="Cancel / Delete Task"
+                          className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   );
