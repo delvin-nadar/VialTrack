@@ -1226,8 +1226,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const stopToUpdate = safeStops[targetIdx] || safeStops[0] || { stopName: 'Collection Point' };
     const stopName = stopToUpdate.stopName || stopToUpdate.name || 'Collection Stop';
 
-    const finalSamplePhoto = stopPhoto;
-    const finalSelfiePhoto = stopPhoto2 || stopPhoto;
+    const finalSamplePhoto = stopPhoto || stopToUpdate.photoUrl || (stopToUpdate as any).photo;
+    const finalSelfiePhoto = stopPhoto2 || (stopToUpdate as any).handoverPhotoUrl || (stopToUpdate as any).photo2Url || (stopToUpdate as any).selfieUrl || finalSamplePhoto;
 
     const stopStatus: StopStatus = pickupRemarkType === 'No Sample' ? 'no_sample' : 'picked_up';
 
@@ -1243,15 +1243,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         return {
           ...s,
           status: stopStatus,
-          pickedUpAt: new Date().toISOString(),
+          pickedUpAt: s.pickedUpAt || new Date().toISOString(),
           arrivedAt: s.arrivedAt || new Date().toISOString(),
           sampleCount: finalVialCount,
           specimenCount: finalVialCount,
           coldBoxTemp: coldBoxTemp,
-          photoUrl: finalSamplePhoto || undefined,
-          handoverPhotoUrl: finalSelfiePhoto || undefined,
-          photo2Url: finalSelfiePhoto || undefined,
-          selfieUrl: finalSelfiePhoto || undefined,
+          photoUrl: finalSamplePhoto || s.photoUrl || undefined,
+          handoverPhotoUrl: finalSelfiePhoto || (s as any).handoverPhotoUrl || undefined,
+          photo2Url: finalSelfiePhoto || (s as any).photo2Url || undefined,
+          selfieUrl: finalSelfiePhoto || (s as any).selfieUrl || undefined,
           photoTimestamp: new Date().toISOString(),
           photoLocation: { lat: s.lat || 19.2082, lng: s.lng || 72.8398, accuracy: 5 },
           notes: stopNotes,
@@ -1262,7 +1262,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       return s;
     });
 
-    const isAllStopsPicked = updatedStops.every((s) => s.status === 'picked_up' || s.status === 'no_sample' || s.status === 'completed');
+    const isStopComplete = (st: any) =>
+      st.status === 'picked_up' ||
+      st.status === 'completed' ||
+      st.status === 'no_sample' ||
+      (st.sampleCount !== undefined && st.sampleCount > 0 && !!st.pickedUpAt) ||
+      (!!st.photoUrl && st.status !== 'pending');
+
+    const isAllStopsPicked = updatedStops.every((s) => isStopComplete(s));
 
     const updatedTask: PickupTask = {
       ...currentTask,
@@ -1332,6 +1339,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     setVialCount(1);
     setPickupRemarkType('Collected sample');
     setPickupCustomRemark('');
+
+    // Advance to next pending stop index automatically
+    const nextPendingIndex = updatedStops.findIndex((st) => !isStopComplete(st));
+    if (nextPendingIndex !== -1) {
+      setCurrentStopIndex(nextPendingIndex);
+    }
     onRefresh();
 
     const notifTitle =
@@ -1815,10 +1828,18 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <div className="space-y-2">
               {(() => {
                 const safeStops = activeTask.stopsProgress || activeTask.stops || [];
-                const firstPendingIdx = safeStops.findIndex((s) => s.status !== 'picked_up');
+                const isStopComplete = (st: any) =>
+                  st && (
+                    st.status === 'picked_up' ||
+                    st.status === 'completed' ||
+                    st.status === 'no_sample' ||
+                    (st.sampleCount !== undefined && st.sampleCount > 0 && !!st.pickedUpAt) ||
+                    (!!st.photoUrl && st.status !== 'pending')
+                  );
+                const firstPendingIdx = safeStops.findIndex((s) => !isStopComplete(s));
 
                 return safeStops.map((stop, idx) => {
-                  const isPicked = stop.status === 'picked_up';
+                  const isPicked = isStopComplete(stop);
                   const isLocked = !isPicked && firstPendingIdx !== -1 && idx > firstPendingIdx;
                   const isUnlockedActive = !isPicked && (idx === firstPendingIdx || (firstPendingIdx === -1 && idx === 0));
                   const isCurrent = (currentStopIndex === idx || isUnlockedActive) && !isPicked && !isLocked;
@@ -1826,7 +1847,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
                   return (
                     <div
-                      key={stop.stopId}
+                      key={stop.stopId || `stop-key-${idx}`}
                       className={`p-3 sm:p-4 rounded-xl border transition-all ${
                         isPicked
                           ? 'bg-emerald-50/50 border-emerald-200'
@@ -1861,7 +1882,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                           <div>
                             <div className="flex items-center gap-2">
                               <h4 className={`font-bold text-xs sm:text-sm ${isLocked ? 'text-slate-600' : 'text-slate-900'}`}>
-                                {stop.stopName}
+                                {stop.stopName || stop.name}
                               </h4>
                               {isUnlockedActive && (
                                 <span className="px-2 py-0.2 bg-sky-100 text-sky-800 text-[10px] font-bold rounded-full border border-sky-300 animate-pulse">
@@ -1877,7 +1898,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
                             {isLocked ? (
                               <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                                <span>🔒 Details locked until Stop {firstPendingIdx + 1} ({activeTask.stopsProgress[firstPendingIdx]?.stopName}) is completed</span>
+                                <span>🔒 Details locked until Stop {firstPendingIdx + 1} ({activeTask.stopsProgress?.[firstPendingIdx]?.stopName || activeTask.stops?.[firstPendingIdx]?.stopName || 'Previous Stop'}) is completed</span>
                               </p>
                             ) : (
                               <>
@@ -1886,7 +1907,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                                   <span>{stop.address}</span>
                                 </p>
                                 <p className="text-[11px] text-slate-500 mt-1">
-                                  Contact: <span className="font-medium text-slate-800">{stop.contactPerson}</span> ({stop.phone})
+                                  Contact: <span className="font-medium text-slate-800">{stop.contactPerson || 'Coordinator'}</span> ({stop.phone || 'No phone'})
                                 </p>
                               </>
                             )}
@@ -1942,10 +1963,27 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                                   onClick={() => {
                                     if (activeTask?.id) setActiveTaskId(activeTask.id);
                                     setCurrentStopIndex(idx);
-                                    setVialCount(stop.sampleCount || 0);
-                                    setColdBoxTemp(stop.coldBoxTemp || 4.0);
-                                    setStopPhoto(stop.photoUrl || null);
+                                    const existingVials = stop.sampleCount ?? (stop as any).specimenCount ?? 0;
+                                    const existingRemark = (stop as any).remark || (stop.status === 'no_sample' ? 'No Sample' : (existingVials > 0 ? 'Collected sample' : 'Collected sample'));
+
+                                    if (existingRemark === 'No Sample' || stop.status === 'no_sample') {
+                                      setPickupRemarkType('No Sample');
+                                      setPickupCustomRemark('');
+                                      setVialCount(0);
+                                    } else if (typeof existingRemark === 'string' && existingRemark.startsWith('Other')) {
+                                      setPickupRemarkType('Other');
+                                      setPickupCustomRemark(existingRemark.replace(/^Other:?\s*/i, ''));
+                                      setVialCount(existingVials);
+                                    } else {
+                                      setPickupRemarkType('Collected sample');
+                                      setPickupCustomRemark('');
+                                      setVialCount(existingVials > 0 ? existingVials : 1);
+                                    }
+
+                                    setColdBoxTemp(stop.coldBoxTemp ?? 4.0);
+                                    setStopPhoto(stop.photoUrl || (stop as any).photo || null);
                                     setStopPhoto2((stop as any).handoverPhotoUrl || (stop as any).photo2Url || (stop as any).selfieUrl || null);
+                                    setPickupFormError(null);
                                     setIsProcessingStop(true);
                                   }}
                                   className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-98"
@@ -1956,7 +1994,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                               ) : (
                                 <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-md border border-emerald-200 flex items-center gap-1">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                                  <span>{stop.sampleCount ?? 0} Vials Collected</span>
+                                  <span>{stop.sampleCount ?? (stop as any).specimenCount ?? 0} Vials Collected</span>
                                 </span>
                               )}
                             </>
@@ -2023,7 +2061,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   <span>Upload 2-Photo Proof & Confirm Pickup</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  {activeTask?.stopsProgress[currentStopIndex]?.stopName}
+                  {activeTask?.stopsProgress?.[currentStopIndex]?.stopName || activeTask?.stops?.[currentStopIndex]?.stopName || (activeTask?.stops?.[currentStopIndex] as any)?.name || 'Collection Stop'}
                 </p>
               </div>
               <button
