@@ -558,9 +558,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   // Find currently active task strictly from this rider's tasks
   const activeTask = useMemo(() => {
     // 1. Explicitly selected task if not delivered
-    const explicit = todayRiderTasks.find((t) => t.id === activeTaskId);
-    if (explicit && explicit.status !== 'delivered' && (explicit.destination as any)?.status !== 'delivered') {
-      return explicit;
+    const allKnownTasks = [...liveTasks, ...todayRiderTasks, ...tasks, ...StorageService.getTasks()];
+    if (activeTaskId) {
+      const explicit = allKnownTasks.find((t) => t.id === activeTaskId);
+      if (explicit && explicit.status !== 'delivered' && (explicit.destination as any)?.status !== 'delivered') {
+        return explicit;
+      }
+      if (explicit) return explicit;
     }
     // 2. Any active in-progress task (started, at_stop, picked_up, in_transit)
     const inProgress = todayRiderTasks.find((t) =>
@@ -576,7 +580,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     // 4. Fallback to first task if all are delivered
     return todayRiderTasks[0] || null;
-  }, [todayRiderTasks, activeTaskId]);
+  }, [todayRiderTasks, activeTaskId, liveTasks, tasks]);
 
   const activeRoute = useMemo(() => {
     if (!activeTask) return assignedRoutes[0] || null;
@@ -1101,6 +1105,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const stopIdx = stopItem.stopIndex !== undefined ? stopItem.stopIndex : 0;
     setCurrentStopIndex(stopIdx);
 
+    setLiveTasks((prev) => {
+      const exists = prev.some((t) => t.id === targetTask!.id);
+      if (exists) {
+        return prev.map((t) => (t.id === targetTask!.id ? targetTask! : t));
+      }
+      return [targetTask!, ...prev];
+    });
+
     const safeStops = targetTask.stopsProgress || targetTask.stops || [];
     const targetStop = safeStops[stopIdx] || safeStops[0];
     setVialCount((targetStop as any)?.sampleCount ?? (targetStop as any)?.specimenCount ?? 0);
@@ -1250,32 +1262,57 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   // Confirm Stop Pickup with 2-Photo Proof (Specimens & Selfie)
   const handleConfirmStopPickup = () => {
-    if (!activeTask) return;
+    const allKnownTasks = [...liveTasks, ...todayRiderTasks, ...tasks, ...StorageService.getTasks()];
+    const currentTask = (activeTaskId ? allKnownTasks.find((t) => t.id === activeTaskId) : null) || activeTask;
 
-    const safeStops = activeTask.stopsProgress || activeTask.stops || [];
-    const stopToUpdate = safeStops[currentStopIndex] || safeStops[0] || { stopName: 'Collection Point' };
+    if (!currentTask) {
+      console.warn("No active task to update in handleConfirmStopPickup");
+      return;
+    }
+
+    const rawStops = (currentTask.stopsProgress && currentTask.stopsProgress.length > 0)
+      ? currentTask.stopsProgress
+      : (currentTask.stops && currentTask.stops.length > 0 ? currentTask.stops : []);
+
+    const safeStops: any[] = rawStops.length > 0 ? [...rawStops] : [{
+      id: 'stop-1',
+      stopId: 'stop-1',
+      stopName: currentTask.clientName || 'Assigned Pickup Point',
+      name: currentTask.clientName || 'Assigned Pickup Point',
+      address: currentTask.pickupLocation?.address || currentTask.destination?.address || 'Mumbai Pickup Point',
+      lat: currentTask.pickupLocation?.lat || 19.1287852,
+      lng: currentTask.pickupLocation?.lng || 72.8294183,
+      status: 'pending',
+      sampleCount: vialCount
+    }];
+
+    const targetIdx = Math.max(0, Math.min(currentStopIndex, safeStops.length - 1));
+    const stopToUpdate = safeStops[targetIdx] || safeStops[0] || { stopName: 'Collection Point' };
+    const stopName = stopToUpdate.stopName || stopToUpdate.name || 'Collection Stop';
+
     const finalSamplePhoto =
       stopPhoto ||
-      generateSampleVialPhoto('vial', `${vialCount} Specimen Vials (${stopToUpdate.stopName})`);
+      generateSampleVialPhoto('vial', `${vialCount} Specimen Vials (${stopName})`);
     const finalSelfiePhoto =
       stopPhoto2 ||
-      generateSampleVialPhoto('selfie', `Rider Location Selfie • ${activeRider.name} (${stopToUpdate.stopName})`);
+      generateSampleVialPhoto('selfie', `Rider Location Selfie • ${activeRider.name} (${stopName})`);
 
     const updatedStops: StopProgress[] = safeStops.map((s, idx) => {
-      if (idx === currentStopIndex) {
+      if (idx === targetIdx) {
         return {
           ...s,
           status: 'picked_up',
           pickedUpAt: new Date().toISOString(),
           arrivedAt: s.arrivedAt || new Date().toISOString(),
           sampleCount: vialCount,
+          specimenCount: vialCount,
           coldBoxTemp: coldBoxTemp,
           photoUrl: finalSamplePhoto,
           handoverPhotoUrl: finalSelfiePhoto,
           photo2Url: finalSelfiePhoto,
           selfieUrl: finalSelfiePhoto,
           photoTimestamp: new Date().toISOString(),
-          photoLocation: { lat: 19.2082, lng: 72.8398, accuracy: 5 },
+          photoLocation: { lat: s.lat || 19.2082, lng: s.lng || 72.8398, accuracy: 5 },
           notes:
             vialCount === 0
               ? 'Verified: 0 samples ready for collection.'
@@ -1288,7 +1325,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const isAllStopsPicked = updatedStops.every((s) => s.status === 'picked_up' || s.status === 'no_sample');
 
     const updatedTask: PickupTask = {
-      ...activeTask,
+      ...currentTask,
       status: isAllStopsPicked ? 'in_transit' : 'at_stop',
       stopsProgress: updatedStops,
       stops: updatedStops.map((sp: any) => ({
@@ -1313,14 +1350,26 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         photoTimestamp: sp.photoTimestamp,
         photoLocation: sp.photoLocation,
         notes: sp.notes || ''
-      }))
+      })),
+      photoUrl: finalSamplePhoto,
+      photo2Url: finalSelfiePhoto,
+      selfieUrl: finalSelfiePhoto,
+      handoverPhotoUrl: finalSelfiePhoto,
+      coldBoxTemp: coldBoxTemp,
+      sampleCount: vialCount
     };
 
-    setLiveTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    setLiveTasks((prev) => {
+      const exists = prev.some((t) => t.id === updatedTask.id);
+      if (exists) {
+        return prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+      }
+      return [updatedTask, ...prev];
+    });
     StorageService.updateTask(updatedTask);
     CloudSync.completeTripStop(
-      activeTask.id,
-      currentStopIndex,
+      currentTask.id,
+      targetIdx,
       updatedStops,
       {
         sampleCount: vialCount,
@@ -1329,7 +1378,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         handoverPhotoUrl: finalSelfiePhoto,
         photo2Url: finalSelfiePhoto,
         selfieUrl: finalSelfiePhoto,
-        notes: vialCount === 0 ? '0 samples collected' : `${vialCount} specimen vials collected`
+        notes: vialCount === 0 ? '0 samples collected' : `${vialCount} specimen vials collected in chiller rack with rider selfie`
       }
     );
     setIsProcessingStop(false);
@@ -1341,7 +1390,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     NotificationService.sendAlert({
       type: 'pickup',
       title: `Sample Picked: ${vialCount} Vials`,
-      message: `${activeRider.name} collected ${vialCount} vials at ${stopToUpdate.stopName}. 2-Photo proof verified (Specimens & Selfie). Cold box: ${coldBoxTemp}°C.`,
+      message: `${activeRider.name} collected ${vialCount} vials at ${stopName}. 2-Photo proof verified (Specimens & Selfie). Cold box: ${coldBoxTemp}°C.`,
       recipientRole: 'both',
       channel: 'both'
     });
@@ -1928,11 +1977,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    if (activeTask?.id) setActiveTaskId(activeTask.id);
                                     setCurrentStopIndex(idx);
                                     setVialCount(stop.sampleCount || 0);
                                     setColdBoxTemp(stop.coldBoxTemp || 4.0);
                                     setStopPhoto(stop.photoUrl || null);
-                                    setStopPhoto2((stop as any).handoverPhotoUrl || (stop as any).photo2Url || null);
+                                    setStopPhoto2((stop as any).handoverPhotoUrl || (stop as any).photo2Url || (stop as any).selfieUrl || null);
                                     setIsProcessingStop(true);
                                   }}
                                   className="px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-98"
