@@ -589,7 +589,25 @@ function AppContent() {
 
       {/* Chain of Custody Proof Modal */}
       <ProofModal
-        task={tasks.find((t) => t.id === selectedProofTask?.id) || selectedProofTask}
+        task={(() => {
+          if (!selectedProofTask) return null;
+          const allStored = StorageService.getTasks();
+          const matched = allStored.find((t) => t.id === selectedProofTask.id) ||
+            tasks.find((t) => t.id === selectedProofTask.id) ||
+            allStored.find((t) => (t.routeId === selectedProofTask.routeId || t.routeName === selectedProofTask.routeName) && t.timeSlot === selectedProofTask.timeSlot) ||
+            selectedProofTask;
+
+          return {
+            ...selectedProofTask,
+            ...matched,
+            stopsProgress: (matched?.stopsProgress && matched.stopsProgress.length > 0) ? matched.stopsProgress : selectedProofTask.stopsProgress,
+            stops: (matched?.stops && matched.stops.length > 0) ? matched.stops : selectedProofTask.stops,
+            destination: {
+              ...selectedProofTask.destination,
+              ...matched?.destination
+            }
+          };
+        })()}
         isOpen={isProofModalOpen}
         onClose={() => {
           setIsProofModalOpen(false);
