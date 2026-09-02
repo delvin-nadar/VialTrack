@@ -53,6 +53,55 @@ import {
 } from '../../utils/riderTelemetry';
 import { getLiveBatteryInfo, subscribeToBatteryChanges } from '../../utils/deviceBattery';
 
+// Rank how "complete" a stop's status is, so a race between the two live Firestore listeners
+// below (one on 'trips', one on 'tasks' — both mirror the same document) can never regress an
+// already-confirmed stop back to an earlier state just because a slower/stale snapshot arrived
+// after a faster one.
+const STOP_COMPLETION_RANK: Record<string, number> = {
+  pending: 0,
+  in_progress: 1,
+  arrived: 1,
+  picked_up: 2,
+  completed: 2,
+  no_sample: 2
+};
+
+const stopRank = (status?: string) => STOP_COMPLETION_RANK[status || 'pending'] ?? 0;
+
+// Merge an incoming task snapshot with whatever we already have locally, keeping the more
+// "complete" version of each individual stop rather than blindly replacing the whole array.
+// This protects against the two independent 'trips'/'tasks' listeners overwriting each other
+// with out-of-order snapshots for the same logical task.
+const mergeTaskPreservingProgress = (prevTask: PickupTask | undefined, incomingTask: PickupTask): PickupTask => {
+  if (!prevTask) return incomingTask;
+
+  const prevStops = prevTask.stopsProgress || prevTask.stops || [];
+  const incomingStops = incomingTask.stopsProgress || incomingTask.stops || [];
+
+  if (!prevStops.length || !incomingStops.length || prevStops.length !== incomingStops.length) {
+    // Shape mismatch (e.g. task was just created) — trust the incoming snapshot as-is.
+    return incomingTask;
+  }
+
+  let anyStopKeptFromPrev = false;
+  const mergedStops = incomingStops.map((incomingStop: any, idx: number) => {
+    const prevStop: any = prevStops[idx];
+    if (prevStop && stopRank(prevStop.status) > stopRank(incomingStop.status)) {
+      anyStopKeptFromPrev = true;
+      return prevStop;
+    }
+    return incomingStop;
+  });
+
+  if (!anyStopKeptFromPrev) return incomingTask;
+
+  return {
+    ...incomingTask,
+    stopsProgress: mergedStops,
+    stops: mergedStops
+  };
+};
+
 interface RiderDashboardProps {
   user: UserAuth;
   tasks: PickupTask[];
@@ -137,7 +186,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         setLiveTasks((prev) => {
           const map = new Map<string, PickupTask>();
           prev.forEach((item) => map.set(item.id, item));
-          formatted.forEach((item) => map.set(item.id, item));
+          formatted.forEach((item) => map.set(item.id, mergeTaskPreservingProgress(map.get(item.id), item)));
           return Array.from(map.values());
         });
       }
@@ -148,7 +197,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         setLiveTasks((prev) => {
           const map = new Map<string, PickupTask>();
           prev.forEach((item) => map.set(item.id, item));
-          cloudTasks.forEach((item) => map.set(item.id, item));
+          cloudTasks.forEach((item) => map.set(item.id, mergeTaskPreservingProgress(map.get(item.id), item)));
           return Array.from(map.values());
         });
       }
