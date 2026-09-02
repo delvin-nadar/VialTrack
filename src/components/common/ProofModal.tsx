@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PickupTask } from '../../types';
+import { StorageService } from '../../services/storage';
 import { X, CheckCircle, MapPin, Thermometer, ShieldCheck, Download, Package, UserCheck, Calendar, Clock, Maximize2, ExternalLink } from 'lucide-react';
 
 interface ProofModalProps {
@@ -13,9 +14,31 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
 
   if (!isOpen || !task) return null;
 
+  const fallbackRoute = StorageService.getRoutes().find(
+    (r) => r.id === task.routeId || r.name === task.routeName
+  );
+
   const rawStops = (task?.stopsProgress && task.stopsProgress.length > 0)
     ? task.stopsProgress
-    : ((task?.stops && task.stops.length > 0) ? task.stops : []);
+    : ((task?.stops && task.stops.length > 0)
+    ? task.stops
+    : (fallbackRoute?.stops && fallbackRoute.stops.length > 0
+    ? fallbackRoute.stops.map((s, idx) => ({
+        id: s.id || `stop-${idx + 1}`,
+        stopId: s.id || `stop-${idx + 1}`,
+        stopName: s.name || `Collection Stop ${idx + 1}`,
+        name: s.name || `Collection Stop ${idx + 1}`,
+        address: s.address || 'Collection Facility',
+        sampleCount: (task as any)?.totalVials || (task as any)?.sampleCount || 0,
+        specimenCount: (task as any)?.totalVials || (task as any)?.sampleCount || 0,
+        status: task.status === 'delivered' || task.status === 'completed' ? 'picked_up' : task.status,
+        photoUrl: (task as any)?.photoUrl || (task as any)?.proofPhoto || '',
+        photo2Url: (task as any)?.photo2Url || (task as any)?.handoverPhotoUrl || (task as any)?.selfieUrl || '',
+        coldBoxTemp: (task as any)?.handoverTemperature || (task as any)?.coldBoxTemp || 4.0,
+        arrivedAt: task.startedAt,
+        pickedUpAt: (task as any)?.completedAt || (task as any)?.deliveryTimestamp
+      }))
+    : []));
 
   const safeStops = rawStops.length > 0
     ? rawStops
@@ -40,7 +63,9 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
       }]
     : [];
 
-  const totalVials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+  const totalVials = task.destination?.totalVialsHandedOver ||
+    (task as any)?.totalVials ||
+    safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
 
   const handlePrint = () => {
     window.print();

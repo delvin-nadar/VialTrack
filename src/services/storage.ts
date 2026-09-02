@@ -370,13 +370,70 @@ export const StorageService = {
   },
   addTask(task: PickupTask): void {
     const tasks = this.getTasks();
-    tasks.unshift(task);
-    this.saveTasks(tasks);
-    CloudSync.syncDocument('tasks', task.id, task);
+    const existingIndex = tasks.findIndex(
+      (t) =>
+        t.id === task.id ||
+        (t.routeId === task.routeId &&
+          t.timeSlot === task.timeSlot &&
+          (t.date || t.scheduledDate) === (task.date || task.scheduledDate) &&
+          (t.riderId === task.riderId || !t.riderId || !task.riderId))
+    );
+
+    if (existingIndex >= 0) {
+      const existing = tasks[existingIndex];
+      const merged: PickupTask = {
+        ...existing,
+        ...task,
+        id: existing.id,
+        stopsProgress: (task.stopsProgress && task.stopsProgress.length > 0) ? task.stopsProgress : existing.stopsProgress,
+        stops: (task.stops && task.stops.length > 0) ? task.stops : existing.stops,
+        destination: {
+          ...existing.destination,
+          ...task.destination
+        }
+      };
+      tasks[existingIndex] = merged;
+      this.saveTasks(tasks);
+      CloudSync.syncDocument('tasks', merged.id, merged);
+      CloudSync.syncDocument('trips', merged.id, merged);
+    } else {
+      tasks.unshift(task);
+      this.saveTasks(tasks);
+      CloudSync.syncDocument('tasks', task.id, task);
+      CloudSync.syncDocument('trips', task.id, task);
+    }
   },
   updateTask(task: PickupTask): void {
-    const tasks = this.getTasks().map((t) => (t.id === task.id ? task : t));
-    safeSetItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    const tasks = this.getTasks();
+    const existingIndex = tasks.findIndex(
+      (t) =>
+        t.id === task.id ||
+        (t.routeId === task.routeId &&
+          t.timeSlot === task.timeSlot &&
+          (t.date || t.scheduledDate) === (task.date || task.scheduledDate) &&
+          (t.riderId === task.riderId || !t.riderId || !task.riderId))
+    );
+
+    let updatedList: PickupTask[];
+    if (existingIndex >= 0) {
+      const existing = tasks[existingIndex];
+      const merged: PickupTask = {
+        ...existing,
+        ...task,
+        id: existing.id,
+        stopsProgress: (task.stopsProgress && task.stopsProgress.length > 0) ? task.stopsProgress : existing.stopsProgress,
+        stops: (task.stops && task.stops.length > 0) ? task.stops : existing.stops,
+        destination: {
+          ...existing.destination,
+          ...task.destination
+        }
+      };
+      updatedList = tasks.map((t, idx) => (idx === existingIndex ? merged : t));
+    } else {
+      updatedList = [task, ...tasks];
+    }
+
+    safeSetItem(STORAGE_KEYS.TASKS, JSON.stringify(updatedList));
     CloudSync.syncDocument('tasks', task.id, task);
     CloudSync.syncDocument('trips', task.id, task);
   },

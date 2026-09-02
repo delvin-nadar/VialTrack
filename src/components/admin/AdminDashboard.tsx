@@ -99,8 +99,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, []);
 
   const allTasks = useMemo(() => {
-    // Return only actual dispatched tasks from Firestore (or initial tasks if empty)
-    return firestoreTasks.length > 0 ? firestoreTasks : (initialTasks || []);
+    const rawList = firestoreTasks.length > 0 ? firestoreTasks : (initialTasks || []);
+    const mergedMap = new Map<string, PickupTask>();
+
+    rawList.forEach((t) => {
+      if (!t || !t.id) return;
+      const tDate = t.scheduledDate || t.date || (t.createdAt ? t.createdAt.split('T')[0] : '');
+      const groupKey = `${t.routeId || t.routeName || 'direct'}_${t.timeSlot || 'slot'}_${tDate}_${t.riderId || 'rider'}`;
+
+      if (!mergedMap.has(groupKey)) {
+        mergedMap.set(groupKey, { ...t });
+      } else {
+        const existing = mergedMap.get(groupKey)!;
+        const existingStops = existing.stopsProgress || existing.stops || [];
+        const incomingStops = t.stopsProgress || t.stops || [];
+
+        const existingVials = existingStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+        const incomingVials = incomingStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+
+        const isExistingDelivered = existing.status === 'delivered' || existing.status === 'completed';
+        const isIncomingDelivered = t.status === 'delivered' || t.status === 'completed';
+
+        // Choose best stops array that contains collected photos or vials
+        const bestStops = incomingStops.some((s: any) => s.photoUrl || s.status === 'picked_up')
+          ? incomingStops
+          : existingStops;
+
+        const bestStatus = isIncomingDelivered || isExistingDelivered
+          ? 'delivered'
+          : (t.status === 'in_transit' || existing.status === 'in_transit' ? 'in_transit' : (t.status || existing.status));
+
+        mergedMap.set(groupKey, {
+          ...existing,
+          ...t,
+          id: existing.id,
+          status: bestStatus,
+          stopsProgress: bestStops as any,
+          stops: bestStops as any,
+          destination: {
+            ...existing.destination,
+            ...t.destination,
+            dropPhotoUrl: t.destination?.dropPhotoUrl || existing.destination?.dropPhotoUrl || (t as any).handoverPhotoUrl || (existing as any).handoverPhotoUrl,
+            receiverName: t.destination?.receiverName || existing.destination?.receiverName || t.receiverName || existing.receiverName,
+            deliveredAt: t.destination?.deliveredAt || existing.destination?.deliveredAt || t.deliveryTimestamp || existing.deliveryTimestamp,
+            coldBoxTempAtDrop: t.destination?.coldBoxTempAtDrop ?? existing.destination?.coldBoxTempAtDrop,
+            totalVialsHandedOver: Math.max(
+              t.destination?.totalVialsHandedOver || 0,
+              existing.destination?.totalVialsHandedOver || 0,
+              incomingVials,
+              existingVials
+            )
+          }
+        });
+      }
+    });
+
+    const result = Array.from(mergedMap.values());
+    result.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+    return result;
   }, [firestoreTasks, initialTasks]);
 
   useEffect(() => {

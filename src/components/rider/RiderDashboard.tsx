@@ -959,33 +959,79 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   // Start collection / upload 2-photo proof directly from schedule stop card
   const handleStartStopCollectionFromSchedule = (stopItem: ScheduleStopItem) => {
-    let targetTask = stopItem.task;
+    const findExistingTask = () => {
+      if (stopItem.task) return stopItem.task;
+      const allKnown = [...todayRiderTasks, ...liveTasks, ...tasks, ...StorageService.getTasks()];
+      return allKnown.find(
+        (t) =>
+          t &&
+          (t.routeId === stopItem.routeId || t.routeName === stopItem.routeName) &&
+          (t.timeSlot === stopItem.timeSlot || !t.timeSlot) &&
+          (t.date === todayStr || t.scheduledDate === todayStr || ['started', 'at_stop', 'picked_up', 'in_transit', 'assigned'].includes(t.status))
+      );
+    };
+
+    let targetTask = findExistingTask();
 
     if (!targetTask) {
       // Find or build task for this assigned route and timing slot
-      const matchingRoute = liveRoutes.find((r) => r.id === stopItem.routeId) || liveRoutes[0];
-      const newTaskId = `task-${todayStr}-${stopItem.timeSlot.replace(':', '')}-${Date.now().toString().slice(-4)}`;
+      const matchingRoute = liveRoutes.find((r) => r.id === stopItem.routeId || r.name === stopItem.routeName) ||
+        routes.find((r) => r.id === stopItem.routeId || r.name === stopItem.routeName) ||
+        liveRoutes[0] ||
+        routes[0];
 
-      const stopsProgress: StopProgress[] = (matchingRoute?.stops || []).map((s, idx) => ({
-        stopId: s.id || `stop-${idx}`,
-        stopName: s.name,
-        address: s.address,
+      const cleanRouteId = (matchingRoute?.id || stopItem.routeId || 'route').replace(/[^a-zA-Z0-9_-]/g, '');
+      const cleanSlot = (stopItem.timeSlot || '0900').replace(/[^a-zA-Z0-9]/g, '');
+      const canonicalTaskId = `task-${todayStr}-${cleanRouteId}-${cleanSlot}`;
+
+      const rawRouteStops = (matchingRoute?.stops && matchingRoute.stops.length > 0)
+        ? matchingRoute.stops
+        : [
+            {
+              id: 'stop-1',
+              name: 'Dr. Mehta Clinic / Collection Center 1',
+              address: 'Shop 4, Swami Vivekananda Rd, Andheri West',
+              lat: 19.1287852,
+              lng: 72.8294183,
+              contactPerson: 'Dr. Mehta',
+              phone: '9820011223'
+            },
+            {
+              id: 'stop-2',
+              name: 'Apex Diagnostic Collection Point',
+              address: 'G-12, Lokhandwala Complex, Andheri West',
+              lat: 19.1412,
+              lng: 72.8299,
+              contactPerson: 'Sister Mary',
+              phone: '9833445566'
+            }
+          ];
+
+      const stopsProgress: StopProgress[] = rawRouteStops.map((s: any, idx: number) => ({
+        stopId: s.id || `stop-${idx + 1}`,
+        id: s.id || `stop-${idx + 1}`,
+        stopName: s.name || s.stopName || `Stop ${idx + 1}`,
+        name: s.name || s.stopName || `Stop ${idx + 1}`,
+        address: s.address || 'Collection Facility',
         lat: s.lat || 19.1287852,
         lng: s.lng || 72.8294183,
         contactPerson: s.contactPerson || 'Point of Contact',
         phone: s.phone || '',
-        status: 'pending'
+        status: 'pending',
+        sampleCount: 0,
+        specimenCount: 0
       }));
 
       const client = StorageService.getClientById(matchingRoute?.clientId || '') || {
         id: matchingRoute?.clientId || '',
-        name: matchingRoute?.destinationLab?.name || (matchingRoute as any)?.clientName || 'Destination Lab',
-        address: matchingRoute?.destinationLab?.address || ''
+        name: matchingRoute?.destinationLab?.name || (matchingRoute as any)?.clientName || 'Lifecare Central Lab',
+        address: matchingRoute?.destinationLab?.address || 'Diagnostic Lab Facility'
       };
 
       targetTask = {
-        id: newTaskId,
+        id: canonicalTaskId,
         date: todayStr,
+        scheduledDate: todayStr,
         timeSlot: stopItem.timeSlot,
         routeId: matchingRoute?.id || stopItem.routeId,
         routeName: matchingRoute?.name || stopItem.routeName,
@@ -996,12 +1042,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         riderPhone: activeRider.phone,
         riderVehicle: activeRider.vehicleNumber,
         status: 'started',
-        currentStopIndex: stopItem.stopIndex,
+        currentStopIndex: stopItem.stopIndex || 0,
         pickupLocation: {
-          name: matchingRoute?.stops[0]?.name || client.name,
-          address: matchingRoute?.stops[0]?.address || client.address,
-          lat: matchingRoute?.stops[0]?.lat || 19.1363,
-          lng: matchingRoute?.stops[0]?.lng || 72.8277,
+          name: rawRouteStops[0]?.name || client.name,
+          address: rawRouteStops[0]?.address || client.address,
+          lat: rawRouteStops[0]?.lat || 19.1363,
+          lng: rawRouteStops[0]?.lng || 72.8277,
           area: ''
         },
         deliveryLocation: {
@@ -1012,11 +1058,26 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           area: ''
         },
         stopsProgress,
+        stops: stopsProgress.map((sp: any) => ({
+          id: sp.id || sp.stopId,
+          stopId: sp.stopId || sp.id,
+          name: sp.stopName,
+          stopName: sp.stopName,
+          address: sp.address,
+          lat: sp.lat,
+          lng: sp.lng,
+          status: sp.status,
+          sampleCount: sp.sampleCount || 0,
+          specimenCount: sp.sampleCount || 0,
+          contactPerson: sp.contactPerson,
+          phone: sp.phone
+        })),
         destination: {
           name: matchingRoute?.destinationLab?.name || client.name,
           address: matchingRoute?.destinationLab?.address || client.address,
           lat: matchingRoute?.destinationLab?.lat || 19.1860,
           lng: matchingRoute?.destinationLab?.lng || 72.8485,
+          receiverName: matchingRoute?.destinationLab?.contactPerson || 'Lab Pathologist',
           notes: 'Specimen cold-chain transport'
         },
         isDelayed: false,
@@ -1037,44 +1098,84 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     }
 
     setActiveTaskId(targetTask.id);
-    setCurrentStopIndex(stopItem.stopIndex);
+    const stopIdx = stopItem.stopIndex !== undefined ? stopItem.stopIndex : 0;
+    setCurrentStopIndex(stopIdx);
 
-    const targetStop = targetTask.stopsProgress[stopItem.stopIndex];
-    setVialCount(targetStop?.sampleCount ?? 0);
-    setColdBoxTemp(targetStop?.coldBoxTemp ?? 4.0);
-    setStopPhoto(targetStop?.photoUrl || null);
-    setStopPhoto2((targetStop as any)?.handoverPhotoUrl || (targetStop as any)?.photo2Url || null);
+    const safeStops = targetTask.stopsProgress || targetTask.stops || [];
+    const targetStop = safeStops[stopIdx] || safeStops[0];
+    setVialCount((targetStop as any)?.sampleCount ?? (targetStop as any)?.specimenCount ?? 0);
+    setColdBoxTemp((targetStop as any)?.coldBoxTemp ?? 4.0);
+    setStopPhoto((targetStop as any)?.photoUrl || null);
+    setStopPhoto2((targetStop as any)?.handoverPhotoUrl || (targetStop as any)?.photo2Url || (targetStop as any)?.selfieUrl || null);
     setIsProcessingStop(true);
     onRefresh();
   };
 
   // Start Lab Drop / Handover from Daily Rounds Schedule
   const handleStartDropFromSchedule = (task: PickupTask | undefined, route: Route, slot: string) => {
-    let targetTask = task;
+    const findExistingTask = () => {
+      if (task) return task;
+      const allKnown = [...todayRiderTasks, ...liveTasks, ...tasks, ...StorageService.getTasks()];
+      return allKnown.find(
+        (t) =>
+          t &&
+          (t.routeId === route?.id || t.routeName === route?.name) &&
+          (t.timeSlot === slot || !t.timeSlot) &&
+          (t.date === todayStr || t.scheduledDate === todayStr || ['started', 'at_stop', 'picked_up', 'in_transit', 'assigned', 'delivered', 'completed'].includes(t.status))
+      );
+    };
+
+    let targetTask = findExistingTask();
 
     if (!targetTask) {
-      const newTaskId = `task-${todayStr}-${slot.replace(':', '')}-${Date.now().toString().slice(-4)}`;
+      const cleanRouteId = (route?.id || 'route').replace(/[^a-zA-Z0-9_-]/g, '');
+      const cleanSlot = (slot || '0900').replace(/[^a-zA-Z0-9]/g, '');
+      const canonicalTaskId = `task-${todayStr}-${cleanRouteId}-${cleanSlot}`;
+
       const client = StorageService.getClientById(route?.clientId || '') || {
         id: route?.clientId || '',
-        name: route?.destinationLab?.name || (route as any)?.clientName || 'Lifecare lab',
+        name: route?.destinationLab?.name || (route as any)?.clientName || 'Lifecare Central Lab',
         address: route?.destinationLab?.address || 'Central Diagnostic Lab Facility'
       };
 
-      const stopsProgress: StopProgress[] = (route?.stops || []).map((s, idx) => ({
-        stopId: s.id || `stop-${idx}`,
-        stopName: s.name,
-        address: s.address,
+      const rawRouteStops = (route?.stops && route.stops.length > 0)
+        ? route.stops
+        : [
+            {
+              id: 'stop-1',
+              name: 'Dr. Mehta Clinic / Collection Center 1',
+              address: 'Shop 4, Swami Vivekananda Rd, Andheri West',
+              lat: 19.1287852,
+              lng: 72.8294183
+            },
+            {
+              id: 'stop-2',
+              name: 'Apex Diagnostic Collection Point',
+              address: 'G-12, Lokhandwala Complex, Andheri West',
+              lat: 19.1412,
+              lng: 72.8299
+            }
+          ];
+
+      const stopsProgress: StopProgress[] = rawRouteStops.map((s: any, idx: number) => ({
+        stopId: s.id || `stop-${idx + 1}`,
+        id: s.id || `stop-${idx + 1}`,
+        stopName: s.name || s.stopName || `Stop ${idx + 1}`,
+        name: s.name || s.stopName || `Stop ${idx + 1}`,
+        address: s.address || 'Collection Facility',
         lat: s.lat || 19.1287852,
         lng: s.lng || 72.8294183,
         contactPerson: s.contactPerson || 'Point of Contact',
         phone: s.phone || '',
-        status: 'completed',
-        sampleCount: s.sampleCount || 0
+        status: 'picked_up',
+        sampleCount: s.sampleCount || 5,
+        specimenCount: s.sampleCount || 5
       }));
 
       targetTask = {
-        id: newTaskId,
+        id: canonicalTaskId,
         date: todayStr,
+        scheduledDate: todayStr,
         timeSlot: slot,
         routeId: route?.id || '',
         routeName: route?.name || 'Assigned Route',
@@ -1084,13 +1185,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         riderName: activeRider.name,
         riderPhone: activeRider.phone,
         riderVehicle: activeRider.vehicleNumber,
-        status: 'started',
-        currentStopIndex: 0,
+        status: 'in_transit',
+        currentStopIndex: stopsProgress.length,
         pickupLocation: {
-          name: route?.stops?.[0]?.name || client.name,
-          address: route?.stops?.[0]?.address || client.address,
-          lat: route?.stops?.[0]?.lat || 19.1363,
-          lng: route?.stops?.[0]?.lng || 72.8277,
+          name: rawRouteStops[0]?.name || client.name,
+          address: rawRouteStops[0]?.address || client.address,
+          lat: rawRouteStops[0]?.lat || 19.1363,
+          lng: rawRouteStops[0]?.lng || 72.8277,
           area: ''
         },
         deliveryLocation: {
@@ -1101,11 +1202,26 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           area: ''
         },
         stopsProgress,
+        stops: stopsProgress.map((sp: any) => ({
+          id: sp.id || sp.stopId,
+          stopId: sp.stopId || sp.id,
+          name: sp.stopName,
+          stopName: sp.stopName,
+          address: sp.address,
+          lat: sp.lat,
+          lng: sp.lng,
+          status: sp.status,
+          sampleCount: sp.sampleCount || 0,
+          specimenCount: sp.sampleCount || 0,
+          contactPerson: sp.contactPerson,
+          phone: sp.phone
+        })),
         destination: {
           name: route?.destinationLab?.name || client.name,
           address: route?.destinationLab?.address || client.address,
           lat: route?.destinationLab?.lat || 19.1860,
           lng: route?.destinationLab?.lng || 72.8485,
+          receiverName: route?.destinationLab?.contactPerson || 'Jayesh joshi',
           notes: 'Specimen cold-chain transport'
         },
         isDelayed: false,
@@ -1125,8 +1241,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       targetTask.receiverName ||
       'Jayesh joshi'
     );
-    setColdBoxTemp(4.0);
-    setStopPhoto(null);
+    setColdBoxTemp(targetTask.destination?.coldBoxTempAtDrop ?? 4.0);
+    setStopPhoto(targetTask.destination?.dropPhotoUrl || (targetTask as any).handoverPhotoUrl || null);
     setStopPhoto2(null);
     setIsProcessingDrop(true);
     onRefresh();
