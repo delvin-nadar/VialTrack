@@ -176,13 +176,16 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                   stop.selfiePhoto ||
                   (safeStops.length === 1 ? ((task as any)?.selfieUrl || (task as any)?.photo2Url || (task as any)?.handoverPhotoUrl) : null);
 
-                const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (stop.status === 'picked_up' || isDelivered ? 'Collected sample' : null));
-                const arrivalTime = stop.arrivedAt || task.startedAt || task.createdAt;
+                const isStopCompleted = stop.status === 'picked_up' || stop.status === 'no_sample' || stop.status === 'completed';
+                const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (stop.status === 'picked_up' ? 'Collected sample' : null));
+                const arrivalTime = stop.arrivedAt || stop.completedAt || (isStopCompleted ? (task.startedAt || task.createdAt) : null);
 
                 return (
                 <div
                   key={stop.stopId || stop.id || idx}
-                  className="bg-white rounded-lg p-3.5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-2.5"
+                  className={`bg-white rounded-lg p-3.5 border shadow-xs flex flex-col justify-between space-y-2.5 ${
+                    isStopCompleted ? 'border-slate-200' : 'border-amber-200 bg-amber-50/20'
+                  }`}
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2">
@@ -193,7 +196,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                         <h5 className="font-bold text-slate-900 text-xs sm:text-sm">{stopName}</h5>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                        {stopRemark && (
+                        {stopRemark ? (
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             stopRemark === 'Collected sample' || stop.status === 'picked_up'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
@@ -203,13 +206,15 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                           }`}>
                             {stopRemark}
                           </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            Pending Pickup
+                          </span>
                         )}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          stop.status === 'picked_up' || stop.status === 'completed' || isDelivered
+                          isStopCompleted
                             ? 'bg-slate-100 text-slate-800 border border-slate-200'
-                            : stop.status === 'no_sample'
-                            ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                            : 'bg-slate-100 text-slate-700'
+                            : 'bg-slate-100 text-slate-500'
                         }`}>
                           {stop.status === 'no_sample' ? '0 Vials' : `${stopVials} Vials`}
                         </span>
@@ -221,8 +226,8 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                     <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
                       <div>
                         <span className="text-slate-400 block text-[10px] font-semibold">Arrival Time:</span>
-                        <span className="font-mono text-slate-700 text-xs">
-                          {arrivalTime ? new Date(arrivalTime).toLocaleTimeString('en-IN') : (task.timeSlot || 'Scheduled Slot')}
+                        <span className="font-mono text-slate-700 text-xs font-semibold">
+                          {arrivalTime ? new Date(arrivalTime).toLocaleTimeString('en-IN') : 'Pending Arrival'}
                         </span>
                       </div>
                       <div>
