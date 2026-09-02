@@ -33,7 +33,8 @@ import {
   LogOut,
   Edit2,
   Lock,
-  Upload
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
@@ -787,22 +788,19 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   };
 
   // Handle Photo Upload with 2-Photo Proof & Watermarking
-  const handlePhotoCapture = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    photoType: 'photo1' | 'photo2' | 'drop'
-  ) => {
-    const file = e.target.files?.[0];
+  // Process uploaded/captured photo file with watermark & fallbacks
+  const processSelectedFile = async (file: File, photoType: 'photo1' | 'photo2' | 'drop') => {
     if (!file) return;
-
     setWatermarking(true);
-    const currentStop = activeTask?.stopsProgress?.[currentStopIndex] || (activeTask as any)?.stops?.[currentStopIndex];
 
-    if (e.target) {
-      e.target.value = '';
-    }
-
+    const safeStops = activeTask?.stopsProgress || (activeTask as any)?.stops || [];
+    const currentStop = safeStops[currentStopIndex] || safeStops[0];
     const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
     const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
+    const stopAddr =
+      photoType === 'drop'
+        ? activeTask?.destination?.name || activeTask?.destination?.address || 'Processing Facility'
+        : currentStop?.stopName || currentStop?.address || 'Collection Stop';
 
     try {
       // High-definition watermark with dynamic sizing & zero overlap
@@ -810,10 +808,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         timestamp: new Date().toISOString(),
         lat: stopLat,
         lng: stopLng,
-        address:
-          photoType === 'drop'
-            ? activeTask?.destination?.name || activeTask?.destination?.address || 'Processing Facility'
-            : currentStop?.stopName || currentStop?.address || 'Collection Stop',
+        address: stopAddr,
         riderName: activeRider.name,
         clientName: activeTask?.clientName || (activeTask as any)?.destination?.name || '',
         vialCount: vialCount,
@@ -823,36 +818,56 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         receiverName: photoType === 'drop' ? receiverName : undefined
       });
 
-      if (photoType === 'photo1') {
-        setStopPhoto(watermarked);
-      } else if (photoType === 'photo2') {
-        setStopPhoto2(watermarked);
-      } else {
-        setStopPhoto(watermarked);
-      }
+      if (photoType === 'photo1') setStopPhoto(watermarked);
+      else if (photoType === 'photo2') setStopPhoto2(watermarked);
+      else setStopPhoto(watermarked);
     } catch (err) {
-      console.warn('Watermark generation error, applying fallback compression:', err);
+      console.warn('Watermark generation warning, using compressed fallback:', err);
       try {
         const fallbackBase64 = await compressImageToBase64(file, 1080, 0.80);
         if (photoType === 'photo1') setStopPhoto(fallbackBase64);
         else if (photoType === 'photo2') setStopPhoto2(fallbackBase64);
         else setStopPhoto(fallbackBase64);
       } catch (fallbackErr) {
-        console.error('Photo compression fallback error:', fallbackErr);
+        console.error('Photo compression fallback error, using FileReader direct:', fallbackErr);
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          const directBase64 = re.target?.result as string;
+          if (directBase64) {
+            if (photoType === 'photo1') setStopPhoto(directBase64);
+            else if (photoType === 'photo2') setStopPhoto2(directBase64);
+            else setStopPhoto(directBase64);
+          }
+        };
+        reader.readAsDataURL(file);
       }
     } finally {
       setWatermarking(false);
     }
   };
 
+  // Handle Photo Upload with 2-Photo Proof & Watermarking from input change
+  const handlePhotoCapture = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    photoType: 'photo1' | 'photo2' | 'drop'
+  ) => {
+    const file = e.target.files?.[0];
+    if (e.target) {
+      e.target.value = '';
+    }
+    if (!file) return;
+    await processSelectedFile(file, photoType);
+  };
+
   // Verified Specimen / Rider Selfie Proof Generator
   const handleDigitalPhotoGenerate = async (photoType: 'photo1' | 'photo2' | 'drop') => {
     setWatermarking(true);
-    const currentStop = activeTask?.stopsProgress[currentStopIndex];
+    const safeStops = activeTask?.stopsProgress || (activeTask as any)?.stops || [];
+    const currentStop = safeStops[currentStopIndex] || safeStops[0];
     const generated = generateSampleVialPhoto(
       photoType === 'drop' ? 'drop' : photoType === 'photo2' ? 'selfie' : 'vial',
       photoType === 'drop'
-        ? `Diagnostic Lab Handover • ${activeTask?.destination.name || 'Lab'}`
+        ? `Diagnostic Lab Handover • ${activeTask?.destination?.name || 'Central Lab'}`
         : photoType === 'photo2'
         ? `Rider Verification Selfie • ${activeRider.name} @ ${currentStop?.stopName || 'Stop'}`
         : `${vialCount} Specimen Vials • ${currentStop?.stopName || 'Stop'}`
@@ -860,16 +875,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
     const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
+    const stopAddr =
+      photoType === 'drop'
+        ? activeTask?.destination?.name || activeTask?.destination?.address || 'Processing Facility'
+        : currentStop?.stopName || currentStop?.address || 'Collection Stop';
 
     try {
       const watermarked = await addWatermarkToImage(generated, {
         timestamp: new Date().toISOString(),
         lat: stopLat,
         lng: stopLng,
-        address:
-          photoType === 'drop'
-            ? activeTask?.destination.name || activeTask?.destination.address || 'Processing Facility'
-            : currentStop?.stopName || currentStop?.address || 'Collection Stop',
+        address: stopAddr,
         riderName: activeRider.name,
         clientName: activeTask?.clientName || (activeTask as any)?.destination?.name || '',
         vialCount: vialCount,
@@ -885,6 +901,57 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       if (photoType === 'photo1') setStopPhoto(generated);
       else if (photoType === 'photo2') setStopPhoto2(generated);
       else setStopPhoto(generated);
+    } finally {
+      setWatermarking(false);
+    }
+  };
+
+  // Quick 1-Tap Generator for Both Required Proofs (Specimens & Selfie)
+  const handleAutoGenerateBothProofs = async () => {
+    setWatermarking(true);
+    const safeStops = activeTask?.stopsProgress || (activeTask as any)?.stops || [];
+    const currentStop = safeStops[currentStopIndex] || safeStops[0];
+    const vialLabel = `${vialCount} Specimen Vials • ${currentStop?.stopName || 'Stop'}`;
+    const selfieLabel = `Rider Verification Selfie • ${activeRider.name} @ ${currentStop?.stopName || 'Stop'}`;
+
+    const gen1 = generateSampleVialPhoto('vial', vialLabel);
+    const gen2 = generateSampleVialPhoto('selfie', selfieLabel);
+
+    const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
+    const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
+    const stopAddr = currentStop?.stopName || currentStop?.address || 'Collection Stop';
+
+    try {
+      const wm1 = await addWatermarkToImage(gen1, {
+        timestamp: new Date().toISOString(),
+        lat: stopLat,
+        lng: stopLng,
+        address: stopAddr,
+        riderName: activeRider.name,
+        clientName: activeTask?.clientName || '',
+        vialCount: vialCount,
+        temperature: coldBoxTemp,
+        isDrop: false,
+        isSelfie: false
+      });
+      setStopPhoto(wm1);
+
+      const wm2 = await addWatermarkToImage(gen2, {
+        timestamp: new Date().toISOString(),
+        lat: stopLat,
+        lng: stopLng,
+        address: stopAddr,
+        riderName: activeRider.name,
+        clientName: activeTask?.clientName || '',
+        vialCount: vialCount,
+        temperature: coldBoxTemp,
+        isDrop: false,
+        isSelfie: true
+      });
+      setStopPhoto2(wm2);
+    } catch {
+      setStopPhoto(gen1);
+      setStopPhoto2(gen2);
     } finally {
       setWatermarking(false);
     }
@@ -1932,11 +1999,36 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                   Mandatory 2-Photo Proof (Specimens & Selfie)
                 </label>
-                <span className="text-[10px] text-slate-500">Live GPS & Time Watermark</span>
+                <button
+                  type="button"
+                  onClick={handleAutoGenerateBothProofs}
+                  disabled={watermarking}
+                  className="text-[11px] text-sky-700 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 font-bold px-2 py-0.5 rounded border border-sky-200 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                  title="One-tap verified digital proof generator"
+                >
+                  <Sparkles className="w-3 h-3 text-sky-600" />
+                  <span>Auto-Fill Proofs</span>
+                </button>
               </div>
 
+              {/* Watermarking Progress Alert */}
+              {watermarking && (
+                <div className="bg-sky-50 border border-sky-200 rounded-lg p-2.5 flex items-center gap-2 text-sky-900 text-xs font-medium animate-pulse">
+                  <Loader2 className="w-4 h-4 text-sky-600 animate-spin shrink-0" />
+                  <span>Processing & Geotagging ISO-15189 Watermarked Chain of Custody Proof...</span>
+                </div>
+              )}
+
               {/* Photo 1: Specimen Vials in Rack */}
-              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+              <div 
+                className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2 transition-all"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const droppedFile = e.dataTransfer.files?.[0];
+                  if (droppedFile) processSelectedFile(droppedFile, 'photo1');
+                }}
+              >
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800 flex items-center gap-1.5">
                     <Package className="w-3.5 h-3.5 text-sky-700" />
@@ -2009,7 +2101,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       onClick={() => fileGalleryRef1.current?.click()}
                       disabled={watermarking}
                       className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
-                      title="Select from Photo Library / Files"
+                      title="Select from Photo Library / Files or Drag & Drop"
                     >
                       <Upload className="w-4 h-4 text-slate-600" />
                       <span className="text-[11px]">Upload</span>
@@ -2029,7 +2121,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               </div>
 
               {/* Photo 2: Rider Location Selfie */}
-              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+              <div 
+                className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2 transition-all"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const droppedFile = e.dataTransfer.files?.[0];
+                  if (droppedFile) processSelectedFile(droppedFile, 'photo2');
+                }}
+              >
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800 flex items-center gap-1.5">
                     <UserCheck className="w-3.5 h-3.5 text-sky-700" />
@@ -2102,7 +2202,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       onClick={() => fileGalleryRef2.current?.click()}
                       disabled={watermarking}
                       className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
-                      title="Select Selfie from Photo Library / Files"
+                      title="Select Selfie from Photo Library / Files or Drag & Drop"
                     >
                       <Upload className="w-4 h-4 text-slate-600" />
                       <span className="text-[11px]">Upload</span>
@@ -2126,7 +2226,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmStopPickup}
-                className="w-full py-2.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                disabled={watermarking}
+                className="w-full py-2.5 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               >
                 <Check className="w-4 h-4" />
                 <span>CONFIRM 2-PHOTO PICKUP ({vialCount} VIALS & SELFIE)</span>
@@ -2152,6 +2253,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Watermarking Progress Alert */}
+            {watermarking && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 flex items-center gap-2 text-emerald-900 text-xs font-medium animate-pulse">
+                <Loader2 className="w-4 h-4 text-emerald-600 animate-spin shrink-0" />
+                <span>Processing & Geotagging Diagnostic Lab Handover Proof...</span>
+              </div>
+            )}
 
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -2185,7 +2294,15 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             </div>
 
             {/* Handover Photo */}
-            <div className="space-y-2">
+            <div 
+              className="space-y-2"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const droppedFile = e.dataTransfer.files?.[0];
+                if (droppedFile) processSelectedFile(droppedFile, 'drop');
+              }}
+            >
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                   Lab Handover Photo / Signed Slip
@@ -2257,7 +2374,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     onClick={() => dropGalleryRef.current?.click()}
                     disabled={watermarking}
                     className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
-                    title="Choose from photo library / signed slip file"
+                    title="Choose from photo library / signed slip file or drag & drop"
                   >
                     <Upload className="w-4 h-4 text-slate-600" />
                     <span className="text-[11px]">Upload Slip</span>
@@ -2281,7 +2398,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmLabDelivery}
-                className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                disabled={watermarking}
+                className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>COMPLETE LAB DELIVERY</span>

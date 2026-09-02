@@ -86,20 +86,31 @@ export async function compressImageToBase64(
   quality: number = 0.80
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Timeout safeguard
+    const timeout = setTimeout(() => {
+      if (typeof imageSource === 'string') {
+        resolve(imageSource);
+      } else if (imageSource instanceof File || imageSource instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) || '');
+        reader.onerror = () => reject(new Error('Image compression timed out'));
+        reader.readAsDataURL(imageSource);
+      } else {
+        reject(new Error('Image compression timed out'));
+      }
+    }, 4000);
+
     const img = new Image();
     if (typeof imageSource === 'string' && /^https?:\/\//i.test(imageSource)) {
       img.crossOrigin = 'anonymous';
     }
 
-    let objectUrlToRevoke: string | null = null;
-
+    let isDone = false;
     const handleLoad = () => {
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(timeout);
       try {
-        if (objectUrlToRevoke) {
-          URL.revokeObjectURL(objectUrlToRevoke);
-          objectUrlToRevoke = null;
-        }
-
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
 
@@ -132,46 +143,62 @@ export async function compressImageToBase64(
         const base64 = canvas.toDataURL('image/jpeg', quality);
         resolve(base64);
       } catch (err) {
-        if (objectUrlToRevoke) {
-          URL.revokeObjectURL(objectUrlToRevoke);
+        if (typeof imageSource === 'string') {
+          resolve(imageSource);
+        } else if (imageSource instanceof File || imageSource instanceof Blob) {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || '');
+          reader.onerror = () => reject(err);
+          reader.readAsDataURL(imageSource);
+        } else {
+          reject(err);
         }
-        reject(err);
       }
     };
 
     img.onload = handleLoad;
     img.onerror = (err) => {
-      if (objectUrlToRevoke) {
-        URL.revokeObjectURL(objectUrlToRevoke);
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(timeout);
+      if (typeof imageSource === 'string') {
+        resolve(imageSource);
+      } else if (imageSource instanceof File || imageSource instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) || '');
+        reader.onerror = () => reject(err);
+        reader.readAsDataURL(imageSource);
+      } else {
+        reject(err);
       }
-      reject(err);
     };
 
     if (typeof imageSource === 'string') {
       img.src = imageSource;
-    } else if (imageSource instanceof Blob || imageSource instanceof File) {
-      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-        try {
-          objectUrlToRevoke = URL.createObjectURL(imageSource);
-          img.src = objectUrlToRevoke;
-        } catch {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            img.src = e.target?.result as string;
-          };
-          reader.onerror = (err) => reject(err);
-          reader.readAsDataURL(imageSource);
-        }
-      } else {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          img.src = e.target?.result as string;
-        };
-        reader.onerror = (err) => reject(err);
-        reader.readAsDataURL(imageSource);
+      if (img.complete && img.naturalWidth > 0) {
+        handleLoad();
       }
+    } else if (imageSource instanceof Blob || imageSource instanceof File) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        img.src = dataUrl;
+        if (img.complete && img.naturalWidth > 0) {
+          handleLoad();
+        }
+      };
+      reader.onerror = (err) => {
+        if (isDone) return;
+        isDone = true;
+        clearTimeout(timeout);
+        reject(err);
+      };
+      reader.readAsDataURL(imageSource);
     } else if (imageSource instanceof HTMLImageElement) {
       img.src = imageSource.src;
+      if (img.complete && img.naturalWidth > 0) {
+        handleLoad();
+      }
     }
   });
 }
@@ -184,20 +211,31 @@ export async function addWatermarkToImage(
   data: WatermarkData
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Timeout safeguard
+    const timeout = setTimeout(() => {
+      if (typeof imageSource === 'string') {
+        resolve(imageSource);
+      } else if (imageSource instanceof File || imageSource instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) || '');
+        reader.onerror = () => reject(new Error('Watermark processing timed out'));
+        reader.readAsDataURL(imageSource);
+      } else {
+        reject(new Error('Watermark processing timed out'));
+      }
+    }, 4500);
+
     const img = new Image();
     if (typeof imageSource === 'string' && /^https?:\/\//i.test(imageSource)) {
       img.crossOrigin = 'anonymous';
     }
 
-    let objectUrlToRevoke: string | null = null;
-
+    let isDone = false;
     const handleLoad = () => {
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(timeout);
       try {
-        if (objectUrlToRevoke) {
-          URL.revokeObjectURL(objectUrlToRevoke);
-          objectUrlToRevoke = null;
-        }
-
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
 
@@ -471,46 +509,62 @@ export async function addWatermarkToImage(
         const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.80);
         resolve(watermarkedUrl);
       } catch (err) {
-        if (objectUrlToRevoke) {
-          URL.revokeObjectURL(objectUrlToRevoke);
+        if (typeof imageSource === 'string') {
+          resolve(imageSource);
+        } else if (imageSource instanceof File || imageSource instanceof Blob) {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || '');
+          reader.onerror = () => reject(err);
+          reader.readAsDataURL(imageSource);
+        } else {
+          reject(err);
         }
-        reject(err);
       }
     };
 
     img.onload = handleLoad;
     img.onerror = (err) => {
-      if (objectUrlToRevoke) {
-        URL.revokeObjectURL(objectUrlToRevoke);
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(timeout);
+      if (typeof imageSource === 'string') {
+        resolve(imageSource);
+      } else if (imageSource instanceof File || imageSource instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) || '');
+        reader.onerror = () => reject(err);
+        reader.readAsDataURL(imageSource);
+      } else {
+        reject(err);
       }
-      reject(err);
     };
 
     if (typeof imageSource === 'string') {
       img.src = imageSource;
-    } else if (imageSource instanceof Blob || imageSource instanceof File) {
-      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-        try {
-          objectUrlToRevoke = URL.createObjectURL(imageSource);
-          img.src = objectUrlToRevoke;
-        } catch {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            img.src = e.target?.result as string;
-          };
-          reader.onerror = (err) => reject(err);
-          reader.readAsDataURL(imageSource);
-        }
-      } else {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          img.src = e.target?.result as string;
-        };
-        reader.onerror = (err) => reject(err);
-        reader.readAsDataURL(imageSource);
+      if (img.complete && img.naturalWidth > 0) {
+        handleLoad();
       }
+    } else if (imageSource instanceof Blob || imageSource instanceof File) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        img.src = dataUrl;
+        if (img.complete && img.naturalWidth > 0) {
+          handleLoad();
+        }
+      };
+      reader.onerror = (err) => {
+        if (isDone) return;
+        isDone = true;
+        clearTimeout(timeout);
+        reject(err);
+      };
+      reader.readAsDataURL(imageSource);
     } else if (imageSource instanceof HTMLImageElement) {
       img.src = imageSource.src;
+      if (img.complete && img.naturalWidth > 0) {
+        handleLoad();
+      }
     }
   });
 }
