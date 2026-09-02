@@ -490,8 +490,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                       </span>
                     </div>
 
-                    {/* Stops progress */}
-                    <div className="text-[11px] text-slate-600 space-y-1 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
+                    {/* Stops progress with Rider Remark and Vial Count */}
+                    <div className="text-[11px] text-slate-600 space-y-1.5 bg-white p-2.5 rounded-md border border-slate-200 shadow-xs">
                       {(() => {
                         const safeStops = task?.stopsProgress || (task as any)?.stops || [];
                         if (safeStops.length === 0) {
@@ -499,14 +499,35 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <div className="text-slate-400 italic text-[10px]">No collection points specified</div>
                           );
                         }
-                        return safeStops.map((stop: any, sIdx: number) => (
-                          <div key={stop.stopId || stop.id || sIdx} className="flex items-center justify-between">
-                            <span className="truncate max-w-[190px] text-slate-700">{stop.stopName || stop.name || `Point ${sIdx + 1}`}</span>
-                            <span className="font-mono text-emerald-700 font-medium">
-                              {stop.status === 'picked_up' ? `${stop.sampleCount || stop.specimenCount || 0} Vials` : 'Pending'}
-                            </span>
-                          </div>
-                        ));
+                        return safeStops.map((stop: any, sIdx: number) => {
+                          const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (stop.status === 'picked_up' ? 'Collected sample' : null));
+                          const vials = stop.sampleCount ?? stop.specimenCount ?? 0;
+
+                          return (
+                            <div key={stop.stopId || stop.id || sIdx} className="flex items-center justify-between gap-2">
+                              <span className="truncate max-w-[170px] text-slate-700 font-medium">{stop.stopName || stop.name || `Point ${sIdx + 1}`}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {stop.status === 'picked_up' ? (
+                                  <span className="font-mono text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1">
+                                    <span>{stopRemark || 'Collected'}</span>
+                                    <span>•</span>
+                                    <span>{vials} Vials</span>
+                                  </span>
+                                ) : stop.status === 'no_sample' || stopRemark === 'No Sample' ? (
+                                  <span className="font-mono text-amber-800 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded text-[10px]">
+                                    No Sample (0 Vials)
+                                  </span>
+                                ) : stopRemark && stopRemark.startsWith('Other') ? (
+                                  <span className="font-mono text-sky-800 font-bold bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[130px]" title={stopRemark}>
+                                    {stopRemark} {vials > 0 ? `(${vials}V)` : ''}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-medium text-[10px]">Pending</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
                       })()}
                     </div>
 

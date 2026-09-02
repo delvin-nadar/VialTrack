@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getFirestore,
+  initializeFirestore,
   doc,
   setDoc,
   addDoc,
@@ -106,11 +107,24 @@ export const resolvedFirestoreDatabaseId: string =
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
-// Connect to Firestore instance
-export const db =
-  resolvedFirestoreDatabaseId && resolvedFirestoreDatabaseId !== '(default)'
-    ? getFirestore(app, resolvedFirestoreDatabaseId)
-    : getFirestore(app);
+// Connect to Firestore instance with resilient long-polling auto-detection for ad-blocker environments
+export const db = (() => {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalAutoDetectLongPolling: true,
+      },
+      resolvedFirestoreDatabaseId && resolvedFirestoreDatabaseId !== '(default)'
+        ? resolvedFirestoreDatabaseId
+        : undefined
+    );
+  } catch {
+    return resolvedFirestoreDatabaseId && resolvedFirestoreDatabaseId !== '(default)'
+      ? getFirestore(app, resolvedFirestoreDatabaseId)
+      : getFirestore(app);
+  }
+})();
 export const auth = getAuth(app);
 
 export { GeoPoint };
@@ -302,6 +316,8 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     const pickedUpAt = prog.pickedUpAt || s.pickedUpAt || '';
     const completedAt = prog.completedAt || s.completedAt || '';
     const notes = prog.notes || s.notes || '';
+    const remark = prog.remark || s.remark || (prog.noSampleReason ? 'No Sample' : (notes.includes('No Sample') ? 'No Sample' : (sampleCount > 0 ? 'Collected sample' : undefined)));
+    const noSampleReason = prog.noSampleReason || s.noSampleReason || '';
     const photoTimestamp = prog.photoTimestamp || s.photoTimestamp || '';
     const photoLocation = prog.photoLocation || s.photoLocation;
 
@@ -327,7 +343,9 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
       completedAt,
       photoTimestamp,
       photoLocation,
-      notes
+      notes,
+      remark,
+      noSampleReason
     };
   });
 
@@ -353,7 +371,9 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     completedAt: s.completedAt || '',
     photoTimestamp: s.photoTimestamp || '',
     photoLocation: s.photoLocation,
-    notes: s.notes || ''
+    notes: s.notes || '',
+    remark: s.remark,
+    noSampleReason: s.noSampleReason
   }));
 
   const scheduledDate = data.scheduledDate || data.date || new Date().toISOString().split('T')[0];
@@ -702,10 +722,12 @@ export const CloudSync = {
           const photo2Url = extra?.photo2Url || extra?.handoverPhotoUrl || s.photo2Url || s.handoverPhotoUrl || '';
           const handoverPhotoUrl = extra?.handoverPhotoUrl || extra?.photo2Url || s.handoverPhotoUrl || s.photo2Url || '';
           const coldBoxTemp = extra?.coldBoxTemp !== undefined ? Number(extra.coldBoxTemp) : (s.coldBoxTemp ?? 4.0);
+          const remark = extra?.remark || s.remark || (extra?.noSampleReason ? 'No Sample' : (sampleCount > 0 ? 'Collected sample' : undefined));
+          const noSampleReason = extra?.noSampleReason || s.noSampleReason || '';
 
           return {
             ...s,
-            status: 'completed',
+            status: extra?.status || (remark === 'No Sample' ? 'no_sample' : 'completed'),
             completedAt: nowStr,
             pickedUpAt: s.pickedUpAt || nowStr,
             arrivedAt: s.arrivedAt || nowStr,
@@ -717,7 +739,9 @@ export const CloudSync = {
             photoTimestamp: extra?.photoTimestamp || nowStr,
             photoLocation: extra?.photoLocation || s.photoLocation || { lat: 19.2082, lng: 72.8398, accuracy: 5 },
             coldBoxTemp: coldBoxTemp,
-            notes: extra?.notes || s.notes || ''
+            notes: extra?.notes || s.notes || '',
+            remark,
+            noSampleReason
           };
         }
         if (idx === stopIndex + 1 && s.status === 'pending') {
@@ -750,7 +774,9 @@ export const CloudSync = {
         pickedUpAt: s.pickedUpAt || nowStr,
         completedAt: s.completedAt || nowStr,
         arrivedAt: s.arrivedAt,
-        notes: s.notes || ''
+        notes: s.notes || '',
+        remark: s.remark,
+        noSampleReason: s.noSampleReason
       }));
 
       await setDoc(tripRef, {

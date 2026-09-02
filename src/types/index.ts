@@ -189,6 +189,7 @@ export interface TripStop {
   contactPerson?: string;
   phone?: string;
   notes?: string;
+  remark?: string;
   arrivedAt?: string;
   completedAt?: string;
   pickedUpAt?: string;
@@ -260,6 +261,7 @@ export interface UnifiedStopItem {
   contactPerson?: string;
   phone?: string;
   sampleCount?: number;
+  remark?: string;
 }
 
 export interface StopExecution {
@@ -287,6 +289,7 @@ export interface StopExecution {
   photoTimestamp?: string;
   coldBoxTemp?: number; // In Celsius, e.g. 4.2°C
   notes?: string;
+  remark?: string;
   noSampleReason?: string;
 }
 

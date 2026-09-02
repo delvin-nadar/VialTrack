@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserAuth, PickupTask, Route, PickupBoy, StopProgress, TaskStatus, RiderSession } from '../../types';
+import { UserAuth, PickupTask, Route, PickupBoy, StopProgress, TaskStatus, RiderSession, StopStatus } from '../../types';
 import {
   Bike,
   MapPin,
@@ -192,8 +192,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [isProcessingDrop, setIsProcessingDrop] = useState<boolean>(false);
 
   // Stop collection 2-Photo proof state
-  const [vialCount, setVialCount] = useState<number>(0);
+  const [vialCount, setVialCount] = useState<number>(1);
   const [coldBoxTemp, setColdBoxTemp] = useState<number>(4.0);
+  const [pickupRemarkType, setPickupRemarkType] = useState<'Collected sample' | 'No Sample' | 'Other'>('Collected sample');
+  const [pickupCustomRemark, setPickupCustomRemark] = useState<string>('');
   const [stopPhoto, setStopPhoto] = useState<string | null>(null); // Photo 1: Specimen Vials
   const [stopPhoto2, setStopPhoto2] = useState<string | null>(null); // Photo 2: Rider Location Selfie
   const [pickupFormError, setPickupFormError] = useState<string | null>(null);
@@ -1099,7 +1101,23 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     const safeStops = targetTask.stopsProgress || targetTask.stops || [];
     const targetStop = safeStops[stopIdx] || safeStops[0];
-    setVialCount((targetStop as any)?.sampleCount ?? (targetStop as any)?.specimenCount ?? 0);
+    const rawVials = (targetStop as any)?.sampleCount ?? (targetStop as any)?.specimenCount ?? 0;
+    const existingRemark = (targetStop as any)?.remark || ((targetStop as any)?.status === 'no_sample' || (targetStop as any)?.noSampleReason ? 'No Sample' : (rawVials > 0 ? 'Collected sample' : 'Collected sample'));
+
+    if (existingRemark === 'No Sample' || (targetStop as any)?.status === 'no_sample') {
+      setPickupRemarkType('No Sample');
+      setPickupCustomRemark('');
+      setVialCount(0);
+    } else if (typeof existingRemark === 'string' && existingRemark.startsWith('Other')) {
+      setPickupRemarkType('Other');
+      setPickupCustomRemark(existingRemark.replace(/^Other:?\s*/i, ''));
+      setVialCount(rawVials);
+    } else {
+      setPickupRemarkType('Collected sample');
+      setPickupCustomRemark('');
+      setVialCount(rawVials > 0 ? rawVials : 1);
+    }
+
     setColdBoxTemp((targetStop as any)?.coldBoxTemp ?? 4.0);
     setStopPhoto((targetStop as any)?.photoUrl || null);
     setStopPhoto2((targetStop as any)?.handoverPhotoUrl || (targetStop as any)?.photo2Url || (targetStop as any)?.selfieUrl || null);
@@ -1231,7 +1249,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     onRefresh();
   };
 
-  // Confirm Stop Pickup with 2-Photo Proof (Specimens & Selfie)
+  // Confirm Stop Pickup with 2-Photo Proof (Specimens & Selfie) & Remark
   const handleConfirmStopPickup = () => {
     const allKnownTasks = [...liveTasks, ...todayRiderTasks, ...tasks, ...StorageService.getTasks()];
     const currentTask = (activeTaskId ? allKnownTasks.find((t) => t.id === activeTaskId) : null) || activeTask;
@@ -1241,18 +1259,47 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       return;
     }
 
-    // Strict Mandatory Proof Validations
-    if (!stopPhoto && !stopPhoto2) {
-      setPickupFormError('Mandatory Proofs Required: Please capture/upload both "Specimen Vials in Chiller Rack" AND "Rider Location Selfie" before confirming.');
-      return;
-    }
-    if (!stopPhoto) {
-      setPickupFormError('Mandatory Photo 1 Missing: Please capture/upload photo of "Specimen Vials in Chiller Rack".');
-      return;
-    }
-    if (!stopPhoto2) {
-      setPickupFormError('Mandatory Photo 2 Missing: Please capture/upload "Rider Location Selfie" to verify on-site presence.');
-      return;
+    // Determine final remark and vial count based on rider selection
+    const finalRemark =
+      pickupRemarkType === 'Collected sample'
+        ? 'Collected sample'
+        : pickupRemarkType === 'No Sample'
+        ? 'No Sample'
+        : pickupCustomRemark.trim()
+        ? `Other: ${pickupCustomRemark.trim()}`
+        : 'Other';
+
+    const finalVialCount = pickupRemarkType === 'No Sample' ? 0 : Math.max(0, vialCount);
+
+    // Proof Validations based on selected remark
+    if (pickupRemarkType === 'Collected sample') {
+      if (finalVialCount <= 0) {
+        setPickupFormError('Please enter at least 1 vial for "Collected sample", or choose "No Sample" if zero specimens were available.');
+        return;
+      }
+      if (!stopPhoto && !stopPhoto2) {
+        setPickupFormError('Mandatory Proofs Required: Please capture/upload both "Specimen Vials in Chiller Rack" AND "Rider Location Selfie" before confirming.');
+        return;
+      }
+      if (!stopPhoto) {
+        setPickupFormError('Mandatory Photo 1 Missing: Please capture/upload photo of "Specimen Vials in Chiller Rack".');
+        return;
+      }
+      if (!stopPhoto2) {
+        setPickupFormError('Mandatory Photo 2 Missing: Please capture/upload "Rider Location Selfie" to verify on-site presence.');
+        return;
+      }
+    } else if (pickupRemarkType === 'No Sample') {
+      if (!stopPhoto2 && !stopPhoto) {
+        setPickupFormError('Mandatory Arrival Proof: Please capture/upload "Rider Location Selfie" to verify on-site presence for No Sample.');
+        return;
+      }
+    } else {
+      // Other
+      if (!stopPhoto2 && !stopPhoto) {
+        setPickupFormError('Mandatory Proof Required: Please capture/upload "Rider Location Selfie" or verification photo.');
+        return;
+      }
     }
 
     setPickupFormError(null);
@@ -1270,42 +1317,50 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       lat: currentTask.pickupLocation?.lat || 19.1287852,
       lng: currentTask.pickupLocation?.lng || 72.8294183,
       status: 'pending',
-      sampleCount: vialCount
+      sampleCount: finalVialCount
     }];
 
     const targetIdx = Math.max(0, Math.min(currentStopIndex, safeStops.length - 1));
     const stopToUpdate = safeStops[targetIdx] || safeStops[0] || { stopName: 'Collection Point' };
     const stopName = stopToUpdate.stopName || stopToUpdate.name || 'Collection Stop';
 
-    const finalSamplePhoto = stopPhoto;
-    const finalSelfiePhoto = stopPhoto2;
+    const finalSamplePhoto = stopPhoto || (pickupRemarkType === 'No Sample' ? generateSampleVialPhoto('vial', `Zero Sample Recorded • ${stopName}`) : stopPhoto);
+    const finalSelfiePhoto = stopPhoto2 || stopPhoto;
+
+    const stopStatus: StopStatus = pickupRemarkType === 'No Sample' ? 'no_sample' : 'picked_up';
+
+    const stopNotes =
+      pickupRemarkType === 'No Sample'
+        ? 'No Sample - Verified at collection point (0 samples ready).'
+        : pickupRemarkType === 'Collected sample'
+        ? `${finalVialCount} specimen vials collected and sealed in chiller rack.`
+        : `Other: ${pickupCustomRemark.trim() || 'Special condition noted'} (${finalVialCount} vials)`;
 
     const updatedStops: StopProgress[] = safeStops.map((s, idx) => {
       if (idx === targetIdx) {
         return {
           ...s,
-          status: 'picked_up',
+          status: stopStatus,
           pickedUpAt: new Date().toISOString(),
           arrivedAt: s.arrivedAt || new Date().toISOString(),
-          sampleCount: vialCount,
-          specimenCount: vialCount,
+          sampleCount: finalVialCount,
+          specimenCount: finalVialCount,
           coldBoxTemp: coldBoxTemp,
-          photoUrl: finalSamplePhoto,
-          handoverPhotoUrl: finalSelfiePhoto,
-          photo2Url: finalSelfiePhoto,
-          selfieUrl: finalSelfiePhoto,
+          photoUrl: finalSamplePhoto || undefined,
+          handoverPhotoUrl: finalSelfiePhoto || undefined,
+          photo2Url: finalSelfiePhoto || undefined,
+          selfieUrl: finalSelfiePhoto || undefined,
           photoTimestamp: new Date().toISOString(),
           photoLocation: { lat: s.lat || 19.2082, lng: s.lng || 72.8398, accuracy: 5 },
-          notes:
-            vialCount === 0
-              ? 'Verified: 0 samples ready for collection.'
-              : `${vialCount} specimen vials sealed in chiller rack with rider selfie verification.`
+          notes: stopNotes,
+          remark: finalRemark,
+          noSampleReason: pickupRemarkType === 'No Sample' ? 'No Sample ready at collection point' : undefined
         };
       }
       return s;
     });
 
-    const isAllStopsPicked = updatedStops.every((s) => s.status === 'picked_up' || s.status === 'no_sample');
+    const isAllStopsPicked = updatedStops.every((s) => s.status === 'picked_up' || s.status === 'no_sample' || s.status === 'completed');
 
     const updatedTask: PickupTask = {
       ...currentTask,
@@ -1332,14 +1387,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         completedAt: sp.completedAt,
         photoTimestamp: sp.photoTimestamp,
         photoLocation: sp.photoLocation,
-        notes: sp.notes || ''
+        notes: sp.notes || '',
+        remark: sp.remark,
+        noSampleReason: sp.noSampleReason
       })),
-      photoUrl: finalSamplePhoto,
-      photo2Url: finalSelfiePhoto,
-      selfieUrl: finalSelfiePhoto,
-      handoverPhotoUrl: finalSelfiePhoto,
+      photoUrl: finalSamplePhoto || currentTask.photoUrl,
+      photo2Url: finalSelfiePhoto || currentTask.photo2Url,
+      selfieUrl: finalSelfiePhoto || currentTask.selfieUrl,
+      handoverPhotoUrl: finalSelfiePhoto || currentTask.handoverPhotoUrl,
       coldBoxTemp: coldBoxTemp,
-      sampleCount: vialCount
+      sampleCount: updatedStops.reduce((sum, st) => sum + (st.sampleCount || 0), 0)
     };
 
     setLiveTasks((prev) => {
@@ -1355,25 +1412,37 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       targetIdx,
       updatedStops,
       {
-        sampleCount: vialCount,
+        sampleCount: finalVialCount,
         coldBoxTemp: coldBoxTemp,
-        photoUrl: finalSamplePhoto,
-        handoverPhotoUrl: finalSelfiePhoto,
-        photo2Url: finalSelfiePhoto,
-        selfieUrl: finalSelfiePhoto,
-        notes: vialCount === 0 ? '0 samples collected' : `${vialCount} specimen vials collected in chiller rack with rider selfie`
+        photoUrl: finalSamplePhoto || '',
+        handoverPhotoUrl: finalSelfiePhoto || '',
+        photo2Url: finalSelfiePhoto || '',
+        selfieUrl: finalSelfiePhoto || '',
+        notes: stopNotes,
+        remark: finalRemark,
+        status: stopStatus,
+        noSampleReason: pickupRemarkType === 'No Sample' ? 'No Sample ready at collection point' : undefined
       }
     );
     setIsProcessingStop(false);
     setStopPhoto(null);
     setStopPhoto2(null);
-    setVialCount(0);
+    setVialCount(1);
+    setPickupRemarkType('Collected sample');
+    setPickupCustomRemark('');
     onRefresh();
+
+    const notifTitle =
+      pickupRemarkType === 'No Sample'
+        ? `No Sample Recorded at ${stopName}`
+        : pickupRemarkType === 'Collected sample'
+        ? `Sample Picked: ${finalVialCount} Vials`
+        : `Stop Remark Logged: ${finalRemark}`;
 
     NotificationService.sendAlert({
       type: 'pickup',
-      title: `Sample Picked: ${vialCount} Vials`,
-      message: `${activeRider.name} collected ${vialCount} vials at ${stopName}. 2-Photo proof verified (Specimens & Selfie). Cold box: ${coldBoxTemp}°C.`,
+      title: notifTitle,
+      message: `${activeRider.name} updated ${stopName}: [${finalRemark}] ${finalVialCount > 0 ? `${finalVialCount} vials collected.` : ''} Cold box: ${coldBoxTemp}°C.`,
       recipientRole: 'both',
       channel: 'both'
     });
@@ -2074,69 +2143,187 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               </div>
             )}
 
-            {/* Quick 1-Handed Vial Counter Stepper */}
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 text-center space-y-2.5">
+            {/* Rider Remark Selector */}
+            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2.5">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Vials / Blood Samples Count
+                  Pickup Status Remark (Visible to Client)
                 </label>
-                <span className="text-[11px] text-slate-500 font-medium">Recorded Vials: {vialCount}</span>
+                <span className="text-[10px] text-sky-700 font-bold bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                  {pickupRemarkType}
+                </span>
               </div>
 
-              <div className="flex items-center justify-center gap-3">
+              {/* 3 Main Remark Options */}
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setVialCount(Math.max(0, vialCount - 1))}
-                  className="w-11 h-11 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-2xl flex items-center justify-center active:scale-90 shadow-xs cursor-pointer"
-                  title="Decrease count"
+                  onClick={() => {
+                    setPickupRemarkType('Collected sample');
+                    if (vialCount === 0) setVialCount(1);
+                  }}
+                  className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                    pickupRemarkType === 'Collected sample'
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-900 ring-2 ring-emerald-200 shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
                 >
-                  <Minus className="w-5 h-5" />
+                  <CheckCircle2 className={`w-4 h-4 ${pickupRemarkType === 'Collected sample' ? 'text-emerald-700' : 'text-slate-400'}`} />
+                  <span className="text-xs font-bold leading-tight">Collected sample</span>
+                  <span className="text-[9px] text-slate-500 font-medium">Vials collected</span>
                 </button>
 
-                <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickupRemarkType('No Sample');
+                    setVialCount(0);
+                  }}
+                  className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                    pickupRemarkType === 'No Sample'
+                      ? 'bg-amber-50 border-amber-400 text-amber-900 ring-2 ring-amber-200 shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <AlertCircle className={`w-4 h-4 ${pickupRemarkType === 'No Sample' ? 'text-amber-700' : 'text-slate-400'}`} />
+                  <span className="text-xs font-bold leading-tight">No Sample</span>
+                  <span className="text-[9px] text-slate-500 font-medium">Zero samples</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickupRemarkType('Other');
+                  }}
+                  className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                    pickupRemarkType === 'Other'
+                      ? 'bg-sky-50 border-sky-400 text-sky-900 ring-2 ring-sky-200 shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <FileText className={`w-4 h-4 ${pickupRemarkType === 'Other' ? 'text-sky-700' : 'text-slate-400'}`} />
+                  <span className="text-xs font-bold leading-tight">Other</span>
+                  <span className="text-[9px] text-slate-500 font-medium">Custom status</span>
+                </button>
+              </div>
+
+              {/* Sub-details for 'Other' option */}
+              {pickupRemarkType === 'Other' && (
+                <div className="pt-2 border-t border-slate-200 space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-700">Specify Remark / Reason:</span>
+                    <span className="text-slate-400 text-[10px]">Client will see this</span>
+                  </div>
                   <input
-                    type="number"
-                    min="0"
-                    max="999"
-                    value={vialCount}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      setVialCount(isNaN(val) || val < 0 ? 0 : val);
-                    }}
-                    className="w-24 h-11 text-center font-mono font-bold text-2xl text-amber-800 bg-white border-2 border-slate-300 rounded-lg focus:outline-hidden focus:border-sky-600 shadow-inner"
+                    type="text"
+                    placeholder="e.g. Clinic closed, Doctor unavailable, Sample postponed..."
+                    value={pickupCustomRemark}
+                    onChange={(e) => setPickupCustomRemark(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:ring-1 focus:ring-sky-600 focus:border-sky-600 font-medium"
                   />
-                  <span className="block text-[9px] text-slate-400 uppercase font-semibold mt-0.5">Vials</span>
+                  {/* Quick Pill presets */}
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {['Center Closed', 'Doctor Unavailable', 'Postponed to Next Round', 'Compromised Specimen'].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setPickupCustomRemark(preset)}
+                        className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                          pickupCustomRemark === preset
+                            ? 'bg-sky-700 text-white border-sky-700'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Informative notification for No Sample */}
+              {pickupRemarkType === 'No Sample' && (
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px] flex items-center gap-2 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>
+                    <strong>"No Sample"</strong> remark will be reported to the client. Zero vials will be recorded, and rider location selfie will verify your on-site visit.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Quick 1-Handed Manual Vial Counter Stepper (Active for Collected sample and Other) */}
+            {pickupRemarkType !== 'No Sample' ? (
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 text-center space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Manual Vial Count (Entered by Rider)
+                  </label>
+                  <span className="text-[11px] text-emerald-800 font-bold">Vials: {vialCount}</span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setVialCount(vialCount + 1)}
-                  className="w-11 h-11 rounded-lg bg-sky-700 hover:bg-sky-800 text-white font-bold text-2xl flex items-center justify-center active:scale-90 shadow-xs cursor-pointer"
-                  title="Increase count"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Quick Preset Selector Chips */}
-              <div className="flex items-center justify-center gap-1.5 pt-1 flex-wrap">
-                <span className="text-[10px] text-slate-400 font-semibold mr-1">Quick:</span>
-                {[0, 2, 5, 10, 15, 20].map((preset) => (
+                <div className="flex items-center justify-center gap-3">
                   <button
-                    key={preset}
                     type="button"
-                    onClick={() => setVialCount(preset)}
-                    className={`px-2.5 py-1 text-xs font-mono font-semibold rounded-md border transition-all cursor-pointer ${
-                      vialCount === preset
-                        ? 'bg-sky-700 text-white border-sky-700 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
+                    onClick={() => setVialCount(Math.max(1, vialCount - 1))}
+                    className="w-11 h-11 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-2xl flex items-center justify-center active:scale-90 shadow-xs cursor-pointer"
+                    title="Decrease count"
                   >
-                    {preset}
+                    <Minus className="w-5 h-5" />
                   </button>
-                ))}
+
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={vialCount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setVialCount(isNaN(val) || val < 0 ? 0 : val);
+                      }}
+                      className="w-24 h-11 text-center font-mono font-bold text-2xl text-emerald-800 bg-white border-2 border-emerald-300 rounded-lg focus:outline-hidden focus:border-emerald-600 shadow-inner"
+                    />
+                    <span className="block text-[9px] text-slate-400 uppercase font-semibold mt-0.5">Vials Picked</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setVialCount(vialCount + 1)}
+                    className="w-11 h-11 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-2xl flex items-center justify-center active:scale-90 shadow-xs cursor-pointer"
+                    title="Increase count"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Quick Preset Selector Chips */}
+                <div className="flex items-center justify-center gap-1.5 pt-1 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-semibold mr-1">Quick:</span>
+                  {[1, 2, 5, 10, 15, 20].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setVialCount(preset)}
+                      className={`px-2.5 py-1 text-xs font-mono font-semibold rounded-md border transition-all cursor-pointer ${
+                        vialCount === preset
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">Specimens Count:</span>
+                <span className="font-mono font-bold text-xs bg-amber-100 text-amber-900 px-3 py-1 rounded-md border border-amber-300">
+                  0 Vials (No Sample)
+                </span>
+              </div>
+            )}
 
             {/* Chiller Box Temperature reading */}
             <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1.5">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Client, Route, PickupBoy, PickupTask } from '../../types';
 import { CloudSync, formatUnifiedTask } from '../../services/firebase';
 import { db } from '../../firebase';
@@ -63,9 +63,12 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   // Array of selected stop IDs for dispatch batch assignment
   const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
 
-  // Initialize selections when modal opens or props change
+  // Track previous isOpen state to only initialize when the modal transitions from closed to open
+  const prevIsOpenRef = useRef(false);
+
+  // Initialize selections ONLY when modal opens (not on background telemetry refetches)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       const initialClient = clients[0];
       const initialClientId = initialClient?.id || '';
       setSelectedClientId(initialClientId);
@@ -98,13 +101,12 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         setSelectedStopIds(formattedStops.map((s) => s.id));
       }
     }
-  }, [isOpen, clients, routes, riders]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
 
-  // When Rider is selected: Automatically select/check ALL available pickup stops in the current collection route
+  // When Rider is selected: retain existing stop counts and ensure they are assigned
   const handleRiderChange = (rId: string) => {
     setSelectedRiderId(rId);
-    // Auto-select all available stops by default when rider is selected/changed
-    setSelectedStopIds(customStops.map((s) => s.id));
   };
 
   // Update route and stops when client changes
@@ -197,16 +199,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     }
   };
 
-  const handleUpdateStopSpecimenCount = (index: number, count: number) => {
-    const updated = [...customStops];
-    updated[index].specimenCount = Math.max(0, count);
-    setCustomStops(updated);
-  };
-
   // Metrics for selected stops
   const selectedStopsList = customStops.filter((s) => selectedStopIds.includes(s.id));
-  const selectedSpecimensCount = selectedStopsList.reduce((sum, s) => sum + (s.specimenCount || 0), 0);
-  const totalSpecimensAllStops = customStops.reduce((sum, s) => sum + (s.specimenCount || 0), 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -477,11 +471,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <span className="text-[11px] text-slate-500">
-                  Total Specimens:{' '}
-                  <strong className="text-emerald-700 font-bold">
-                    {selectedSpecimensCount} Vials
-                  </strong>{' '}
-                  <span className="text-slate-400">({totalSpecimensAllStops} max)</span>
+                  Selected Stops:{' '}
+                  <strong className="text-sky-800 font-bold">
+                    {selectedStopIds.length} of {customStops.length}
+                  </strong>
                 </span>
                 <button
                   type="button"
@@ -540,19 +533,9 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex items-center gap-1">
-                        <label className="text-[10px] font-bold text-slate-500">Vials:</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="200"
-                          value={stop.specimenCount}
-                          onChange={(e) =>
-                            handleUpdateStopSpecimenCount(idx, parseInt(e.target.value) || 0)
-                          }
-                          className="w-14 px-2 py-1 text-center bg-slate-50 border border-slate-300 rounded text-xs font-bold text-slate-800 focus:ring-1 focus:ring-sky-500 focus:outline-hidden"
-                        />
-                      </div>
+                      <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md font-medium hidden sm:inline-block">
+                        Vials filled by rider
+                      </span>
                       {customStops.length > 1 && (
                         <button
                           type="button"

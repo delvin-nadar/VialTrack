@@ -179,6 +179,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                   (safeStops.length === 1 ? ((task as any)?.selfieUrl || (task as any)?.photo2Url || (task as any)?.handoverPhotoUrl) : null) ||
                   generateSampleVialPhoto('selfie', `Rider Verification Selfie • ${task.riderName} @ ${stopName}`);
 
+                const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (stop.status === 'picked_up' || isDelivered ? 'Collected sample' : null));
                 const arrivalTime = stop.arrivedAt || task.startedAt || task.createdAt;
 
                 return (
@@ -194,15 +195,28 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                         </span>
                         <h5 className="font-bold text-slate-900 text-xs sm:text-sm">{stopName}</h5>
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        stop.status === 'picked_up' || stop.status === 'completed' || isDelivered
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : stop.status === 'no_sample'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {stop.status === 'picked_up' || stop.status === 'completed' || isDelivered ? `${stopVials} Vials Picked` : (stop.status || 'Verified')}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {stopRemark && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            stopRemark === 'Collected sample' || stop.status === 'picked_up'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : stopRemark === 'No Sample' || stop.status === 'no_sample'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-sky-100 text-sky-800 border border-sky-200'
+                          }`}>
+                            {stopRemark}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          stop.status === 'picked_up' || stop.status === 'completed' || isDelivered
+                            ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                            : stop.status === 'no_sample'
+                            ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {stop.status === 'no_sample' ? '0 Vials' : `${stopVials} Vials`}
+                        </span>
+                      </div>
                     </div>
 
                     <p className="text-xs text-slate-500 mt-1.5">{stop.address || 'Certified Mumbai Collection Facility'}</p>
