@@ -2255,7 +2255,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Mandatory 2-Photo Proof (Specimens & Selfie)
+                  Mandatory 2-Photo Proof (Specimens & Selfie) <span className="text-rose-600 font-bold">*</span>
                 </label>
               </div>
 
@@ -2269,7 +2269,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
               {/* Photo 1: Specimen Vials in Rack */}
               <div 
-                className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2 transition-all"
+                className={`border rounded-lg p-3 space-y-2 transition-all ${
+                  !stopPhoto && pickupFormError && pickupRemarkType === 'Collected sample'
+                    ? 'border-rose-400 bg-rose-50/50 ring-2 ring-rose-300'
+                    : 'border-slate-200 bg-slate-50/50'
+                }`}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -2281,13 +2285,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   <span className="font-bold text-slate-800 flex items-center gap-1.5">
                     <Package className="w-3.5 h-3.5 text-sky-700" />
                     <span>Photo 1: Specimen Vials in Chiller Rack</span>
+                    <span className="text-rose-600 font-bold">*</span>
                   </span>
                   {stopPhoto ? (
                     <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Geotagged
                     </span>
                   ) : (
-                    <span className="text-[10px] text-amber-700 font-semibold">Required</span>
+                    <span className="text-[10px] text-rose-700 font-bold bg-rose-100/90 px-1.5 py-0.5 rounded border border-rose-200">
+                      * Required Photo
+                    </span>
                   )}
                 </div>
 
@@ -2338,7 +2345,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       type="button"
                       onClick={() => fileInputRef1.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-1.5 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border-2 border-dashed border-sky-400 rounded-lg bg-sky-50/70 hover:bg-sky-100 text-sky-900 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                       title="Open Live Camera"
                     >
                       <Camera className="w-4 h-4 text-sky-700" />
@@ -2348,7 +2355,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       type="button"
                       onClick={() => fileGalleryRef1.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                       title="Select from Photo Library / Files or Drag & Drop"
                     >
                       <Upload className="w-4 h-4 text-slate-600" />
@@ -2360,7 +2367,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
               {/* Photo 2: Rider Location Selfie */}
               <div 
-                className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2 transition-all"
+                className={`border rounded-lg p-3 space-y-2 transition-all ${
+                  !stopPhoto2 && pickupFormError
+                    ? 'border-rose-400 bg-rose-50/50 ring-2 ring-rose-300'
+                    : 'border-slate-200 bg-slate-50/50'
+                }`}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -2372,13 +2383,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   <span className="font-bold text-slate-800 flex items-center gap-1.5">
                     <UserCheck className="w-3.5 h-3.5 text-sky-700" />
                     <span>Photo 2: Rider Location Selfie</span>
+                    <span className="text-rose-600 font-bold">*</span>
                   </span>
                   {stopPhoto2 ? (
                     <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Geotagged
                     </span>
                   ) : (
-                    <span className="text-[10px] text-amber-700 font-semibold">Selfie Required</span>
+                    <span className="text-[10px] text-rose-700 font-bold bg-rose-100/90 px-1.5 py-0.5 rounded border border-rose-200">
+                      * Required Selfie
+                    </span>
                   )}
                 </div>
 
@@ -2429,7 +2443,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       type="button"
                       onClick={() => fileInputRef2.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-1.5 border-2 border-dashed border-sky-300 rounded-lg bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border-2 border-dashed border-sky-400 rounded-lg bg-sky-50/70 hover:bg-sky-100 text-sky-900 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                       title="Open Front Camera Selfie"
                     >
                       <Camera className="w-4 h-4 text-sky-700" />
@@ -2439,7 +2453,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       type="button"
                       onClick={() => fileGalleryRef2.current?.click()}
                       disabled={watermarking}
-                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                      className="py-3 px-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                       title="Select Selfie from Photo Library / Files or Drag & Drop"
                     >
                       <Upload className="w-4 h-4 text-slate-600" />
@@ -2534,7 +2548,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
             {/* Handover Photo */}
             <div 
-              className="space-y-2"
+              className={`space-y-2 p-3 rounded-lg border transition-all ${
+                !stopPhoto && dropFormError
+                  ? 'border-rose-400 bg-rose-50/50 ring-2 ring-rose-300'
+                  : 'border-slate-200 bg-slate-50/30'
+              }`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
@@ -2543,12 +2561,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               }}
             >
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Lab Handover Photo / Signed Slip
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                  <span>Lab Handover Photo / Signed Slip</span>
+                  <span className="text-rose-600 font-bold">*</span>
                 </label>
-                {stopPhoto && (
+                {stopPhoto ? (
                   <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
                     <Check className="w-3 h-3" /> Geotagged
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-rose-700 font-bold bg-rose-100/90 px-1.5 py-0.5 rounded border border-rose-200">
+                    * Required Photo
                   </span>
                 )}
               </div>
@@ -2601,7 +2624,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     type="button"
                     onClick={() => dropFileInputRef.current?.click()}
                     disabled={watermarking}
-                    className="py-3 px-2 border-2 border-dashed border-emerald-300 rounded-lg bg-emerald-50/50 hover:bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    className="py-3 px-2 border-2 border-dashed border-emerald-400 rounded-lg bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     title="Take photo with camera"
                   >
                     <Camera className="w-4 h-4 text-emerald-700" />
@@ -2612,7 +2635,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     type="button"
                     onClick={() => dropGalleryRef.current?.click()}
                     disabled={watermarking}
-                    className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
+                    className="py-3 px-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
                     title="Choose from photo library / signed slip file or drag & drop"
                   >
                     <Upload className="w-4 h-4 text-slate-600" />
@@ -2630,7 +2653,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>COMPLETE LAB DELIVERY</span>
+                <span>
+                  {!stopPhoto
+                    ? 'COMPLETE LAB DELIVERY (Photo Required)'
+                    : 'COMPLETE LAB DELIVERY'}
+                </span>
               </button>
             </div>
           </div>

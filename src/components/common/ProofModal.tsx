@@ -405,7 +405,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                     </div>
                   </div>
 
-                  {destPhoto && (
+                  {destPhoto ? (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
@@ -438,6 +438,18 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                           Click to enlarge
                         </div>
                       </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-emerald-300 bg-emerald-50/50 p-4 flex flex-col items-center justify-center text-center space-y-1">
+                      <ShieldCheck className="w-7 h-7 text-emerald-600 mb-0.5" />
+                      <span className="text-xs font-bold text-emerald-900">
+                        {isDelivered ? 'Lab Handover Completed (No Photo Captured)' : 'Pending Destination Diagnostic Lab Handover'}
+                      </span>
+                      <span className="text-[10px] text-emerald-700 max-w-sm">
+                        {isDelivered
+                          ? 'Delivery was recorded without an attached handover slip photo.'
+                          : 'Rider is en route to the processing lab. Handover slip & receiver verification will be recorded on arrival.'}
+                      </span>
                     </div>
                   )}
 
