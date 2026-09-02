@@ -741,7 +741,32 @@ export const CloudSync = {
   async completeTripStop(tripId: string, stopIndex: number, currentStops: any[], extra?: any) {
     try {
       const nowStr = new Date().toISOString();
-      const updatedStops = currentStops.map((s, idx) => {
+
+      // Defensive re-sync: `currentStops` comes from the caller's local React state, which can be
+      // stale (e.g. resolved from an older cached task copy while confirming a LATER stop).
+      // Firestore's `merge: true` does NOT deep-merge array fields — writing `stops`/`stopsProgress`
+      // replaces the whole array. If we blindly write a stale `currentStops` array here, an earlier
+      // stop's already-confirmed proof (photo, status) gets silently overwritten back to "pending".
+      // To prevent that, we re-read the current server copy of the stops array and use IT as the
+      // base for every stop except the one we are actively confirming, so a stale local snapshot
+      // can never erase another stop's real progress.
+      let baseStops = currentStops;
+      try {
+        const freshSnap = await getDoc(doc(db, 'trips', tripId));
+        if (freshSnap.exists()) {
+          const freshData = freshSnap.data() as any;
+          const freshStopsArr = Array.isArray(freshData.stops) && freshData.stops.length > 0
+            ? freshData.stops
+            : (Array.isArray(freshData.stopsProgress) ? freshData.stopsProgress : null);
+          if (freshStopsArr && freshStopsArr.length === currentStops.length) {
+            baseStops = freshStopsArr;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[CloudSync] Could not fetch fresh trip doc before completing stop, using local copy as fallback:', fetchErr);
+      }
+
+      const updatedStops = baseStops.map((s: any, idx: number) => {
         if (idx === stopIndex) {
           const sampleCount = extra?.sampleCount !== undefined ? Number(extra.sampleCount) : Number(s.sampleCount ?? s.specimenCount ?? 0);
           const photoUrl = extra?.photoUrl || s.photoUrl || '';
