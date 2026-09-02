@@ -92,49 +92,11 @@ export const RiderLogin: React.FC<RiderLoginProps> = ({ onLoginSuccess, onBackTo
         }
       }
 
-      // 3. If still not found, allow dynamic auto-provisioning for any valid 10-digit number
+      // 3. If not found, strictly deny access - only admin-registered riders can log in
       if (!matchedRider) {
-        const riderId = `rider-${cleanPhone}`;
-        const riderName = `Rider ${cleanPhone.slice(-4)}`;
-        matchedRider = {
-          id: riderId,
-          name: riderName,
-          phone: `+91 ${cleanPhone}`,
-          email: `${riderId.toLowerCase()}@vialtrack.in`,
-          password: cleanPin,
-          vehicleNumber: '',
-          vehicleType: 'Motorcycle / Bike',
-          photoUrl: '',
-          assignedRouteIds: [],
-          status: 'active',
-          joiningDate: new Date().toISOString().split('T')[0],
-          isOnline: true,
-          isCheckedIn: true
-        };
-
-        // Persist to local storage and Firestore
-        StorageService.addRider(matchedRider);
-        try {
-          await setDoc(
-            doc(db, 'riders', riderId),
-            {
-              id: riderId,
-              name: riderName,
-              phone: `+91 ${cleanPhone}`,
-              vehicleNo: '',
-              vehicleNumber: '',
-              vehicleType: 'Motorcycle / Bike',
-              battery: 100,
-              coldBoxTemp: 4.0,
-              isOnline: true,
-              status: 'active',
-              lastUpdated: serverTimestamp()
-            },
-            { merge: true }
-          );
-        } catch (e) {
-          console.warn('[RiderLogin] Firestore auto-init:', e);
-        }
+        setError('Access Denied: Mobile number not registered with SecondMedic Operations. Contact Ops Admin.');
+        setLoading(false);
+        return;
       }
 
       // 4. Rate Limiting Check
