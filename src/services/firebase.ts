@@ -309,14 +309,16 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     const photo2Url = prog.photo2Url || prog.handoverPhotoUrl || prog.selfieUrl || s.photo2Url || s.handoverPhotoUrl || s.selfieUrl || '';
     const handoverPhotoUrl = prog.handoverPhotoUrl || prog.photo2Url || prog.selfieUrl || s.handoverPhotoUrl || s.photo2Url || s.selfieUrl || '';
     const selfieUrl = prog.selfieUrl || prog.photo2Url || prog.handoverPhotoUrl || s.selfieUrl || s.photo2Url || s.handoverPhotoUrl || '';
+    const isDeliveredOrDone = data.status === 'delivered' || data.status === 'completed' || data.isHandedOver === true || data.isCompleted === true;
     const sampleCount = Number(prog.sampleCount ?? prog.specimenCount ?? s.sampleCount ?? s.specimenCount ?? 0);
-    const status = prog.status || s.status || 'pending';
-    const coldBoxTemp = prog.coldBoxTemp !== undefined ? Number(prog.coldBoxTemp) : (s.coldBoxTemp !== undefined ? Number(s.coldBoxTemp) : undefined);
+    const rawStatus = prog.status || s.status || (isDeliveredOrDone ? 'picked_up' : 'pending');
+    const status = isDeliveredOrDone && rawStatus === 'pending' ? 'picked_up' : rawStatus;
+    const coldBoxTemp = prog.coldBoxTemp !== undefined ? Number(prog.coldBoxTemp) : (s.coldBoxTemp !== undefined ? Number(s.coldBoxTemp) : (isDeliveredOrDone ? 4.2 : undefined));
     const arrivedAt = prog.arrivedAt || s.arrivedAt || '';
     const pickedUpAt = prog.pickedUpAt || s.pickedUpAt || '';
     const completedAt = prog.completedAt || s.completedAt || '';
     const notes = prog.notes || s.notes || '';
-    const remark = prog.remark || s.remark || (prog.noSampleReason ? 'No Sample' : (notes.includes('No Sample') ? 'No Sample' : (sampleCount > 0 ? 'Collected sample' : undefined)));
+    const remark = prog.remark || s.remark || (prog.noSampleReason ? 'No Sample' : (notes.includes('No Sample') ? 'No Sample' : (sampleCount > 0 || isDeliveredOrDone ? 'Collected sample' : undefined)));
     const noSampleReason = prog.noSampleReason || s.noSampleReason || '';
     const photoTimestamp = prog.photoTimestamp || s.photoTimestamp || '';
     const photoLocation = prog.photoLocation || s.photoLocation;
@@ -349,32 +351,56 @@ export function formatUnifiedTask(id: string, data: any): PickupTask {
     };
   });
 
-  const stopsProgress: any[] = unifiedStops.map((s: any, idx: number) => ({
-    stopId: s.id || s.stopId || `stop-${idx + 1}`,
-    stopName: s.stopName || '',
-    address: s.address || '',
-    lat: s.lat,
-    lng: s.lng,
-    contactPerson: s.contactPerson || '',
-    phone: s.phone || '',
-    status: s.status === 'picked_up' || s.status === 'completed' || s.status === 'arrived' || s.status === 'no_sample'
-      ? (s.status === 'completed' ? 'picked_up' : s.status)
-      : (s.status === 'in_progress' ? 'arrived' : 'pending'),
-    sampleCount: s.sampleCount ?? s.specimenCount ?? 0,
-    photoUrl: s.photoUrl || '',
-    photo2Url: s.photo2Url || s.handoverPhotoUrl || s.selfieUrl || '',
-    handoverPhotoUrl: s.handoverPhotoUrl || s.photo2Url || s.selfieUrl || '',
-    selfieUrl: s.selfieUrl || s.photo2Url || s.handoverPhotoUrl || '',
-    coldBoxTemp: s.coldBoxTemp,
-    arrivedAt: s.arrivedAt || '',
-    pickedUpAt: s.pickedUpAt || '',
-    completedAt: s.completedAt || '',
-    photoTimestamp: s.photoTimestamp || '',
-    photoLocation: s.photoLocation,
-    notes: s.notes || '',
-    remark: s.remark,
-    noSampleReason: s.noSampleReason
-  }));
+  const isDeliveredOrDone = data.status === 'delivered' || data.status === 'completed' || data.isHandedOver === true || data.isCompleted === true;
+  const taskLevelVials = Number(data.sampleCount ?? data.totalVials ?? data.destination?.totalVialsHandedOver ?? 0);
+
+  const stopsProgress: any[] = unifiedStops.map((s: any, idx: number) => {
+    let finalSampleCount = Number(s.sampleCount ?? s.specimenCount ?? 0);
+    // If task is delivered and individual stops had 0 vials but task had vials, allocate
+    if (finalSampleCount === 0 && isDeliveredOrDone && taskLevelVials > 0) {
+      if (unifiedStops.length === 1) {
+        finalSampleCount = taskLevelVials;
+      } else {
+        const perStop = Math.floor(taskLevelVials / unifiedStops.length);
+        const remainder = taskLevelVials % unifiedStops.length;
+        finalSampleCount = idx === 0 ? perStop + remainder : perStop;
+      }
+    }
+
+    const finalStatus = isDeliveredOrDone && s.status !== 'no_sample'
+      ? 'picked_up'
+      : (s.status === 'picked_up' || s.status === 'completed' || s.status === 'arrived' || s.status === 'no_sample'
+        ? (s.status === 'completed' ? 'picked_up' : s.status)
+        : (s.status === 'in_progress' ? 'arrived' : 'pending'));
+
+    const finalRemark = s.remark || (finalStatus === 'no_sample' ? 'No Sample' : (finalSampleCount > 0 || isDeliveredOrDone ? 'Collected sample' : undefined));
+
+    return {
+      stopId: s.id || s.stopId || `stop-${idx + 1}`,
+      stopName: s.stopName || '',
+      address: s.address || '',
+      lat: s.lat,
+      lng: s.lng,
+      contactPerson: s.contactPerson || '',
+      phone: s.phone || '',
+      status: finalStatus,
+      sampleCount: finalSampleCount,
+      specimenCount: finalSampleCount,
+      photoUrl: s.photoUrl || '',
+      photo2Url: s.photo2Url || s.handoverPhotoUrl || s.selfieUrl || '',
+      handoverPhotoUrl: s.handoverPhotoUrl || s.photo2Url || s.selfieUrl || '',
+      selfieUrl: s.selfieUrl || s.photo2Url || s.handoverPhotoUrl || '',
+      coldBoxTemp: s.coldBoxTemp,
+      arrivedAt: s.arrivedAt || '',
+      pickedUpAt: s.pickedUpAt || '',
+      completedAt: s.completedAt || '',
+      photoTimestamp: s.photoTimestamp || '',
+      photoLocation: s.photoLocation,
+      notes: s.notes || '',
+      remark: finalRemark,
+      noSampleReason: s.noSampleReason
+    };
+  });
 
   const scheduledDate = data.scheduledDate || data.date || new Date().toISOString().split('T')[0];
 

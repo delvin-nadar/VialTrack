@@ -499,23 +499,37 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <div className="text-slate-400 italic text-[10px]">No collection points specified</div>
                           );
                         }
+                        const isTaskDelivered = task.status === 'delivered' || task.status === 'completed';
+                        const taskTotalVials = Number(task.sampleCount || (task as any).totalVials || 0);
+
                         return safeStops.map((stop: any, sIdx: number) => {
-                          const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (stop.status === 'picked_up' ? 'Collected sample' : null));
-                          const vials = stop.sampleCount ?? stop.specimenCount ?? 0;
+                          const isStopDone = stop.status === 'picked_up' || stop.status === 'completed' || isTaskDelivered;
+                          let vials = Number(stop.sampleCount ?? stop.specimenCount ?? 0);
+                          if (vials === 0 && isTaskDelivered && taskTotalVials > 0) {
+                            if (safeStops.length === 1) {
+                              vials = taskTotalVials;
+                            } else {
+                              const perStop = Math.floor(taskTotalVials / safeStops.length);
+                              const remainder = taskTotalVials % safeStops.length;
+                              vials = sIdx === 0 ? perStop + remainder : perStop;
+                            }
+                          }
+
+                          const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (isStopDone ? 'Collected sample' : null));
 
                           return (
                             <div key={stop.stopId || stop.id || sIdx} className="flex items-center justify-between gap-2">
                               <span className="truncate max-w-[170px] text-slate-700 font-medium">{stop.stopName || stop.name || `Point ${sIdx + 1}`}</span>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                {stop.status === 'picked_up' ? (
-                                  <span className="font-mono text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1">
-                                    <span>{stopRemark || 'Collected'}</span>
-                                    <span>•</span>
-                                    <span>{vials} Vials</span>
-                                  </span>
-                                ) : stop.status === 'no_sample' || stopRemark === 'No Sample' ? (
+                                {stop.status === 'no_sample' || stopRemark === 'No Sample' ? (
                                   <span className="font-mono text-amber-800 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded text-[10px]">
                                     No Sample (0 Vials)
+                                  </span>
+                                ) : isStopDone || vials > 0 ? (
+                                  <span className="font-mono text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1">
+                                    <span>{stopRemark || 'Collected sample'}</span>
+                                    <span>•</span>
+                                    <span>{vials} Vials</span>
                                   </span>
                                 ) : stopRemark && stopRemark.startsWith('Other') ? (
                                   <span className="font-mono text-sky-800 font-bold bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[130px]" title={stopRemark}>
@@ -645,6 +659,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 <th className="px-4 py-3">Date & Slot</th>
                 <th className="px-4 py-3">Route</th>
                 <th className="px-4 py-3">Rider</th>
+                <th className="px-4 py-3">Pickup Remark</th>
                 <th className="px-4 py-3">Vials Picked</th>
                 <th className="px-4 py-3">Chiller Temp</th>
                 <th className="px-4 py-3">Status</th>
@@ -654,8 +669,15 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredTasks.map((t) => {
                 const safeStops = t?.stopsProgress || t?.stops || [];
-                const vials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+                let vials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
+                if (vials === 0 && (t.sampleCount || (t as any).totalVials)) {
+                  vials = Number(t.sampleCount || (t as any).totalVials || 0);
+                }
                 const lastTemp = t?.destination?.coldBoxTempAtDrop || (safeStops[0] as any)?.coldBoxTemp;
+
+                // Derive overall task remark
+                const stopRemarks = safeStops.map((s: any) => s.remark || (s.status === 'no_sample' ? 'No Sample' : (s.sampleCount > 0 ? 'Collected sample' : null))).filter(Boolean);
+                const primaryRemark = stopRemarks[0] || (t.status === 'delivered' ? (vials > 0 ? 'Collected sample' : 'No Sample') : 'Scheduled');
 
                 return (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -665,6 +687,23 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{t.routeName}</td>
                     <td className="px-4 py-3 text-slate-700">{t.riderName}</td>
+                    <td className="px-4 py-3">
+                      {primaryRemark === 'Collected sample' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Collected sample
+                        </span>
+                      ) : primaryRemark === 'No Sample' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          No Sample
+                        </span>
+                      ) : primaryRemark.startsWith('Other') ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200 truncate max-w-[140px]" title={primaryRemark}>
+                          {primaryRemark}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[10px] font-medium">{primaryRemark}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-bold font-mono text-amber-700 text-xs">{vials} Vials</td>
                     <td className="px-4 py-3 font-mono text-emerald-700">
                       {lastTemp !== undefined ? `${lastTemp.toFixed(1)}°C` : 'N/A'}
