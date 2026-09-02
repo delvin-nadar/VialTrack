@@ -210,6 +210,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       try {
         await deleteDoc(doc(db, 'tasks', taskId));
         await deleteDoc(doc(db, 'trips', taskId));
+        await deleteDoc(doc(db, 'smvt_tasks', taskId));
       } catch (err) {
         console.warn('Firestore task delete error:', err);
       }
