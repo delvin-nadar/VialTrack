@@ -37,7 +37,7 @@ import {
   Upload,
   Loader2
 } from 'lucide-react';
-import { addWatermarkToImage, compressImageToBase64, generateSampleVialPhoto } from '../../services/imageWatermark';
+import { addWatermarkToImage, compressImageToBase64 } from '../../services/imageWatermark';
 import { StorageService } from '../../services/storage';
 import { LocationService, GpsStatusEvent } from '../../services/locationService';
 import { NotificationService } from '../../services/notificationService';
@@ -868,104 +868,6 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     await processSelectedFile(file, photoType);
   };
 
-  // Verified Specimen / Rider Selfie Proof Generator
-  const handleDigitalPhotoGenerate = async (photoType: 'photo1' | 'photo2' | 'drop') => {
-    setWatermarking(true);
-    const safeStops = activeTask?.stopsProgress || (activeTask as any)?.stops || [];
-    const currentStop = safeStops[currentStopIndex] || safeStops[0];
-    const generated = generateSampleVialPhoto(
-      photoType === 'drop' ? 'drop' : photoType === 'photo2' ? 'selfie' : 'vial',
-      photoType === 'drop'
-        ? `Diagnostic Lab Handover • ${activeTask?.destination?.name || 'Central Lab'}`
-        : photoType === 'photo2'
-        ? `Rider Verification Selfie • ${activeRider.name} @ ${currentStop?.stopName || 'Stop'}`
-        : `${vialCount} Specimen Vials • ${currentStop?.stopName || 'Stop'}`
-    );
-
-    const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
-    const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
-    const stopAddr =
-      photoType === 'drop'
-        ? activeTask?.destination?.name || activeTask?.destination?.address || 'Processing Facility'
-        : currentStop?.stopName || currentStop?.address || 'Collection Stop';
-
-    try {
-      const watermarked = await addWatermarkToImage(generated, {
-        timestamp: new Date().toISOString(),
-        lat: stopLat,
-        lng: stopLng,
-        address: stopAddr,
-        riderName: activeRider.name,
-        clientName: activeTask?.clientName || (activeTask as any)?.destination?.name || '',
-        vialCount: vialCount,
-        temperature: coldBoxTemp,
-        isDrop: photoType === 'drop',
-        isSelfie: photoType === 'photo2',
-        receiverName: photoType === 'drop' ? receiverName : undefined
-      });
-      if (photoType === 'photo1') setStopPhoto(watermarked);
-      else if (photoType === 'photo2') setStopPhoto2(watermarked);
-      else setStopPhoto(watermarked);
-    } catch {
-      if (photoType === 'photo1') setStopPhoto(generated);
-      else if (photoType === 'photo2') setStopPhoto2(generated);
-      else setStopPhoto(generated);
-    } finally {
-      setWatermarking(false);
-    }
-  };
-
-  // Quick 1-Tap Generator for Both Required Proofs (Specimens & Selfie)
-  const handleAutoGenerateBothProofs = async () => {
-    setWatermarking(true);
-    const safeStops = activeTask?.stopsProgress || (activeTask as any)?.stops || [];
-    const currentStop = safeStops[currentStopIndex] || safeStops[0];
-    const vialLabel = `${vialCount} Specimen Vials • ${currentStop?.stopName || 'Stop'}`;
-    const selfieLabel = `Rider Verification Selfie • ${activeRider.name} @ ${currentStop?.stopName || 'Stop'}`;
-
-    const gen1 = generateSampleVialPhoto('vial', vialLabel);
-    const gen2 = generateSampleVialPhoto('selfie', selfieLabel);
-
-    const stopLat = currentStop?.lat || (currentStop as any)?.latitude || 19.2082;
-    const stopLng = currentStop?.lng || (currentStop as any)?.longitude || 72.8398;
-    const stopAddr = currentStop?.stopName || currentStop?.address || 'Collection Stop';
-
-    try {
-      const wm1 = await addWatermarkToImage(gen1, {
-        timestamp: new Date().toISOString(),
-        lat: stopLat,
-        lng: stopLng,
-        address: stopAddr,
-        riderName: activeRider.name,
-        clientName: activeTask?.clientName || '',
-        vialCount: vialCount,
-        temperature: coldBoxTemp,
-        isDrop: false,
-        isSelfie: false
-      });
-      setStopPhoto(wm1);
-
-      const wm2 = await addWatermarkToImage(gen2, {
-        timestamp: new Date().toISOString(),
-        lat: stopLat,
-        lng: stopLng,
-        address: stopAddr,
-        riderName: activeRider.name,
-        clientName: activeTask?.clientName || '',
-        vialCount: vialCount,
-        temperature: coldBoxTemp,
-        isDrop: false,
-        isSelfie: true
-      });
-      setStopPhoto2(wm2);
-    } catch {
-      setStopPhoto(gen1);
-      setStopPhoto2(gen2);
-    } finally {
-      setWatermarking(false);
-    }
-  };
-
   // Start collection / upload 2-photo proof directly from schedule stop card
   const handleStartStopCollectionFromSchedule = (stopItem: ScheduleStopItem) => {
     const findExistingTask = () => {
@@ -1324,7 +1226,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const stopToUpdate = safeStops[targetIdx] || safeStops[0] || { stopName: 'Collection Point' };
     const stopName = stopToUpdate.stopName || stopToUpdate.name || 'Collection Stop';
 
-    const finalSamplePhoto = stopPhoto || (pickupRemarkType === 'No Sample' ? generateSampleVialPhoto('vial', `Zero Sample Recorded • ${stopName}`) : stopPhoto);
+    const finalSamplePhoto = stopPhoto;
     const finalSelfiePhoto = stopPhoto2 || stopPhoto;
 
     const stopStatus: StopStatus = pickupRemarkType === 'No Sample' ? 'no_sample' : 'picked_up';
@@ -2355,16 +2257,6 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                   Mandatory 2-Photo Proof (Specimens & Selfie)
                 </label>
-                <button
-                  type="button"
-                  onClick={handleAutoGenerateBothProofs}
-                  disabled={watermarking}
-                  className="text-[11px] text-sky-700 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 font-bold px-2 py-0.5 rounded border border-sky-200 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                  title="One-tap verified digital proof generator"
-                >
-                  <Sparkles className="w-3 h-3 text-sky-600" />
-                  <span>Auto-Fill Proofs</span>
-                </button>
               </div>
 
               {/* Watermarking Progress Alert */}
@@ -2441,7 +2333,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef1.current?.click()}
@@ -2461,16 +2353,6 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     >
                       <Upload className="w-4 h-4 text-slate-600" />
                       <span className="text-[11px]">Upload</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDigitalPhotoGenerate('photo1')}
-                      disabled={watermarking}
-                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
-                      title="Generate Certified Digital Vial Tag"
-                    >
-                      <Package className="w-4 h-4 text-sky-600" />
-                      <span className="text-[11px]">Digital Tag</span>
                     </button>
                   </div>
                 )}
@@ -2542,7 +2424,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef2.current?.click()}
@@ -2562,16 +2444,6 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     >
                       <Upload className="w-4 h-4 text-slate-600" />
                       <span className="text-[11px]">Upload</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDigitalPhotoGenerate('photo2')}
-                      disabled={watermarking}
-                      className="py-3 px-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
-                      title="Generate Verified Rider Presence Tag"
-                    >
-                      <UserCheck className="w-4 h-4 text-sky-600" />
-                      <span className="text-[11px]">Digital Tag</span>
                     </button>
                   </div>
                 )}
@@ -2724,7 +2596,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => dropFileInputRef.current?.click()}
@@ -2745,17 +2617,6 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   >
                     <Upload className="w-4 h-4 text-slate-600" />
                     <span className="text-[11px]">Upload Slip</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDigitalPhotoGenerate('drop')}
-                    disabled={watermarking}
-                    className="py-3 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-98 transition-all"
-                    title="Generate certified lab custody transfer record"
-                  >
-                    <FileText className="w-4 h-4 text-emerald-600" />
-                    <span className="text-[11px]">Digital Form</span>
                   </button>
                 </div>
               )}

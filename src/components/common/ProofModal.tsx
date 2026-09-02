@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { PickupTask } from '../../types';
 import { StorageService } from '../../services/storage';
-import { generateSampleVialPhoto } from '../../services/imageWatermark';
 import { X, CheckCircle, MapPin, Thermometer, ShieldCheck, Download, Package, UserCheck, Calendar, Clock, Maximize2, ExternalLink } from 'lucide-react';
 
 interface ProofModalProps {
@@ -169,15 +168,13 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                   stop.photo ||
                   stop.samplePhotoUrl ||
                   stop.vialsPhoto ||
-                  (safeStops.length === 1 ? (task as any)?.photoUrl : null) ||
-                  generateSampleVialPhoto('vial', `${stopVials} Specimen Vials • ${stopName}`);
+                  (safeStops.length === 1 ? (task as any)?.photoUrl : null);
 
                 const selfiePhoto = stop.selfieUrl ||
                   stop.handoverPhotoUrl ||
                   stop.photo2Url ||
                   stop.selfiePhoto ||
-                  (safeStops.length === 1 ? ((task as any)?.selfieUrl || (task as any)?.photo2Url || (task as any)?.handoverPhotoUrl) : null) ||
-                  generateSampleVialPhoto('selfie', `Rider Verification Selfie • ${task.riderName} @ ${stopName}`);
+                  (safeStops.length === 1 ? ((task as any)?.selfieUrl || (task as any)?.photo2Url || (task as any)?.handoverPhotoUrl) : null);
 
                 const stopRemark = stop.remark || (stop.status === 'no_sample' ? 'No Sample' : (stop.status === 'picked_up' || isDelivered ? 'Collected sample' : null));
                 const arrivalTime = stop.arrivedAt || task.startedAt || task.createdAt;
@@ -245,27 +242,37 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                         <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
                           <Package className="w-3.5 h-3.5 text-sky-700" /> Photo 1: Specimen Vials
                         </span>
-                        <button
-                          type="button"
+                        {vialsPhoto && (
+                          <button
+                            type="button"
+                            onClick={() => setZoomedImage({ url: vialsPhoto, title: `Specimen Vials Proof: ${stopName}` })}
+                            className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Maximize2 className="w-3 h-3" /> Zoom
+                          </button>
+                        )}
+                      </div>
+                      {vialsPhoto ? (
+                        <div
                           onClick={() => setZoomedImage({ url: vialsPhoto, title: `Specimen Vials Proof: ${stopName}` })}
-                          className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
+                          className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
                         >
-                          <Maximize2 className="w-3 h-3" /> Zoom
-                        </button>
-                      </div>
-                      <div
-                        onClick={() => setZoomedImage({ url: vialsPhoto, title: `Specimen Vials Proof: ${stopName}` })}
-                        className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
-                      >
-                        <img
-                          src={vialsPhoto}
-                          alt={`Specimen proof at ${stopName}`}
-                          className="w-full h-36 object-cover rounded-lg group-hover:scale-101 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
-                          Click to enlarge
+                          <img
+                            src={vialsPhoto}
+                            alt={`Specimen proof at ${stopName}`}
+                            className="w-full h-36 object-cover rounded-lg group-hover:scale-101 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                            Click to enlarge
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="h-36 rounded-lg border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-3 text-center text-slate-400">
+                          <Package className="w-6 h-6 text-slate-300 mb-1" />
+                          <span className="text-[11px] font-semibold text-slate-600">No Photo Captured</span>
+                          <span className="text-[9px] text-slate-400">Pending photo capture on pickup</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Photo 2: Rider Location Selfie */}
@@ -274,33 +281,43 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                         <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
                           <UserCheck className="w-3.5 h-3.5 text-sky-700" /> Photo 2: Rider Selfie
                         </span>
-                        <button
-                          type="button"
+                        {selfiePhoto && (
+                          <button
+                            type="button"
+                            onClick={() => setZoomedImage({
+                              url: selfiePhoto,
+                              title: `Rider Selfie Proof: ${stopName}`
+                            })}
+                            className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Maximize2 className="w-3 h-3" /> Zoom
+                          </button>
+                        )}
+                      </div>
+                      {selfiePhoto ? (
+                        <div
                           onClick={() => setZoomedImage({
                             url: selfiePhoto,
                             title: `Rider Selfie Proof: ${stopName}`
                           })}
-                          className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 cursor-pointer"
+                          className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
                         >
-                          <Maximize2 className="w-3 h-3" /> Zoom
-                        </button>
-                      </div>
-                      <div
-                        onClick={() => setZoomedImage({
-                          url: selfiePhoto,
-                          title: `Rider Selfie Proof: ${stopName}`
-                        })}
-                        className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
-                      >
-                        <img
-                          src={selfiePhoto}
-                          alt={`Rider selfie at ${stopName}`}
-                          className="w-full h-36 object-cover rounded-lg group-hover:scale-101 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
-                          Click to enlarge
+                          <img
+                            src={selfiePhoto}
+                            alt={`Rider selfie at ${stopName}`}
+                            className="w-full h-36 object-cover rounded-lg group-hover:scale-101 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                            Click to enlarge
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="h-36 rounded-lg border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-3 text-center text-slate-400">
+                          <UserCheck className="w-6 h-6 text-slate-300 mb-1" />
+                          <span className="text-[11px] font-semibold text-slate-600">No Selfie Captured</span>
+                          <span className="text-[9px] text-slate-400">Pending selfie on pickup</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -350,7 +367,7 @@ export const ProofModal: React.FC<ProofModalProps> = ({ task, isOpen, onClose })
                 task.handoverPhotoUrl ||
                 (task as any)?.dropPhotoUrl ||
                 (task as any)?.finalDrop?.dropPhotoUrl ||
-                (isDelivered ? generateSampleVialPhoto('drop', `Lab Intake Verified • ${task.destination?.name || 'Central Diagnostic Lab'}`) : null);
+                null;
 
               return (
                 <div className="bg-emerald-50/40 rounded-xl p-4 border border-emerald-200 space-y-3">
