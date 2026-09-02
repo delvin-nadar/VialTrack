@@ -10,6 +10,7 @@ import {
   Camera,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Radio,
   Thermometer,
   ShieldCheck,
@@ -195,6 +196,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [coldBoxTemp, setColdBoxTemp] = useState<number>(4.0);
   const [stopPhoto, setStopPhoto] = useState<string | null>(null); // Photo 1: Specimen Vials
   const [stopPhoto2, setStopPhoto2] = useState<string | null>(null); // Photo 2: Rider Location Selfie
+  const [pickupFormError, setPickupFormError] = useState<string | null>(null);
+  const [dropFormError, setDropFormError] = useState<string | null>(null);
   const [receiverName, setReceiverName] = useState<string>('');
   const [delayReason, setDelayReason] = useState<string>('Heavy Traffic / Rain');
   const [showDelayModal, setShowDelayModal] = useState<boolean>(false);
@@ -1100,6 +1103,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     setColdBoxTemp((targetStop as any)?.coldBoxTemp ?? 4.0);
     setStopPhoto((targetStop as any)?.photoUrl || null);
     setStopPhoto2((targetStop as any)?.handoverPhotoUrl || (targetStop as any)?.photo2Url || (targetStop as any)?.selfieUrl || null);
+    setPickupFormError(null);
     setIsProcessingStop(true);
     onRefresh();
   };
@@ -1222,6 +1226,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     setColdBoxTemp(targetTask.destination?.coldBoxTempAtDrop ?? 4.0);
     setStopPhoto(targetTask.destination?.dropPhotoUrl || (targetTask as any).handoverPhotoUrl || null);
     setStopPhoto2(null);
+    setDropFormError(null);
     setIsProcessingDrop(true);
     onRefresh();
   };
@@ -1235,6 +1240,22 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
       console.warn("No active task to update in handleConfirmStopPickup");
       return;
     }
+
+    // Strict Mandatory Proof Validations
+    if (!stopPhoto && !stopPhoto2) {
+      setPickupFormError('Mandatory Proofs Required: Please capture/upload both "Specimen Vials in Chiller Rack" AND "Rider Location Selfie" before confirming.');
+      return;
+    }
+    if (!stopPhoto) {
+      setPickupFormError('Mandatory Photo 1 Missing: Please capture/upload photo of "Specimen Vials in Chiller Rack".');
+      return;
+    }
+    if (!stopPhoto2) {
+      setPickupFormError('Mandatory Photo 2 Missing: Please capture/upload "Rider Location Selfie" to verify on-site presence.');
+      return;
+    }
+
+    setPickupFormError(null);
 
     const rawStops = (currentTask.stopsProgress && currentTask.stopsProgress.length > 0)
       ? currentTask.stopsProgress
@@ -1256,12 +1277,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const stopToUpdate = safeStops[targetIdx] || safeStops[0] || { stopName: 'Collection Point' };
     const stopName = stopToUpdate.stopName || stopToUpdate.name || 'Collection Stop';
 
-    const finalSamplePhoto =
-      stopPhoto ||
-      generateSampleVialPhoto('vial', `${vialCount} Specimen Vials (${stopName})`);
-    const finalSelfiePhoto =
-      stopPhoto2 ||
-      generateSampleVialPhoto('selfie', `Rider Location Selfie • ${activeRider.name} (${stopName})`);
+    const finalSamplePhoto = stopPhoto;
+    const finalSelfiePhoto = stopPhoto2;
 
     const updatedStops: StopProgress[] = safeStops.map((s, idx) => {
       if (idx === targetIdx) {
@@ -1366,9 +1383,18 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const handleConfirmLabDelivery = () => {
     if (!activeTask) return;
 
-    const finalLabPhoto =
-      stopPhoto ||
-      generateSampleVialPhoto('drop', `Lab Handover Verified (${activeTask.destination?.name || 'Central Lab'})`);
+    if (!stopPhoto) {
+      setDropFormError('Mandatory Proof Missing: Please capture/upload or generate the Lab Handover Proof photo before completing delivery.');
+      return;
+    }
+    if (!receiverName || !receiverName.trim()) {
+      setDropFormError('Mandatory Field Missing: Please enter the Receiver Name / Pathologist in Lab.');
+      return;
+    }
+
+    setDropFormError(null);
+
+    const finalLabPhoto = stopPhoto;
 
     const safeStops = activeTask.stopsProgress || activeTask.stops || [];
     const totalVials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
@@ -2030,12 +2056,23 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 </p>
               </div>
               <button
-                onClick={() => setIsProcessingStop(false)}
+                onClick={() => {
+                  setIsProcessingStop(false);
+                  setPickupFormError(null);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Error Notification Alert */}
+            {pickupFormError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{pickupFormError}</span>
+              </div>
+            )}
 
             {/* Quick 1-Handed Vial Counter Stepper */}
             <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 text-center space-y-2.5">
@@ -2379,12 +2416,23 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <span>Diagnostic Lab Handover Confirmation</span>
               </h3>
               <button
-                onClick={() => setIsProcessingDrop(false)}
+                onClick={() => {
+                  setIsProcessingDrop(false);
+                  setDropFormError(null);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Error Notification Alert */}
+            {dropFormError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{dropFormError}</span>
+              </div>
+            )}
 
             {/* Watermarking Progress Alert */}
             {watermarking && (

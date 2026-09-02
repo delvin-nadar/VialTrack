@@ -682,19 +682,12 @@ export const DailyRoundsSchedule: React.FC<DailyRoundsScheduleProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => onOpenProofModal(stop.task!)}
-                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-98"
                                   >
                                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
                                     <span>View Proof</span>
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => onStartCollection(stop)}
-                                  className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold text-xs rounded-lg cursor-pointer"
-                                >
-                                  Update
-                                </button>
                               </div>
                             )}
                           </div>

@@ -473,7 +473,7 @@ export const RouteStopsManager: React.FC<RouteStopsManagerProps> = ({
 
       const updatedRoute: Route = {
         ...route,
-        stops: [...route.stops, newStop]
+        stops: [...safeStops, newStop]
       };
 
       StorageService.updateRoute(updatedRoute);
