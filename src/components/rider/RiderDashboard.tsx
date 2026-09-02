@@ -42,7 +42,7 @@ import { StorageService } from '../../services/storage';
 import { LocationService, GpsStatusEvent } from '../../services/locationService';
 import { NotificationService } from '../../services/notificationService';
 import { LiveMap } from '../common/LiveMap';
-import { CloudSync, db, formatUnifiedTask } from '../../services/firebase';
+import { CloudSync, db, formatUnifiedTask, uploadPhotoToStorage } from '../../services/firebase';
 import { doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { DailyRoundsSchedule, ScheduleStopItem } from './DailyRoundsSchedule';
 import {
@@ -1201,7 +1201,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   };
 
   // Confirm Stop Pickup with 2-Photo Proof (Specimens & Selfie) & Remark
-  const handleConfirmStopPickup = () => {
+  const handleConfirmStopPickup = async () => {
     const allKnownTasks = [...liveTasks, ...todayRiderTasks, ...tasks, ...StorageService.getTasks()];
     const currentTask = (activeTaskId ? allKnownTasks.find((t) => t.id === activeTaskId) : null) || activeTask;
 
@@ -1275,8 +1275,39 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const stopToUpdate = safeStops[targetIdx] || safeStops[0] || { stopName: 'Collection Point' };
     const stopName = stopToUpdate.stopName || stopToUpdate.name || 'Collection Stop';
 
-    const finalSamplePhoto = stopPhoto || stopToUpdate.photoUrl || (stopToUpdate as any).photo;
-    const finalSelfiePhoto = stopPhoto2 || (stopToUpdate as any).handoverPhotoUrl || (stopToUpdate as any).photo2Url || (stopToUpdate as any).selfieUrl || finalSamplePhoto;
+    // Upload captured photos to Cloud Storage instead of embedding raw base64 in the Firestore
+    // document. Base64 photos are ~200-400KB each; a couple of stops' worth easily blows past
+    // Firestore's 1MiB per-document limit, and that write failure was previously silent (the photo
+    // looked fine locally but never actually persisted). We upload first and only proceed once we
+    // have real, short download URLs — if the upload fails, we stop here and tell the rider,
+    // instead of quietly losing the photo.
+    setWatermarking(true);
+    let uploadedSamplePhoto: string | undefined;
+    let uploadedSelfiePhoto: string | undefined;
+    try {
+      const uploadTimestamp = Date.now();
+      if (stopPhoto) {
+        uploadedSamplePhoto = await uploadPhotoToStorage(
+          stopPhoto,
+          `proofs/${currentTask.id}/stop-${targetIdx}-specimen-${uploadTimestamp}.jpg`
+        );
+      }
+      if (stopPhoto2) {
+        uploadedSelfiePhoto = await uploadPhotoToStorage(
+          stopPhoto2,
+          `proofs/${currentTask.id}/stop-${targetIdx}-selfie-${uploadTimestamp}.jpg`
+        );
+      }
+    } catch (uploadErr) {
+      console.error('[RiderDashboard] Photo upload failed:', uploadErr);
+      setWatermarking(false);
+      setPickupFormError('Could not save your photo(s) to the server — please check your connection and try confirming again. Your proof has NOT been recorded yet.');
+      return;
+    }
+    setWatermarking(false);
+
+    const finalSamplePhoto = uploadedSamplePhoto || stopToUpdate.photoUrl || (stopToUpdate as any).photo;
+    const finalSelfiePhoto = uploadedSelfiePhoto || (stopToUpdate as any).handoverPhotoUrl || (stopToUpdate as any).photo2Url || (stopToUpdate as any).selfieUrl || finalSamplePhoto;
 
     const stopStatus: StopStatus = pickupRemarkType === 'No Sample' ? 'no_sample' : 'picked_up';
 
@@ -1413,7 +1444,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   };
 
   // Complete Destination Lab Delivery
-  const handleConfirmLabDelivery = () => {
+  const handleConfirmLabDelivery = async () => {
     if (!activeTask) return;
 
     if (!stopPhoto) {
@@ -1427,7 +1458,19 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
     setDropFormError(null);
 
-    const finalLabPhoto = stopPhoto;
+    // Upload to Cloud Storage rather than embedding base64 directly on the task document —
+    // see the matching note in handleConfirmStopPickup for why.
+    let finalLabPhoto: string;
+    setWatermarking(true);
+    try {
+      finalLabPhoto = await uploadPhotoToStorage(stopPhoto, `proofs/${activeTask.id}/lab-drop-${Date.now()}.jpg`);
+    } catch (uploadErr) {
+      console.error('[RiderDashboard] Lab handover photo upload failed:', uploadErr);
+      setWatermarking(false);
+      setDropFormError('Could not save the handover photo to the server — please check your connection and try confirming again. Delivery has NOT been recorded yet.');
+      return;
+    }
+    setWatermarking(false);
 
     const safeStops = activeTask.stopsProgress || activeTask.stops || [];
     const totalVials = safeStops.reduce((sum: number, s: any) => sum + Number(s?.sampleCount || s?.specimenCount || 0), 0);
